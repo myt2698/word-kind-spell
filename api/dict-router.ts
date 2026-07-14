@@ -1,6 +1,9 @@
 /**
  * Dictionary Lookup Router
- * Proxies dictionary API calls from backend to avoid CORS issues
+ * Combines multiple free APIs:
+ * - iciba: Chinese definitions
+ * - Free Dictionary API: phonetic
+ * - Tatoeba: bilingual example sentences (EN/ZH)
  */
 
 import { z } from "zod";
@@ -12,7 +15,7 @@ async function fetchIciba(word: string): Promise<{ definitions: string } | null>
     const url = `https://dict-mobile.iciba.com/interface/index.php?c=word&m=getsuggest&nums=1&client=6&is_need_mean=1&word=${encodeURIComponent(word.toLowerCase())}`;
     const res = await fetch(url, { signal: AbortSignal.timeout(10000) });
     if (!res.ok) return null;
-    const data = await res.json() as {
+    const data = (await res.json()) as {
       message?: Array<{
         key: string;
         paraphrase: string;
@@ -45,44 +48,69 @@ async function fetchIciba(word: string): Promise<{ definitions: string } | null>
   }
 }
 
-/** Fetch phonetic + examples from Free Dictionary API */
-async function fetchFreeDict(word: string): Promise<{ phonetic: string; example: string } | null> {
+/** Fetch phonetic from Free Dictionary API */
+async function fetchPhonetic(word: string): Promise<string> {
   try {
     const url = `https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(word.toLowerCase())}`;
     const res = await fetch(url, { signal: AbortSignal.timeout(10000) });
-    if (!res.ok) return null;
+    if (!res.ok) return "";
     const data = (await res.json()) as Array<{
-      word: string;
       phonetic?: string;
       phonetics: Array<{ text?: string; audio?: string }>;
-      meanings: Array<{
-        partOfSpeech: string;
-        definitions: Array<{ definition: string; example?: string }>;
-      }>;
     }>;
-    if (!data || data.length === 0) return null;
+    if (!data || data.length === 0) return "";
 
     const entry = data[0];
-
     let phonetic = entry.phonetic || "";
     if (!phonetic) {
       for (const p of entry.phonetics) {
         if (p.text) { phonetic = p.text; break; }
       }
     }
+    return phonetic;
+  } catch {
+    return "";
+  }
+}
+
+/** Fetch bilingual example sentences from Tatoeba */
+async function fetchExamples(word: string): Promise<string> {
+  try {
+    const url = `https://tatoeba.org/en/api_v0/search?from=eng&to=cmn&query=${encodeURIComponent(word.toLowerCase())}&sort=relevance&limit=3`;
+    const res = await fetch(url, { signal: AbortSignal.timeout(10000) });
+    if (!res.ok) return "";
+    const data = (await res.json()) as {
+      results: Array<{
+        text: string;
+        translations: Array<Array<{ text: string }>>;
+      }>;
+    };
 
     const examples: string[] = [];
-    for (const meaning of entry.meanings) {
-      for (const def of meaning.definitions) {
-        if (def.example && examples.length < 2) {
-          examples.push(def.example);
+    for (const result of data.results) {
+      if (examples.length >= 2) break;
+
+      const en = result.text;
+      let zh = "";
+      for (const transGroup of result.translations) {
+        if (transGroup && transGroup.length > 0) {
+          zh = transGroup[0].text;
+          break;
+        }
+      }
+
+      if (en) {
+        if (zh) {
+          examples.push(`${en}\n${zh}`);
+        } else {
+          examples.push(en);
         }
       }
     }
 
-    return { phonetic, example: examples.join("\n") };
+    return examples.join("\n\n");
   } catch {
-    return null;
+    return "";
   }
 }
 
@@ -92,21 +120,23 @@ export const dictRouter = createRouter({
     .mutation(async ({ input }) => {
       const word = input.word.trim().toLowerCase();
 
-      const [icibaResult, dictResult] = await Promise.all([
+      // Query all 3 APIs in parallel
+      const [icibaResult, phonetic, example] = await Promise.all([
         fetchIciba(word),
-        fetchFreeDict(word),
+        fetchPhonetic(word),
+        fetchExamples(word),
       ]);
 
-      if (!icibaResult && !dictResult) {
+      if (!icibaResult && !phonetic && !example) {
         return { found: false as const, phonetic: "", definition: "", example: "" };
       }
 
       return {
         found: true as const,
-        phonetic: dictResult?.phonetic || "",
+        phonetic,
         definition: icibaResult?.definitions || "",
-        example: dictResult?.example || "",
-        partial: !icibaResult || !dictResult,
+        example,
+        partial: !icibaResult || (!phonetic && !example),
       };
     }),
 });
