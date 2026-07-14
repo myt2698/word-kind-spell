@@ -15,9 +15,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { X, Plus, Tag, Folder } from "lucide-react";
-import { useState, useEffect } from "react";
 import { trpc } from "@/providers/trpc";
+import { X, Plus, Tag, Folder, BookOpen, Loader2, Search, Volume2 } from "lucide-react";
+import { useState, useEffect, useCallback } from "react";
+import { useDebounce } from "@/hooks/useDebounce";
 import type { WordCardData } from "./WordCard";
 
 interface WordFormProps {
@@ -45,6 +46,75 @@ const proficiencyOptions = [
   { value: "mastered" as const, label: "已掌握" },
 ];
 
+// ── Dictionary API Types ──
+interface DictPhonetic {
+  text?: string;
+  audio?: string;
+}
+interface DictDefinition {
+  definition: string;
+  example?: string;
+}
+interface DictMeaning {
+  partOfSpeech: string;
+  definitions: DictDefinition[];
+}
+interface DictEntry {
+  word: string;
+  phonetic?: string;
+  phonetics: DictPhonetic[];
+  meanings: DictMeaning[];
+}
+
+async function lookupDictionary(word: string): Promise<{
+  phonetic: string;
+  definition: string;
+  example: string;
+} | null> {
+  try {
+    const res = await fetch(
+      `https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(word.trim().toLowerCase())}`
+    );
+    if (!res.ok) return null;
+    const data: DictEntry[] = await res.json();
+    if (!data || data.length === 0) return null;
+
+    const entry = data[0];
+
+    // Extract phonetic
+    let phonetic = entry.phonetic || "";
+    if (!phonetic) {
+      for (const p of entry.phonetics) {
+        if (p.text) { phonetic = p.text; break; }
+      }
+    }
+
+    // Extract definition and example from all meanings
+    let definition = "";
+    let example = "";
+
+    for (const meaning of entry.meanings) {
+      const pos = meaning.partOfSpeech;
+      for (const def of meaning.definitions) {
+        if (!definition) {
+          definition = `(${pos}) ${def.definition}`;
+        } else {
+          definition += `\n(${pos}) ${def.definition}`;
+        }
+        if (!example && def.example) {
+          example = def.example;
+        }
+      }
+    }
+
+    if (!definition) return null;
+
+    return { phonetic, definition, example };
+  } catch {
+    return null;
+  }
+}
+
 export default function WordForm({ open, onClose, onSubmit, editWord }: WordFormProps) {
   const { data: groups } = trpc.wordGroup.list.useQuery();
   const { data: allTags } = trpc.tag.list.useQuery();
@@ -61,32 +131,78 @@ export default function WordForm({ open, onClose, onSubmit, editWord }: WordForm
   });
 
   const [newTagName, setNewTagName] = useState("");
+  const [isLookingUp, setIsLookingUp] = useState(false);
+  const [dictError, setDictError] = useState("");
+  const [hasAutoFilled, setHasAutoFilled] = useState(false);
 
+  const debouncedWord = useDebounce(form.word, 600);
+
+  // Reset form when dialog opens
   useEffect(() => {
-    if (editWord) {
-      setForm({
-        word: editWord.word,
-        phonetic: editWord.phonetic || "",
-        definition: editWord.definition,
-        example: editWord.example || "",
-        notes: editWord.notes || "",
-        groupId: undefined, // Will be set if group exists
-        tagIds: editWord.tags.map((t) => t.id),
-        proficiency: editWord.proficiency,
-      });
-    } else {
-      setForm({
-        word: "",
-        phonetic: "",
-        definition: "",
-        example: "",
-        notes: "",
-        groupId: undefined,
-        tagIds: [],
-        proficiency: "new",
-      });
+    if (open) {
+      setDictError("");
+      setHasAutoFilled(false);
+      if (editWord) {
+        setForm({
+          word: editWord.word,
+          phonetic: editWord.phonetic || "",
+          definition: editWord.definition,
+          example: editWord.example || "",
+          notes: editWord.notes || "",
+          groupId: undefined,
+          tagIds: editWord.tags.map((t) => t.id),
+          proficiency: editWord.proficiency,
+        });
+      } else {
+        setForm({
+          word: "",
+          phonetic: "",
+          definition: "",
+          example: "",
+          notes: "",
+          groupId: undefined,
+          tagIds: [],
+          proficiency: "new",
+        });
+      }
     }
   }, [editWord, open]);
+
+  // Auto-lookup when word changes (only for new words, not edit)
+  useEffect(() => {
+    if (
+      !editWord &&
+      debouncedWord.trim().length >= 2 &&
+      /^[a-zA-Z\s'-]+$/.test(debouncedWord.trim()) &&
+      !hasAutoFilled
+    ) {
+      handleLookup(debouncedWord.trim());
+    }
+  }, [debouncedWord, editWord, hasAutoFilled]);
+
+  const handleLookup = useCallback(async (word?: string) => {
+    const target = word || form.word.trim();
+    if (!target || target.length < 2) {
+      setDictError("请输入至少2个字母的单词");
+      return;
+    }
+    setIsLookingUp(true);
+    setDictError("");
+    const result = await lookupDictionary(target);
+    setIsLookingUp(false);
+    if (result) {
+      setForm((prev) => ({
+        ...prev,
+        phonetic: result.phonetic || prev.phonetic,
+        definition: result.definition || prev.definition,
+        example: result.example || prev.example,
+      }));
+      setHasAutoFilled(true);
+      setDictError("");
+    } else {
+      setDictError(`未找到 "${target}" 的释义，请手动填写`);
+    }
+  }, [form.word]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -107,18 +223,9 @@ export default function WordForm({ open, onClose, onSubmit, editWord }: WordForm
   const createTagMutation = trpc.tag.create.useMutation({
     onSuccess: (data) => {
       if (data.created) {
-        setForm((prev) => ({
-          ...prev,
-          tagIds: [...prev.tagIds, data.id],
-        }));
-      } else {
-        // Tag already exists, add it
-        if (!form.tagIds.includes(data.id)) {
-          setForm((prev) => ({
-            ...prev,
-            tagIds: [...prev.tagIds, data.id],
-          }));
-        }
+        setForm((prev) => ({ ...prev, tagIds: [...prev.tagIds, data.id] }));
+      } else if (!form.tagIds.includes(data.id)) {
+        setForm((prev) => ({ ...prev, tagIds: [...prev.tagIds, data.id] }));
       }
       setNewTagName("");
     },
@@ -129,27 +236,101 @@ export default function WordForm({ open, onClose, onSubmit, editWord }: WordForm
     createTagMutation.mutate({ name: newTagName.trim() });
   };
 
+  const handleSpeak = () => {
+    if (form.word && "speechSynthesis" in window) {
+      const utterance = new SpeechSynthesisUtterance(form.word);
+      utterance.lang = "en-US";
+      window.speechSynthesis.speak(utterance);
+    }
+  };
+
+  const updateForm = (updates: Partial<WordFormData>) => {
+    setForm((prev) => {
+      const next = { ...prev, ...updates };
+      // Reset auto-fill flag when word changes significantly
+      if (updates.word !== undefined && updates.word !== prev.word) {
+        setHasAutoFilled(false);
+        setDictError("");
+      }
+      return next;
+    });
+  };
+
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
       <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>{editWord ? "编辑单词" : "添加新单词"}</DialogTitle>
+          <DialogTitle className="flex items-center gap-2">
+            <BookOpen className="w-5 h-5 text-indigo-500" />
+            {editWord ? "编辑单词" : "添加新单词"}
+          </DialogTitle>
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          {/* Word */}
+          {/* Word + Lookup */}
           <div className="space-y-1.5">
             <Label htmlFor="word" className="text-sm font-medium">
               单词 <span className="text-red-400">*</span>
             </Label>
-            <Input
-              id="word"
-              value={form.word}
-              onChange={(e) => setForm((p) => ({ ...p, word: e.target.value }))}
-              placeholder="输入单词"
-              className="h-10"
-              required
-            />
+            <div className="flex gap-2">
+              <div className="relative flex-1">
+                <Input
+                  id="word"
+                  value={form.word}
+                  onChange={(e) => updateForm({ word: e.target.value })}
+                  placeholder="输入英文单词"
+                  className="h-11 pr-10"
+                  required
+                  autoFocus
+                />
+                {form.word && (
+                  <button
+                    type="button"
+                    onClick={handleSpeak}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-indigo-500 transition-colors"
+                    title="朗读"
+                  >
+                    <Volume2 className="w-4 h-4" />
+                  </button>
+                )}
+              </div>
+              {!editWord && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-11 px-3 shrink-0"
+                  onClick={() => handleLookup()}
+                  disabled={isLookingUp || form.word.trim().length < 2}
+                  title="从字典查询释义"
+                >
+                  {isLookingUp ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Search className="w-4 h-4" />
+                  )}
+                </Button>
+              )}
+            </div>
+            {isLookingUp && (
+              <p className="text-xs text-indigo-500 flex items-center gap-1">
+                <Loader2 className="w-3 h-3 animate-spin" />
+                正在查询字典...
+              </p>
+            )}
+            {dictError && (
+              <p className="text-xs text-amber-600">{dictError}</p>
+            )}
+            {!editWord && !hasAutoFilled && !dictError && !isLookingUp && form.word.trim().length >= 2 && (
+              <p className="text-xs text-gray-400">
+                输入单词后自动查询字典，或点击搜索按钮手动查询
+              </p>
+            )}
+            {hasAutoFilled && (
+              <p className="text-xs text-green-600 flex items-center gap-1">
+                <Tag className="w-3 h-3" />
+                已从字典自动填充释义
+              </p>
+            )}
           </div>
 
           {/* Phonetic */}
@@ -160,7 +341,7 @@ export default function WordForm({ open, onClose, onSubmit, editWord }: WordForm
             <Input
               id="phonetic"
               value={form.phonetic}
-              onChange={(e) => setForm((p) => ({ ...p, phonetic: e.target.value }))}
+              onChange={(e) => updateForm({ phonetic: e.target.value })}
               placeholder="/fəˈnetɪk/"
               className="h-10 font-mono text-sm"
             />
@@ -174,9 +355,9 @@ export default function WordForm({ open, onClose, onSubmit, editWord }: WordForm
             <Textarea
               id="definition"
               value={form.definition}
-              onChange={(e) => setForm((p) => ({ ...p, definition: e.target.value }))}
+              onChange={(e) => updateForm({ definition: e.target.value })}
               placeholder="输入单词释义"
-              className="min-h-[60px] resize-none"
+              className="min-h-[80px] resize-none"
               required
             />
           </div>
@@ -189,7 +370,7 @@ export default function WordForm({ open, onClose, onSubmit, editWord }: WordForm
             <Textarea
               id="example"
               value={form.example}
-              onChange={(e) => setForm((p) => ({ ...p, example: e.target.value }))}
+              onChange={(e) => updateForm({ example: e.target.value })}
               placeholder="输入例句（可选）"
               className="min-h-[60px] resize-none"
             />
@@ -203,7 +384,7 @@ export default function WordForm({ open, onClose, onSubmit, editWord }: WordForm
             <Textarea
               id="notes"
               value={form.notes}
-              onChange={(e) => setForm((p) => ({ ...p, notes: e.target.value }))}
+              onChange={(e) => updateForm({ notes: e.target.value })}
               placeholder="添加你的学习备注、记忆技巧等"
               className="min-h-[60px] resize-none"
             />
@@ -217,7 +398,7 @@ export default function WordForm({ open, onClose, onSubmit, editWord }: WordForm
                 <button
                   key={opt.value}
                   type="button"
-                  onClick={() => setForm((p) => ({ ...p, proficiency: opt.value }))}
+                  onClick={() => updateForm({ proficiency: opt.value })}
                   className={`flex-1 py-2 text-xs rounded-lg border transition-all ${
                     form.proficiency === opt.value
                       ? "bg-indigo-50 border-indigo-300 text-indigo-700 font-medium shadow-sm"
@@ -238,7 +419,7 @@ export default function WordForm({ open, onClose, onSubmit, editWord }: WordForm
             <Select
               value={form.groupId?.toString() || "none"}
               onValueChange={(v) =>
-                setForm((p) => ({ ...p, groupId: v === "none" ? undefined : parseInt(v) }))
+                updateForm({ groupId: v === "none" ? undefined : parseInt(v) })
               }
             >
               <SelectTrigger className="h-10">
