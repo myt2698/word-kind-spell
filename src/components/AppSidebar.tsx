@@ -97,10 +97,6 @@ export default function AppSidebar({
                       : "text-gray-600 hover:bg-gray-50"
                   }`}
                 >
-                  <div
-                    className="w-2.5 h-2.5 rounded-full shrink-0"
-                    style={{ backgroundColor: group.color || "#3b82f6" }}
-                  />
                   <span className="truncate flex-1 text-left">{group.name}</span>
                   {isDefault && (
                     <Star className="w-3 h-3 text-amber-400 fill-amber-400 shrink-0" />
@@ -137,22 +133,9 @@ export default function AppSidebar({
                 }}
                 className={`inline-flex items-center gap-1 px-2.5 py-1 text-xs rounded-full border transition-all ${
                   selectedTag === tag.id
-                    ? "ring-2 ring-offset-1 ring-indigo-200 font-medium"
-                    : "opacity-70 hover:opacity-100"
+                    ? "bg-indigo-50 text-indigo-600 border-indigo-300 ring-2 ring-offset-1 ring-indigo-200 font-medium"
+                    : "bg-gray-50 text-gray-500 border-gray-200 opacity-70 hover:opacity-100"
                 }`}
-                style={
-                  selectedTag === tag.id
-                    ? {
-                        backgroundColor: (tag.color || "#10b981") + "20",
-                        borderColor: (tag.color || "#10b981") + "60",
-                        color: tag.color || "#10b981",
-                      }
-                    : {
-                        backgroundColor: "#f3f4f6",
-                        borderColor: "#e5e7eb",
-                        color: "#6b7280",
-                      }
-                }
               >
                 {tag.name}
                 <span className="text-[10px] opacity-60">{tag.wordCount}</span>

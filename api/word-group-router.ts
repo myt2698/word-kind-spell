@@ -5,7 +5,6 @@ import { wordGroups, users } from "@db/schema";
 import { eq, and, asc } from "drizzle-orm";
 
 export const wordGroupRouter = createRouter({
-  // 获取用户的所有分组
   list: authedQuery.query(async ({ ctx }) => {
     const db = getDb();
     return db
@@ -15,7 +14,6 @@ export const wordGroupRouter = createRouter({
       .orderBy(asc(wordGroups.sortOrder));
   }),
 
-  // 获取单个分组
   getById: authedQuery
     .input(z.object({ id: z.number() }))
     .query(async ({ ctx, input }) => {
@@ -33,19 +31,16 @@ export const wordGroupRouter = createRouter({
       return result[0] ?? null;
     }),
 
-  // 创建分组
   create: authedQuery
     .input(
       z.object({
         name: z.string().min(1).max(100),
         description: z.string().optional(),
-        color: z.string().optional(),
         sortOrder: z.number().optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {
       const db = getDb();
-      // Auto-assign next sortOrder if not provided
       let sortOrder = input.sortOrder;
       if (sortOrder === undefined) {
         const existing = await db
@@ -62,20 +57,17 @@ export const wordGroupRouter = createRouter({
         userId: ctx.user.id,
         name: input.name,
         description: input.description,
-        color: input.color ?? "#3b82f6",
         sortOrder,
       });
       return { id: Number(result[0].insertId) };
     }),
 
-  // 更新分组
   update: authedQuery
     .input(
       z.object({
         id: z.number(),
         name: z.string().min(1).max(100).optional(),
         description: z.string().optional(),
-        color: z.string().optional(),
         sortOrder: z.number().optional(),
       })
     )
@@ -91,7 +83,6 @@ export const wordGroupRouter = createRouter({
       return { success: true };
     }),
 
-  // 删除分组
   delete: authedQuery
     .input(z.object({ id: z.number() }))
     .mutation(async ({ ctx, input }) => {
@@ -104,7 +95,6 @@ export const wordGroupRouter = createRouter({
             eq(wordGroups.userId, ctx.user.id)
           )
         );
-      // Also clear default if this was the default group
       await db
         .update(users)
         .set({ defaultGroupId: null })
@@ -117,7 +107,6 @@ export const wordGroupRouter = createRouter({
       return { success: true };
     }),
 
-  // 批量更新分组排序
   reorder: authedQuery
     .input(
       z.object({
@@ -128,7 +117,6 @@ export const wordGroupRouter = createRouter({
     )
     .mutation(async ({ ctx, input }) => {
       const db = getDb();
-      // Update each group's sortOrder
       for (const item of input.orders) {
         await db
           .update(wordGroups)
@@ -143,13 +131,11 @@ export const wordGroupRouter = createRouter({
       return { success: true };
     }),
 
-  // 设置默认分组
   setDefault: authedQuery
     .input(z.object({ groupId: z.number().nullable() }))
     .mutation(async ({ ctx, input }) => {
       const db = getDb();
 
-      // If groupId is provided, verify the group belongs to this user
       if (input.groupId !== null) {
         const group = await db
           .select()
@@ -174,7 +160,6 @@ export const wordGroupRouter = createRouter({
       return { success: true };
     }),
 
-  // 获取用户设置（含默认分组）
   getSettings: authedQuery.query(async ({ ctx }) => {
     const db = getDb();
     const result = await db

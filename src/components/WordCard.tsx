@@ -15,7 +15,6 @@ import { useState } from "react";
 interface TagInfo {
   id: number;
   name: string;
-  color: string | null;
 }
 
 export interface WordCardData {
@@ -28,7 +27,6 @@ export interface WordCardData {
   proficiency: "new" | "learning" | "familiar" | "mastered";
   tags: TagInfo[];
   groupName?: string | null;
-  groupColor?: string | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -92,12 +90,7 @@ export default function WordCard({ word, onEdit, onDelete }: WordCardProps) {
                   <Badge
                     key={tag.id}
                     variant="outline"
-                    className="text-xs px-2 py-0.5"
-                    style={{
-                      backgroundColor: (tag.color || "#10b981") + "15",
-                      borderColor: (tag.color || "#10b981") + "40",
-                      color: tag.color || "#10b981",
-                    }}
+                    className="text-xs px-2 py-0.5 bg-gray-50 text-gray-500 border-gray-200"
                   >
                     <Tag className="w-3 h-3 mr-1" />
                     {tag.name}

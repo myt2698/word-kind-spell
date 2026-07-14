@@ -358,13 +358,7 @@ export default function WordForm({ open, onClose, onSubmit, editWord }: WordForm
                 <SelectItem value="none">不分组</SelectItem>
                 {groups?.map((g) => (
                   <SelectItem key={g.id} value={g.id.toString()}>
-                    <div className="flex items-center gap-2">
-                      <div
-                        className="w-2.5 h-2.5 rounded-full"
-                        style={{ backgroundColor: g.color || "#3b82f6" }}
-                      />
-                      {g.name}
-                    </div>
+                    {g.name}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -384,22 +378,9 @@ export default function WordForm({ open, onClose, onSubmit, editWord }: WordForm
                   onClick={() => toggleTag(tag.id)}
                   className={`inline-flex items-center gap-1 px-2.5 py-1 text-xs rounded-full border transition-all ${
                     form.tagIds.includes(tag.id)
-                      ? "ring-2 ring-offset-1 ring-indigo-200 font-medium"
-                      : "opacity-60 hover:opacity-100"
+                      ? "bg-indigo-50 text-indigo-600 border-indigo-300 ring-2 ring-offset-1 ring-indigo-200 font-medium"
+                      : "bg-gray-50 text-gray-500 border-gray-200 opacity-70 hover:opacity-100"
                   }`}
-                  style={
-                    form.tagIds.includes(tag.id)
-                      ? {
-                          backgroundColor: (tag.color || "#10b981") + "20",
-                          borderColor: (tag.color || "#10b981") + "60",
-                          color: tag.color || "#10b981",
-                        }
-                      : {
-                          backgroundColor: "#f3f4f6",
-                          borderColor: "#e5e7eb",
-                          color: "#6b7280",
-                        }
-                  }
                 >
                   {tag.name}
                   {form.tagIds.includes(tag.id) && <X className="w-3 h-3" />}

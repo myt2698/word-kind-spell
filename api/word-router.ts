@@ -73,7 +73,6 @@ export const wordRouter = createRouter({
             .select({
               id: tags.id,
               name: tags.name,
-              color: tags.color,
             })
             .from(wordTags)
             .innerJoin(tags, eq(wordTags.tagId, tags.id))
@@ -81,7 +80,6 @@ export const wordRouter = createRouter({
 
           // 获取分组信息
           let groupName = null;
-          let groupColor = null;
           if (word.groupId) {
             const groupResult = await db
               .select()
@@ -90,7 +88,6 @@ export const wordRouter = createRouter({
               .limit(1);
             if (groupResult.length > 0) {
               groupName = groupResult[0].name;
-              groupColor = groupResult[0].color;
             }
           }
 
@@ -98,7 +95,6 @@ export const wordRouter = createRouter({
             ...word,
             tags: tagList,
             groupName,
-            groupColor,
           };
         })
       );
@@ -134,7 +130,6 @@ export const wordRouter = createRouter({
         .select({
           id: tags.id,
           name: tags.name,
-          color: tags.color,
         })
         .from(wordTags)
         .innerJoin(tags, eq(wordTags.tagId, tags.id))

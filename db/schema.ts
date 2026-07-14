@@ -33,7 +33,7 @@ export const users = mysqlTable("users", {
 export type User = typeof users.$inferSelect;
 export type InsertUser = typeof users.$inferInsert;
 
-// 单词分组表（文件夹）
+// 单词分组表
 export const wordGroups = mysqlTable("word_groups", {
   id: serial("id").primaryKey(),
   userId: bigint("userId", { mode: "number", unsigned: true })
@@ -41,7 +41,6 @@ export const wordGroups = mysqlTable("word_groups", {
     .references(() => users.id, { onDelete: "cascade" }),
   name: varchar("name", { length: 100 }).notNull(),
   description: text("description"),
-  color: varchar("color", { length: 20 }).default("#3b82f6"),
   sortOrder: int("sortOrder").default(0).notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt")
@@ -88,7 +87,6 @@ export const tags = mysqlTable("tags", {
     .notNull()
     .references(() => users.id, { onDelete: "cascade" }),
   name: varchar("name", { length: 50 }).notNull(),
-  color: varchar("color", { length: 20 }).default("#10b981"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
 
@@ -110,7 +108,7 @@ export const wordTags = mysqlTable("word_tags", {
 export type WordTag = typeof wordTags.$inferSelect;
 export type InsertWordTag = typeof wordTags.$inferInsert;
 
-// 学习日志表（记录复习次数、上次复习时间等）
+// 学习日志表
 export const wordLogs = mysqlTable("word_logs", {
   id: serial("id").primaryKey(),
   wordId: bigint("wordId", { mode: "number", unsigned: true })
