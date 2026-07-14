@@ -1,10 +1,5 @@
 /**
  * Phone Password Authentication Module
- *
- * Features:
- * - Register with phone + password
- * - Login with phone + password
- * - Change password (authenticated)
  */
 
 import bcrypt from "bcryptjs";
@@ -19,7 +14,6 @@ function isValidPhone(phone: string): boolean {
 }
 
 function isValidPassword(password: string): boolean {
-  // At least 6 characters
   return password.length >= 6;
 }
 
@@ -43,40 +37,47 @@ export async function register(
   userId?: number;
   message?: string;
 }> {
-  if (!isValidPhone(phone)) {
-    return { success: false, message: "请输入有效的手机号" };
+  try {
+    if (!isValidPhone(phone)) {
+      return { success: false, message: "请输入有效的手机号" };
+    }
+
+    if (!isValidPassword(password)) {
+      return { success: false, message: "密码至少6位字符" };
+    }
+
+    const db = getDb();
+
+    // Check if phone already registered
+    const existing = await db
+      .select()
+      .from(users)
+      .where(eq(users.phone, phone))
+      .limit(1)
+      .then((rows) => rows[0] || null);
+
+    if (existing) {
+      return { success: false, message: "该手机号已注册，请直接登录" };
+    }
+
+    // Hash password and create user
+    const passwordHash = await hashPassword(password);
+    console.log("[auth] Register - phone:", phone, "hash length:", passwordHash.length);
+
+    const result = await db.insert(users).values({
+      phone,
+      password: passwordHash,
+      name: name || `用户${phone.slice(-4)}`,
+      lastSignInAt: new Date(),
+    });
+
+    const userId = Number(result[0].insertId);
+    console.log("[auth] Register success - userId:", userId);
+    return { success: true, userId, message: "注册成功" };
+  } catch (err: any) {
+    console.error("[auth] Register exception:", err);
+    return { success: false, message: "注册异常: " + (err.message || "未知错误") };
   }
-
-  if (!isValidPassword(password)) {
-    return { success: false, message: "密码至少6位字符" };
-  }
-
-  const db = getDb();
-
-  // Check if phone already registered
-  const existing = await db
-    .select()
-    .from(users)
-    .where(eq(users.phone, phone))
-    .limit(1)
-    .then((rows) => rows[0] || null);
-
-  if (existing) {
-    return { success: false, message: "该手机号已注册，请直接登录" };
-  }
-
-  // Hash password and create user
-  const passwordHash = await hashPassword(password);
-
-  const result = await db.insert(users).values({
-    phone,
-    password: passwordHash,
-    name: name || `用户${phone.slice(-4)}`,
-    lastSignInAt: new Date(),
-  });
-
-  const userId = Number(result[0].insertId);
-  return { success: true, userId, message: "注册成功" };
 }
 
 /**
@@ -90,43 +91,61 @@ export async function login(
   userId?: number;
   message?: string;
 }> {
-  if (!isValidPhone(phone)) {
-    return { success: false, message: "请输入有效的手机号" };
+  try {
+    if (!isValidPhone(phone)) {
+      return { success: false, message: "请输入有效的手机号" };
+    }
+
+    if (!password) {
+      return { success: false, message: "请输入密码" };
+    }
+
+    const db = getDb();
+
+    // Explicitly select password field to ensure it's included
+    const rows = await db
+      .select({
+        id: users.id,
+        phone: users.phone,
+        password: users.password,
+      })
+      .from(users)
+      .where(eq(users.phone, phone))
+      .limit(1);
+
+    const user = rows[0] || null;
+
+    console.log("[auth] Login - phone:", phone, "user found:", !!user);
+
+    if (!user) {
+      return { success: false, message: "手机号未注册" };
+    }
+
+    if (!user.password) {
+      console.log("[auth] Login - user has no password, userId:", user.id);
+      return { success: false, message: "账号异常，请联系管理员" };
+    }
+
+    console.log("[auth] Login - verifying password, hash length:", user.password.length);
+    const valid = await verifyPassword(password, user.password);
+    console.log("[auth] Login - password valid:", valid);
+
+    if (!valid) {
+      return { success: false, message: "密码错误" };
+    }
+
+    // Update last sign in
+    await db
+      .update(users)
+      .set({ lastSignInAt: new Date() })
+      .where(eq(users.id, user.id));
+
+    console.log("[auth] Login success - userId:", user.id);
+    return { success: true, userId: user.id, message: "登录成功" };
+  } catch (err: any) {
+    console.error("[auth] Login exception:", err);
+    return { success: false, message: "登录异常: " + (err.message || "未知错误") };
   }
-
-  if (!password) {
-    return { success: false, message: "请输入密码" };
-  }
-
-  const db = getDb();
-
-  const user = await db
-    .select()
-    .from(users)
-    .where(eq(users.phone, phone))
-    .limit(1)
-    .then((rows) => rows[0] || null);
-
-  if (!user) {
-    return { success: false, message: "手机号未注册" };
-  }
-
-  if (!user.password) {
-    return { success: false, message: "账号异常，请联系管理员" };
-  }
-
-  const valid = await verifyPassword(password, user.password);
-  if (!valid) {
-    return { success: false, message: "密码错误" };
-  }
-
-  // Update last sign in
-  await db
-    .update(users)
-    .set({ lastSignInAt: new Date() })
-    .where(eq(users.id, user.id));
-
-  return { success: true, userId: user.id, message: "登录成功" };
 }
 
 /**
@@ -140,39 +159,45 @@ export async function changePassword(
   success: boolean;
   message?: string;
 }> {
-  if (!isValidPassword(newPassword)) {
-    return { success: false, message: "新密码至少6位字符" };
+  try {
+    if (!isValidPassword(newPassword)) {
+      return { success: false, message: "新密码至少6位字符" };
+    }
+
+    const db = getDb();
+
+    const rows = await db
+      .select({ password: users.password })
+      .from(users)
+      .where(eq(users.id, userId))
+      .limit(1);
+
+    const user = rows[0];
+
+    if (!user || !user.password) {
+      return { success: false, message: "用户不存在" };
+    }
+
+    const valid = await verifyPassword(oldPassword, user.password);
+    if (!valid) {
+      return { success: false, message: "原密码错误" };
+    }
+
+    const newHash = await hashPassword(newPassword);
+    await db
+      .update(users)
+      .set({ password: newHash })
+      .where(eq(users.id, userId));
+
+    return { success: true, message: "密码修改成功" };
+  } catch (err: any) {
+    console.error("[auth] Change password exception:", err);
+    return { success: false, message: "修改异常: " + (err.message || "未知错误") };
   }
-
-  const db = getDb();
-
-  const user = await db
-    .select()
-    .from(users)
-    .where(eq(users.id, userId))
-    .limit(1)
-    .then((rows) => rows[0] || null);
-
-  if (!user || !user.password) {
-    return { success: false, message: "用户不存在" };
-  }
-
-  const valid = await verifyPassword(oldPassword, user.password);
-  if (!valid) {
-    return { success: false, message: "原密码错误" };
-  }
-
-  const newHash = await hashPassword(newPassword);
-  await db
-    .update(users)
-    .set({ password: newHash })
-    .where(eq(users.id, userId));
-
-  return { success: true, message: "密码修改成功" };
 }
 
 /**
- * Find user by ID
+ * Find user by ID (excludes password)
  */
 export async function findUserById(userId: number) {
   const db = getDb();
