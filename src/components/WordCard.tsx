@@ -26,6 +26,7 @@ export interface WordCardData {
   notes?: string | null;
   proficiency: "new" | "learning" | "familiar" | "mastered";
   tags: TagInfo[];
+  groupId?: number | null;
   groupName?: string | null;
   createdAt: Date;
   updatedAt: Date;

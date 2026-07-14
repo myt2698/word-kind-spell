@@ -111,7 +111,7 @@ export default function WordForm({ open, onClose, onSubmit, editWord }: WordForm
           definition: editWord.definition,
           example: editWord.example || "",
           notes: editWord.notes || "",
-          groupId: undefined,
+          groupId: editWord.groupId ?? undefined,
           tagIds: editWord.tags.map((t) => t.id),
           proficiency: editWord.proficiency,
         });

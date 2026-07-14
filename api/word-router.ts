@@ -94,6 +94,7 @@ export const wordRouter = createRouter({
           return {
             ...word,
             tags: tagList,
+            groupId: word.groupId,
             groupName,
           };
         })
