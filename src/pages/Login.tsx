@@ -20,24 +20,32 @@ export default function Login() {
 
   const loginMutation = trpc.auth.login.useMutation({
     onSuccess: (data) => {
+      console.log("[Login] onSuccess:", data);
       if (data.success) {
-        window.location.reload();
+        window.location.href = "/";
       } else {
         setError(data.message);
       }
     },
-    onError: (err) => setError(err.message || "登录失败"),
+    onError: (err) => {
+      console.error("[Login] onError:", err);
+      setError(err.message || "登录失败，请检查网络");
+    },
   });
 
   const registerMutation = trpc.auth.register.useMutation({
     onSuccess: (data) => {
+      console.log("[Register] onSuccess:", data);
       if (data.success) {
-        window.location.reload();
+        window.location.href = "/";
       } else {
         setError(data.message);
       }
     },
-    onError: (err) => setError(err.message || "注册失败"),
+    onError: (err) => {
+      console.error("[Register] onError:", err);
+      setError(err.message || "注册失败，请检查网络");
+    },
   });
 
   const handleSubmit = () => {
