@@ -28,7 +28,6 @@ import {
   Sparkles,
 } from "lucide-react";
 import { useState, useEffect } from "react";
-import { useDebounce } from "@/hooks/useDebounce";
 import type { WordCardData } from "./WordCard";
 
 interface WordFormProps {
@@ -69,8 +68,6 @@ export default function WordForm({ open, onClose, onSubmit, editWord }: WordForm
   const [isLookingUp, setIsLookingUp] = useState(false);
   const [dictError, setDictError] = useState("");
   const [hasAutoFilled, setHasAutoFilled] = useState(false);
-
-  const debouncedWord = useDebounce(form.word, 600);
 
   const lookupMutation = trpc.dict.lookup.useMutation({
     onSuccess: (result) => {
@@ -131,18 +128,6 @@ export default function WordForm({ open, onClose, onSubmit, editWord }: WordForm
       }
     }
   }, [editWord, open]);
-
-  // Auto-lookup when word changes (only for new words, not edit)
-  useEffect(() => {
-    if (
-      !editWord &&
-      debouncedWord.trim().length >= 2 &&
-      /^[a-zA-Z\s'-]+$/.test(debouncedWord.trim()) &&
-      !hasAutoFilled
-    ) {
-      doLookup(debouncedWord.trim());
-    }
-  }, [debouncedWord, editWord, hasAutoFilled]);
 
   const doLookup = (word: string) => {
     if (!word || word.length < 2) {
@@ -231,6 +216,12 @@ export default function WordForm({ open, onClose, onSubmit, editWord }: WordForm
                   id="word"
                   value={form.word}
                   onChange={(e) => updateForm({ word: e.target.value })}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && form.word.trim().length >= 2) {
+                      e.preventDefault();
+                      doLookup(form.word.trim());
+                    }
+                  }}
                   placeholder="输入英文单词"
                   className="h-11 pr-10"
                   required
@@ -273,9 +264,9 @@ export default function WordForm({ open, onClose, onSubmit, editWord }: WordForm
             {dictError && (
               <p className="text-xs text-amber-600">{dictError}</p>
             )}
-            {!editWord && !hasAutoFilled && !dictError && !isPending && form.word.trim().length >= 2 && (
+            {!editWord && !hasAutoFilled && !dictError && !isPending && (
               <p className="text-xs text-gray-400">
-                输入单词后自动查询字典，或点击搜索按钮手动查询
+                输入单词后，点击搜索按钮或按 Enter 键查询字典
               </p>
             )}
             {hasAutoFilled && !dictError && (
