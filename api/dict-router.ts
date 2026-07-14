@@ -87,8 +87,8 @@ function sentenceContainsWord(sentence: string, word: string): boolean {
 async function fetchExamples(word: string): Promise<string> {
   try {
     const lowerWord = word.toLowerCase();
-    // Increase limit to 10 so we have more candidates after filtering
-    const url = `https://tatoeba.org/en/api_v0/search?from=eng&to=cmn&query=${encodeURIComponent(lowerWord)}&sort=relevance&limit=10`;
+    // Use = prefix for exact word match on Tatoeba
+    const url = `https://tatoeba.org/en/api_v0/search?from=eng&to=cmn&query=${encodeURIComponent("=" + lowerWord)}&sort=relevance&limit=10`;
     const res = await fetch(url, { signal: AbortSignal.timeout(10000) });
     if (!res.ok) return "";
     const data = (await res.json()) as {
