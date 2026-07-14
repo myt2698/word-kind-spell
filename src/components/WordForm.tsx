@@ -139,6 +139,16 @@ export default function WordForm({ open, onClose, onSubmit, editWord }: WordForm
     lookupMutation.mutate({ word });
   };
 
+  const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key !== "Enter") return;
+    e.preventDefault();
+    e.stopPropagation();
+    const word = form.word.trim();
+    if (word.length >= 2) {
+      doLookup(word);
+    }
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.word.trim() || !form.definition.trim()) return;
@@ -216,12 +226,7 @@ export default function WordForm({ open, onClose, onSubmit, editWord }: WordForm
                   id="word"
                   value={form.word}
                   onChange={(e) => updateForm({ word: e.target.value })}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && form.word.trim().length >= 2) {
-                      e.preventDefault();
-                      doLookup(form.word.trim());
-                    }
-                  }}
+                  onKeyDown={handleSearchKeyDown}
                   placeholder="输入英文单词"
                   className="h-11 pr-10"
                   required
