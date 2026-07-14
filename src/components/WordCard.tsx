@@ -160,7 +160,7 @@ export default function WordCard({ word, onEdit, onDelete }: WordCardProps) {
             {word.notes && (
               <div className="mt-2">
                 <p className="text-xs text-gray-400 mb-1">备注</p>
-                <p className="text-sm text-gray-600 bg-amber-50 rounded-lg p-2.5">
+                <p className="text-sm text-gray-600 bg-amber-50 rounded-lg p-2.5 whitespace-pre-line">
                   {word.notes}
                 </p>
               </div>
