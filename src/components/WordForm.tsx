@@ -27,7 +27,7 @@ import {
   Volume2,
   Sparkles,
 } from "lucide-react";
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
 import { useDebounce } from "@/hooks/useDebounce";
 import type { WordCardData } from "./WordCard";
 
@@ -49,158 +49,8 @@ export interface WordFormData {
   proficiency: "new" | "learning" | "familiar" | "mastered";
 }
 
-// ── iciba API (Chinese definitions) ──
-interface IcibaEntry {
-  key: string;
-  paraphrase: string;
-  means: { part: string; means: string[] }[];
-}
-interface IcibaResponse {
-  message?: IcibaEntry[];
-  status: number;
-}
-
-// ── Free Dictionary API (phonetic + examples) ──
-interface DictPhonetic {
-  text?: string;
-  audio?: string;
-}
-interface DictDefinition {
-  definition: string;
-  example?: string;
-}
-interface DictMeaning {
-  partOfSpeech: string;
-  definitions: DictDefinition[];
-}
-interface DictEntry {
-  word: string;
-  phonetic?: string;
-  phonetics: DictPhonetic[];
-  meanings: DictMeaning[];
-}
-
-/** Fetch Chinese definitions from iciba */
-async function fetchIciba(word: string): Promise<{
-  definitions: string;
-} | null> {
-  try {
-    const url = `https://dict-mobile.iciba.com/interface/index.php?c=word&m=getsuggest&nums=1&client=6&is_need_mean=1&word=${encodeURIComponent(word.toLowerCase())}`;
-    console.log("[dict] Fetching iciba:", url);
-    const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
-    console.log("[dict] iciba status:", res.status);
-    if (!res.ok) return null;
-    const data: IcibaResponse = await res.json();
-    console.log("[dict] iciba response status:", data.status, "entries:", data.message?.length ?? 0);
-    if (!data.message || data.message.length === 0) return null;
-
-    const entry = data.message[0];
-    let definitions = "";
-
-    if (entry.means && entry.means.length > 0) {
-      for (const m of entry.means) {
-        const part = m.part;
-        const means = m.means.join("，");
-        if (definitions) definitions += "\n";
-        definitions += `${part} ${means}`;
-      }
-    }
-
-    // Fallback to paraphrase if means is empty
-    if (!definitions && entry.paraphrase) {
-      definitions = entry.paraphrase;
-    }
-
-    console.log("[dict] iciba definitions:", definitions.substring(0, 100));
-    if (!definitions) return null;
-    return { definitions };
-  } catch (err: any) {
-    console.error("[dict] iciba error:", err.message || err);
-    return null;
-  }
-}
-
-/** Fetch phonetic + examples from Free Dictionary API */
-async function fetchFreeDict(word: string): Promise<{
-  phonetic: string;
-  example: string;
-} | null> {
-  try {
-    const url = `https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(word.toLowerCase())}`;
-    console.log("[dict] Fetching free dict:", url);
-    const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
-    console.log("[dict] free dict status:", res.status);
-    if (!res.ok) return null;
-    const data: DictEntry[] = await res.json();
-    if (!data || data.length === 0) return null;
-
-    const entry = data[0];
-
-    // Phonetic
-    let phonetic = entry.phonetic || "";
-    if (!phonetic) {
-      for (const p of entry.phonetics) {
-        if (p.text) { phonetic = p.text; break; }
-      }
-    }
-
-    // Examples (collect up to 2)
-    const examples: string[] = [];
-    for (const meaning of entry.meanings) {
-      for (const def of meaning.definitions) {
-        if (def.example && examples.length < 2) {
-          examples.push(def.example);
-        }
-      }
-    }
-
-    console.log("[dict] free dict phonetic:", phonetic, "examples:", examples.length);
-    return { phonetic, example: examples.join("\n") };
-  } catch (err: any) {
-    console.error("[dict] free dict error:", err.message || err);
-    return null;
-  }
-}
-
-/** Combined lookup: Chinese defs + phonetic + examples */
-async function lookupWord(word: string): Promise<{
-  phonetic: string;
-  definition: string;
-  example: string;
-  partial: boolean;
-} | null> {
-  console.log("[dict] Looking up word:", word);
-  const [icibaResult, dictResult] = await Promise.all([
-    fetchIciba(word),
-    fetchFreeDict(word),
-  ]);
-
-  console.log("[dict] iciba ok:", !!icibaResult, "dict ok:", !!dictResult);
-
-  if (!icibaResult && !dictResult) {
-    console.log("[dict] Both APIs failed");
-    return null;
-  }
-
-  const result = {
-    phonetic: dictResult?.phonetic || "",
-    // BUG FIX: Never fallback to phonetic for definition
-    definition: icibaResult?.definitions || "",
-    example: dictResult?.example || "",
-    partial: !icibaResult || !dictResult,
-  };
-
-  console.log("[dict] Final result:", {
-    phonetic: result.phonetic,
-    definition: result.definition.substring(0, 50),
-    example: result.example.substring(0, 50),
-    partial: result.partial,
-  });
-
-  return result;
-}
-
 export default function WordForm({ open, onClose, onSubmit, editWord }: WordFormProps) {
+  const utils = trpc.useUtils();
   const { data: groups } = trpc.wordGroup.list.useQuery();
   const { data: allTags } = trpc.tag.list.useQuery();
 
@@ -222,11 +72,40 @@ export default function WordForm({ open, onClose, onSubmit, editWord }: WordForm
 
   const debouncedWord = useDebounce(form.word, 600);
 
+  const lookupMutation = trpc.dict.lookup.useMutation({
+    onSuccess: (result) => {
+      setIsLookingUp(false);
+      if (result.found) {
+        setForm((prev) => ({
+          ...prev,
+          phonetic: result.phonetic || prev.phonetic,
+          definition: result.definition || prev.definition,
+          example: result.example || prev.example,
+        }));
+        setHasAutoFilled(true);
+        if (result.partial && !result.definition) {
+          setDictError("未找到中文释义，音标和例句已填充，请手动补充释义");
+        } else if (result.partial) {
+          setDictError("部分数据未获取到，请检查并补充");
+        } else {
+          setDictError("");
+        }
+      } else {
+        setDictError(`未找到 "${form.word.trim()}" 的释义，请手动填写`);
+      }
+    },
+    onError: (err) => {
+      setIsLookingUp(false);
+      setDictError("查询失败: " + (err.message || "网络错误"));
+    },
+  });
+
   // Reset form when dialog opens
   useEffect(() => {
     if (open) {
       setDictError("");
       setHasAutoFilled(false);
+      lookupMutation.reset();
       if (editWord) {
         setForm({
           word: editWord.word,
@@ -261,45 +140,19 @@ export default function WordForm({ open, onClose, onSubmit, editWord }: WordForm
       /^[a-zA-Z\s'-]+$/.test(debouncedWord.trim()) &&
       !hasAutoFilled
     ) {
-      handleLookup(debouncedWord.trim());
+      doLookup(debouncedWord.trim());
     }
   }, [debouncedWord, editWord, hasAutoFilled]);
 
-  const handleLookup = useCallback(async (word?: string) => {
-    const target = word || form.word.trim();
-    if (!target || target.length < 2) {
+  const doLookup = (word: string) => {
+    if (!word || word.length < 2) {
       setDictError("请输入至少2个字母的单词");
       return;
     }
     setIsLookingUp(true);
     setDictError("");
-    const result = await lookupWord(target);
-    setIsLookingUp(false);
-    if (result && result.definition) {
-      setForm((prev) => ({
-        ...prev,
-        phonetic: result.phonetic || prev.phonetic,
-        definition: result.definition,
-        example: result.example || prev.example,
-      }));
-      setHasAutoFilled(true);
-      if (result.partial) {
-        setDictError("部分数据未获取到，请检查并补充");
-      } else {
-        setDictError("");
-      }
-    } else if (result && !result.definition) {
-      // Got phonetic/example but no Chinese definition
-      setForm((prev) => ({
-        ...prev,
-        phonetic: result.phonetic || prev.phonetic,
-        example: result.example || prev.example,
-      }));
-      setDictError(`未找到 "${target}" 的中文释义，请手动填写`);
-    } else {
-      setDictError(`未找到 "${target}" 的释义，请手动填写`);
-    }
-  }, [form.word]);
+    lookupMutation.mutate({ word });
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -319,6 +172,8 @@ export default function WordForm({ open, onClose, onSubmit, editWord }: WordForm
 
   const createTagMutation = trpc.tag.create.useMutation({
     onSuccess: (data) => {
+      utils.tag.list.invalidate();
+      utils.tag.listWithCount.invalidate();
       if (data.created) {
         setForm((prev) => ({ ...prev, tagIds: [...prev.tagIds, data.id] }));
       } else if (!form.tagIds.includes(data.id)) {
@@ -351,6 +206,8 @@ export default function WordForm({ open, onClose, onSubmit, editWord }: WordForm
       return next;
     });
   };
+
+  const isPending = isLookingUp || lookupMutation.isPending;
 
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
@@ -395,11 +252,11 @@ export default function WordForm({ open, onClose, onSubmit, editWord }: WordForm
                   type="button"
                   variant="outline"
                   className="h-11 px-3 shrink-0"
-                  onClick={() => handleLookup()}
-                  disabled={isLookingUp || form.word.trim().length < 2}
+                  onClick={() => doLookup(form.word.trim())}
+                  disabled={isPending || form.word.trim().length < 2}
                   title="从字典查询释义"
                 >
-                  {isLookingUp ? (
+                  {isPending ? (
                     <Loader2 className="w-4 h-4 animate-spin" />
                   ) : (
                     <Search className="w-4 h-4" />
@@ -407,7 +264,7 @@ export default function WordForm({ open, onClose, onSubmit, editWord }: WordForm
                 </Button>
               )}
             </div>
-            {isLookingUp && (
+            {isPending && (
               <p className="text-xs text-indigo-500 flex items-center gap-1">
                 <Loader2 className="w-3 h-3 animate-spin" />
                 正在查询字典...
@@ -416,7 +273,7 @@ export default function WordForm({ open, onClose, onSubmit, editWord }: WordForm
             {dictError && (
               <p className="text-xs text-amber-600">{dictError}</p>
             )}
-            {!editWord && !hasAutoFilled && !dictError && !isLookingUp && form.word.trim().length >= 2 && (
+            {!editWord && !hasAutoFilled && !dictError && !isPending && form.word.trim().length >= 2 && (
               <p className="text-xs text-gray-400">
                 输入单词后自动查询字典，或点击搜索按钮手动查询
               </p>

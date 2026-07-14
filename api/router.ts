@@ -2,6 +2,7 @@ import { authRouter } from "./auth-router";
 import { wordGroupRouter } from "./word-group-router";
 import { wordRouter } from "./word-router";
 import { tagRouter } from "./tag-router";
+import { dictRouter } from "./dict-router";
 import { createRouter, publicQuery } from "./middleware";
 
 export const appRouter = createRouter({
@@ -10,6 +11,7 @@ export const appRouter = createRouter({
   wordGroup: wordGroupRouter,
   word: wordRouter,
   tag: tagRouter,
+  dict: dictRouter,
 });
 
 export type AppRouter = typeof appRouter;
