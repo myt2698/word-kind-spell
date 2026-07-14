@@ -1,17 +1,38 @@
 import { z } from "zod";
 import { createRouter, authedQuery } from "./middleware";
 import { getDb } from "./queries/connection";
-import { wordGroups, users } from "@db/schema";
-import { eq, and, asc } from "drizzle-orm";
+import { wordGroups, users, words } from "@db/schema";
+import { eq, and, asc, sql } from "drizzle-orm";
 
 export const wordGroupRouter = createRouter({
   list: authedQuery.query(async ({ ctx }) => {
     const db = getDb();
-    return db
+    const groups = await db
       .select()
       .from(wordGroups)
       .where(eq(wordGroups.userId, ctx.user.id))
       .orderBy(asc(wordGroups.sortOrder));
+
+    // Get word count for each group
+    const groupsWithCount = await Promise.all(
+      groups.map(async (group) => {
+        const countResult = await db
+          .select({ count: sql<number>`count(*)` })
+          .from(words)
+          .where(
+            and(
+              eq(words.groupId, group.id),
+              eq(words.userId, ctx.user.id)
+            )
+          );
+        return {
+          ...group,
+          wordCount: countResult[0]?.count ?? 0,
+        };
+      })
+    );
+
+    return groupsWithCount;
   }),
 
   getById: authedQuery

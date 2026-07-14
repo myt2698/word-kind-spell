@@ -9,6 +9,14 @@ import {
   Star,
 } from "lucide-react";
 
+interface GroupItem {
+  id: number;
+  name: string;
+  description: string | null;
+  sortOrder: number;
+  wordCount: number;
+}
+
 interface AppSidebarProps {
   selectedGroup: number | null;
   onSelectGroup: (id: number | null) => void;
@@ -98,6 +106,7 @@ export default function AppSidebar({
                   }`}
                 >
                   <span className="truncate flex-1 text-left">{group.name}</span>
+                  <span className="text-xs opacity-50 shrink-0">{(group as unknown as GroupItem).wordCount ?? 0}</span>
                   {isDefault && (
                     <Star className="w-3 h-3 text-amber-400 fill-amber-400 shrink-0" />
                   )}

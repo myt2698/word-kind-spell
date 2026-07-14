@@ -193,6 +193,7 @@ export default function GroupManager({ open, onClose }: GroupManagerProps) {
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-1.5">
                     <p className="text-sm font-medium text-gray-800 truncate">{group.name}</p>
+                    <span className="text-xs text-gray-400 shrink-0">{(group as any).wordCount ?? 0}词</span>
                     {isDefault && (
                       <span className="text-[10px] bg-amber-50 text-amber-600 px-1.5 py-0.5 rounded-full border border-amber-200 shrink-0">默认</span>
                     )}
