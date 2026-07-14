@@ -1,6 +1,7 @@
 import type { FetchCreateContextFnOptions } from "@trpc/server/adapters/fetch";
 import type { User } from "@db/schema";
-import { authenticateRequest } from "./kimi/auth";
+import { verifyPhoneSessionToken } from "./session-v2";
+import { findUserById } from "./sms-auth";
 
 export type TrpcContext = {
   req: Request;
@@ -12,10 +13,23 @@ export async function createContext(
   opts: FetchCreateContextFnOptions,
 ): Promise<TrpcContext> {
   const ctx: TrpcContext = { req: opts.req, resHeaders: opts.resHeaders };
+
   try {
-    ctx.user = await authenticateRequest(opts.req.headers);
+    // Try phone auth session
+    const cookies = opts.req.headers.get("cookie") || "";
+    const match = cookies.match(/kimi_sid=([^;]+)/);
+    if (match) {
+      const session = await verifyPhoneSessionToken(decodeURIComponent(match[1]));
+      if (session) {
+        const user = await findUserById(session.userId);
+        if (user) {
+          ctx.user = user;
+        }
+      }
+    }
   } catch {
-    // Authentication is optional here
+    // Authentication is optional
   }
+
   return ctx;
 }
