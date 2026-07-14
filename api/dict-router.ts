@@ -73,10 +73,22 @@ async function fetchPhonetic(word: string): Promise<string> {
   }
 }
 
+/** Check if sentence contains the target word as a whole word */
+function sentenceContainsWord(sentence: string, word: string): boolean {
+  // Match as whole word (word boundary), case-insensitive
+  const pattern = new RegExp(
+    "(?:^|[^a-zA-Z])" + word.replace(/[.*+?^${}()|[\]\\]/g, "\\$") + "(?:[^a-zA-Z]|$)",
+    "i"
+  );
+  return pattern.test(sentence);
+}
+
 /** Fetch bilingual example sentences from Tatoeba */
 async function fetchExamples(word: string): Promise<string> {
   try {
-    const url = `https://tatoeba.org/en/api_v0/search?from=eng&to=cmn&query=${encodeURIComponent(word.toLowerCase())}&sort=relevance&limit=3`;
+    const lowerWord = word.toLowerCase();
+    // Increase limit to 10 so we have more candidates after filtering
+    const url = `https://tatoeba.org/en/api_v0/search?from=eng&to=cmn&query=${encodeURIComponent(lowerWord)}&sort=relevance&limit=10`;
     const res = await fetch(url, { signal: AbortSignal.timeout(10000) });
     if (!res.ok) return "";
     const data = (await res.json()) as {
@@ -91,6 +103,12 @@ async function fetchExamples(word: string): Promise<string> {
       if (examples.length >= 2) break;
 
       const en = result.text;
+
+      // Filter: only keep sentences that actually contain the target word
+      if (!sentenceContainsWord(en, lowerWord)) {
+        continue;
+      }
+
       let zh = "";
       for (const transGroup of result.translations) {
         if (transGroup && transGroup.length > 0) {
@@ -99,12 +117,10 @@ async function fetchExamples(word: string): Promise<string> {
         }
       }
 
-      if (en) {
-        if (zh) {
-          examples.push(`${en}\n${zh}`);
-        } else {
-          examples.push(en);
-        }
+      if (zh) {
+        examples.push(`${en}\n${zh}`);
+      } else {
+        examples.push(en);
       }
     }
 
