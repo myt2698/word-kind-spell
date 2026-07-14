@@ -74,6 +74,8 @@ async function fetchFreeDict(word: string): Promise<{
         if (p.text) { phonetic = p.text; break; }
       }
     }
+    // Replace IPA flipped-r with regular r for readability
+    phonetic = phonetic.replace(/ɹ/g, "r");
 
     // Examples (up to 2)
     const examples: string[] = [];
