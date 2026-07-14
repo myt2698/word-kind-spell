@@ -85,27 +85,37 @@ async function fetchIciba(word: string): Promise<{
   definitions: string;
 } | null> {
   try {
-    const res = await fetch(
-      `https://dict-mobile.iciba.com/interface/index.php?c=word&m=getsuggest&nums=1&client=6&is_need_mean=1&word=${encodeURIComponent(word.toLowerCase())}`,
-      { signal: AbortSignal.timeout(8000) }
-    );
+    const url = `https://dict-mobile.iciba.com/interface/index.php?c=word&m=getsuggest&nums=1&client=6&is_need_mean=1&word=${encodeURIComponent(word.toLowerCase())}`;
+    console.log("[dict] Fetching iciba:", url);
+    const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
+    console.log("[dict] iciba status:", res.status);
     if (!res.ok) return null;
     const data: IcibaResponse = await res.json();
+    console.log("[dict] iciba response status:", data.status, "entries:", data.message?.length ?? 0);
     if (!data.message || data.message.length === 0) return null;
 
     const entry = data.message[0];
     let definitions = "";
 
-    for (const m of entry.means) {
-      const part = m.part;
-      const means = m.means.join("，");
-      if (definitions) definitions += "\n";
-      definitions += `${part} ${means}`;
+    if (entry.means && entry.means.length > 0) {
+      for (const m of entry.means) {
+        const part = m.part;
+        const means = m.means.join("，");
+        if (definitions) definitions += "\n";
+        definitions += `${part} ${means}`;
+      }
     }
 
+    // Fallback to paraphrase if means is empty
+    if (!definitions && entry.paraphrase) {
+      definitions = entry.paraphrase;
+    }
+
+    console.log("[dict] iciba definitions:", definitions.substring(0, 100));
     if (!definitions) return null;
     return { definitions };
-  } catch {
+  } catch (err: any) {
+    console.error("[dict] iciba error:", err.message || err);
     return null;
   }
 }
@@ -116,10 +126,10 @@ async function fetchFreeDict(word: string): Promise<{
   example: string;
 } | null> {
   try {
-    const res = await fetch(
-      `https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(word.toLowerCase())}`,
-      { signal: AbortSignal.timeout(8000) }
-    );
+    const url = `https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(word.toLowerCase())}`;
+    console.log("[dict] Fetching free dict:", url);
+    const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
+    console.log("[dict] free dict status:", res.status);
     if (!res.ok) return null;
     const data: DictEntry[] = await res.json();
     if (!data || data.length === 0) return null;
@@ -144,8 +154,10 @@ async function fetchFreeDict(word: string): Promise<{
       }
     }
 
+    console.log("[dict] free dict phonetic:", phonetic, "examples:", examples.length);
     return { phonetic, example: examples.join("\n") };
-  } catch {
+  } catch (err: any) {
+    console.error("[dict] free dict error:", err.message || err);
     return null;
   }
 }
@@ -155,19 +167,37 @@ async function lookupWord(word: string): Promise<{
   phonetic: string;
   definition: string;
   example: string;
+  partial: boolean;
 } | null> {
+  console.log("[dict] Looking up word:", word);
   const [icibaResult, dictResult] = await Promise.all([
     fetchIciba(word),
     fetchFreeDict(word),
   ]);
 
-  if (!icibaResult && !dictResult) return null;
+  console.log("[dict] iciba ok:", !!icibaResult, "dict ok:", !!dictResult);
 
-  return {
+  if (!icibaResult && !dictResult) {
+    console.log("[dict] Both APIs failed");
+    return null;
+  }
+
+  const result = {
     phonetic: dictResult?.phonetic || "",
-    definition: icibaResult?.definitions || dictResult?.phonetic || "",
+    // BUG FIX: Never fallback to phonetic for definition
+    definition: icibaResult?.definitions || "",
     example: dictResult?.example || "",
+    partial: !icibaResult || !dictResult,
   };
+
+  console.log("[dict] Final result:", {
+    phonetic: result.phonetic,
+    definition: result.definition.substring(0, 50),
+    example: result.example.substring(0, 50),
+    partial: result.partial,
+  });
+
+  return result;
 }
 
 export default function WordForm({ open, onClose, onSubmit, editWord }: WordFormProps) {
@@ -253,7 +283,19 @@ export default function WordForm({ open, onClose, onSubmit, editWord }: WordForm
         example: result.example || prev.example,
       }));
       setHasAutoFilled(true);
-      setDictError("");
+      if (result.partial) {
+        setDictError("部分数据未获取到，请检查并补充");
+      } else {
+        setDictError("");
+      }
+    } else if (result && !result.definition) {
+      // Got phonetic/example but no Chinese definition
+      setForm((prev) => ({
+        ...prev,
+        phonetic: result.phonetic || prev.phonetic,
+        example: result.example || prev.example,
+      }));
+      setDictError(`未找到 "${target}" 的中文释义，请手动填写`);
     } else {
       setDictError(`未找到 "${target}" 的释义，请手动填写`);
     }
@@ -379,7 +421,7 @@ export default function WordForm({ open, onClose, onSubmit, editWord }: WordForm
                 输入单词后自动查询字典，或点击搜索按钮手动查询
               </p>
             )}
-            {hasAutoFilled && (
+            {hasAutoFilled && !dictError && (
               <p className="text-xs text-green-600 flex items-center gap-1">
                 <Sparkles className="w-3 h-3" />
                 已从字典自动填充释义
