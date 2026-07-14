@@ -209,6 +209,7 @@ export async function findUserById(userId: number) {
       name: users.name,
       email: users.email,
       avatar: users.avatar,
+      defaultGroupId: users.defaultGroupId,
       role: users.role,
       createdAt: users.createdAt,
       updatedAt: users.updatedAt,

@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { createRouter, authedQuery } from "./middleware";
 import { getDb } from "./queries/connection";
-import { wordGroups } from "@db/schema";
+import { wordGroups, users } from "@db/schema";
 import { eq, and, asc } from "drizzle-orm";
 
 export const wordGroupRouter = createRouter({
@@ -45,12 +45,25 @@ export const wordGroupRouter = createRouter({
     )
     .mutation(async ({ ctx, input }) => {
       const db = getDb();
+      // Auto-assign next sortOrder if not provided
+      let sortOrder = input.sortOrder;
+      if (sortOrder === undefined) {
+        const existing = await db
+          .select({ maxOrder: wordGroups.sortOrder })
+          .from(wordGroups)
+          .where(eq(wordGroups.userId, ctx.user.id))
+          .orderBy(wordGroups.sortOrder);
+        sortOrder = existing.length > 0
+          ? Math.max(...existing.map((g) => g.maxOrder)) + 1
+          : 0;
+      }
+
       const result = await db.insert(wordGroups).values({
         userId: ctx.user.id,
         name: input.name,
         description: input.description,
         color: input.color ?? "#3b82f6",
-        sortOrder: input.sortOrder ?? 0,
+        sortOrder,
       });
       return { id: Number(result[0].insertId) };
     }),
@@ -91,6 +104,84 @@ export const wordGroupRouter = createRouter({
             eq(wordGroups.userId, ctx.user.id)
           )
         );
+      // Also clear default if this was the default group
+      await db
+        .update(users)
+        .set({ defaultGroupId: null })
+        .where(
+          and(
+            eq(users.id, ctx.user.id),
+            eq(users.defaultGroupId, input.id)
+          )
+        );
       return { success: true };
     }),
+
+  // 批量更新分组排序
+  reorder: authedQuery
+    .input(
+      z.object({
+        orders: z.array(
+          z.object({ id: z.number(), sortOrder: z.number() })
+        ),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const db = getDb();
+      // Update each group's sortOrder
+      for (const item of input.orders) {
+        await db
+          .update(wordGroups)
+          .set({ sortOrder: item.sortOrder })
+          .where(
+            and(
+              eq(wordGroups.id, item.id),
+              eq(wordGroups.userId, ctx.user.id)
+            )
+          );
+      }
+      return { success: true };
+    }),
+
+  // 设置默认分组
+  setDefault: authedQuery
+    .input(z.object({ groupId: z.number().nullable() }))
+    .mutation(async ({ ctx, input }) => {
+      const db = getDb();
+
+      // If groupId is provided, verify the group belongs to this user
+      if (input.groupId !== null) {
+        const group = await db
+          .select()
+          .from(wordGroups)
+          .where(
+            and(
+              eq(wordGroups.id, input.groupId),
+              eq(wordGroups.userId, ctx.user.id)
+            )
+          )
+          .limit(1);
+        if (group.length === 0) {
+          return { success: false, message: "分组不存在" };
+        }
+      }
+
+      await db
+        .update(users)
+        .set({ defaultGroupId: input.groupId })
+        .where(eq(users.id, ctx.user.id));
+
+      return { success: true };
+    }),
+
+  // 获取用户设置（含默认分组）
+  getSettings: authedQuery.query(async ({ ctx }) => {
+    const db = getDb();
+    const result = await db
+      .select({ defaultGroupId: users.defaultGroupId })
+      .from(users)
+      .where(eq(users.id, ctx.user.id))
+      .limit(1);
+    return result[0] ?? { defaultGroupId: null };
+  }),
 });

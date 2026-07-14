@@ -6,6 +6,7 @@ import {
   BarChart3,
   ChevronRight,
   X,
+  Star,
 } from "lucide-react";
 
 interface AppSidebarProps {
@@ -33,6 +34,7 @@ export default function AppSidebar({
 }: AppSidebarProps) {
   const { data: groups } = trpc.wordGroup.list.useQuery();
   const { data: tags } = trpc.tag.listWithCount.useQuery();
+  const { data: userSettings } = trpc.wordGroup.getSettings.useQuery();
 
   return (
     <div className="h-full flex flex-col bg-white">
@@ -80,26 +82,32 @@ export default function AppSidebar({
             </Button>
           </div>
           <div className="space-y-0.5">
-            {groups?.map((group) => (
-              <button
-                key={group.id}
-                onClick={() => {
-                  onSelectGroup(group.id);
-                  onSelectTag(null);
-                }}
-                className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-all ${
-                  selectedGroup === group.id
-                    ? "bg-indigo-50 text-indigo-700 font-medium"
-                    : "text-gray-600 hover:bg-gray-50"
-                }`}
-              >
-                <div
-                  className="w-2.5 h-2.5 rounded-full shrink-0"
-                  style={{ backgroundColor: group.color || "#3b82f6" }}
-                />
-                <span className="truncate flex-1 text-left">{group.name}</span>
-              </button>
-            ))}
+            {groups?.map((group) => {
+              const isDefault = userSettings?.defaultGroupId === group.id;
+              return (
+                <button
+                  key={group.id}
+                  onClick={() => {
+                    onSelectGroup(group.id);
+                    onSelectTag(null);
+                  }}
+                  className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-all ${
+                    selectedGroup === group.id
+                      ? "bg-indigo-50 text-indigo-700 font-medium"
+                      : "text-gray-600 hover:bg-gray-50"
+                  }`}
+                >
+                  <div
+                    className="w-2.5 h-2.5 rounded-full shrink-0"
+                    style={{ backgroundColor: group.color || "#3b82f6" }}
+                  />
+                  <span className="truncate flex-1 text-left">{group.name}</span>
+                  {isDefault && (
+                    <Star className="w-3 h-3 text-amber-400 fill-amber-400 shrink-0" />
+                  )}
+                </button>
+              );
+            })}
             {groups?.length === 0 && (
               <p className="text-xs text-gray-400 px-3 py-2">暂无分组</p>
             )}

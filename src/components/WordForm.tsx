@@ -52,6 +52,7 @@ export default function WordForm({ open, onClose, onSubmit, editWord }: WordForm
   const utils = trpc.useUtils();
   const { data: groups } = trpc.wordGroup.list.useQuery();
   const { data: allTags } = trpc.tag.list.useQuery();
+  const { data: userSettings } = trpc.wordGroup.getSettings.useQuery();
 
   const [form, setForm] = useState<WordFormData>({
     word: "",
@@ -121,13 +122,13 @@ export default function WordForm({ open, onClose, onSubmit, editWord }: WordForm
           definition: "",
           example: "",
           notes: "",
-          groupId: undefined,
+          groupId: userSettings?.defaultGroupId ?? undefined,
           tagIds: [],
           proficiency: "new",
         });
       }
     }
-  }, [editWord, open]);
+  }, [editWord, open, userSettings]);
 
   const doLookup = (word: string) => {
     if (!word || word.length < 2) {
