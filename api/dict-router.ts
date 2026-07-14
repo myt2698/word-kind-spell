@@ -1,9 +1,7 @@
 /**
  * Dictionary Lookup Router
- * Combines multiple free APIs:
- * - iciba: Chinese definitions (fast)
- * - Free Dictionary API: phonetic (fast)
- * - Tatoeba: bilingual example sentences (slow, may timeout)
+ * - iciba: Chinese definitions (~100ms)
+ * - Free Dictionary API: phonetic + English examples (~1-2s)
  */
 
 import { z } from "zod";
@@ -48,80 +46,48 @@ async function fetchIciba(word: string): Promise<{ definitions: string } | null>
   }
 }
 
-/** Fetch phonetic from Free Dictionary API */
-async function fetchPhonetic(word: string): Promise<string> {
+/** Fetch phonetic + examples from Free Dictionary API */
+async function fetchFreeDict(word: string): Promise<{
+  phonetic: string;
+  examples: string[];
+} | null> {
   try {
     const url = `https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(word.toLowerCase())}`;
-    const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
-    if (!res.ok) return "";
+    const res = await fetch(url, { signal: AbortSignal.timeout(10000) });
+    if (!res.ok) return null;
     const data = (await res.json()) as Array<{
       phonetic?: string;
       phonetics: Array<{ text?: string; audio?: string }>;
+      meanings: Array<{
+        partOfSpeech: string;
+        definitions: Array<{ definition: string; example?: string }>;
+      }>;
     }>;
-    if (!data || data.length === 0) return "";
+    if (!data || data.length === 0) return null;
 
     const entry = data[0];
+
+    // Phonetic
     let phonetic = entry.phonetic || "";
     if (!phonetic) {
       for (const p of entry.phonetics) {
         if (p.text) { phonetic = p.text; break; }
       }
     }
-    return phonetic;
-  } catch {
-    return "";
-  }
-}
 
-/** Check if sentence contains the target word as a whole word */
-function sentenceContainsWord(sentence: string, word: string): boolean {
-  const pattern = new RegExp(
-    "(?:^|[^a-zA-Z])" + word.replace(/[.*+?^${}()|[\]\\]/g, "\\$") + "(?:[^a-zA-Z]|$)",
-    "i"
-  );
-  return pattern.test(sentence);
-}
-
-/** Fetch bilingual example sentences from Tatoeba */
-async function fetchExamples(word: string): Promise<string> {
-  try {
-    const lowerWord = word.toLowerCase();
-    // Use = prefix for exact word match on Tatoeba
-    const url = `https://tatoeba.org/en/api_v0/search?from=eng&to=cmn&query=${encodeURIComponent("=" + lowerWord)}&sort=relevance&limit=10`;
-    const res = await fetch(url, { signal: AbortSignal.timeout(20000) });
-    if (!res.ok) return "";
-    const data = (await res.json()) as {
-      results: Array<{
-        text: string;
-        translations: Array<Array<{ text: string }>>;
-      }>;
-    };
-
+    // Examples (up to 2)
     const examples: string[] = [];
-    for (const result of data.results) {
-      if (examples.length >= 2) break;
-
-      const en = result.text;
-      if (!sentenceContainsWord(en, lowerWord)) continue;
-
-      let zh = "";
-      for (const transGroup of result.translations) {
-        if (transGroup && transGroup.length > 0) {
-          zh = transGroup[0].text;
-          break;
+    for (const meaning of entry.meanings) {
+      for (const def of meaning.definitions) {
+        if (def.example && examples.length < 2) {
+          examples.push(def.example);
         }
-      }
-
-      if (zh) {
-        examples.push(`${en}\n${zh}`);
-      } else {
-        examples.push(en);
       }
     }
 
-    return examples.join("\n\n");
+    return { phonetic, examples };
   } catch {
-    return "";
+    return null;
   }
 }
 
@@ -131,30 +97,22 @@ export const dictRouter = createRouter({
     .mutation(async ({ input }) => {
       const word = input.word.trim().toLowerCase();
 
-      // Query fast APIs (iciba + phonetic) first
-      const [icibaResult, phonetic] = await Promise.all([
+      // Query both APIs in parallel
+      const [icibaResult, dictResult] = await Promise.all([
         fetchIciba(word),
-        fetchPhonetic(word),
+        fetchFreeDict(word),
       ]);
 
-      // If neither fast API returned data, try Tatoeba as last resort
-      if (!icibaResult && !phonetic) {
-        const example = await fetchExamples(word);
-        if (!example) {
-          return { found: false as const, phonetic: "", definition: "", example: "" };
-        }
-        return { found: true as const, phonetic: "", definition: "", example };
+      if (!icibaResult && !dictResult) {
+        return { found: false as const, phonetic: "", definition: "", example: "" };
       }
-
-      // Query Tatoeba separately with longer timeout (doesn't block fast APIs)
-      const example = await fetchExamples(word);
 
       return {
         found: true as const,
-        phonetic,
+        phonetic: dictResult?.phonetic || "",
         definition: icibaResult?.definitions || "",
-        example,
-        partial: !icibaResult || (!phonetic && !example),
+        example: (dictResult?.examples || []).join("\n"),
+        partial: !icibaResult || !dictResult,
       };
     }),
 });
