@@ -5,7 +5,7 @@ import AppHeader from "@/components/AppHeader";
 import AppSidebar from "@/components/AppSidebar";
 import MobileNav from "@/components/MobileNav";
 import SearchBar from "@/components/SearchBar";
-import FilterBar, { type ProficiencyFilter, type SortBy } from "@/components/FilterBar";
+import FilterBar, { type SortBy } from "@/components/FilterBar";
 import WordCard from "@/components/WordCard";
 import type { WordCardData } from "@/components/WordCard";
 import WordForm, { type WordFormData } from "@/components/WordForm";
@@ -32,7 +32,6 @@ export default function Home() {
 
   // Search & Filter state
   const [searchQuery, setSearchQuery] = useState("");
-  const [proficiency, setProficiency] = useState<ProficiencyFilter>("all");
   const [sortBy, setSortBy] = useState<SortBy>("newest");
   const [selectedGroup, setSelectedGroup] = useState<number | null>(null);
   const [selectedTag, setSelectedTag] = useState<number | null>(null);
@@ -51,7 +50,6 @@ export default function Home() {
     groupId: selectedGroup ?? undefined,
     tagId: selectedTag ?? undefined,
     search: searchQuery || undefined,
-    proficiency: proficiency === "all" ? undefined : proficiency,
     sortBy,
   });
 
@@ -80,13 +78,6 @@ export default function Home() {
     },
   });
 
-  const updateProficiency = trpc.word.updateProficiency.useMutation({
-    onSuccess: () => {
-      utils.word.list.invalidate();
-      utils.word.stats.invalidate();
-    },
-  });
-
   const handleSearch = useCallback((query: string) => {
     setSearchQuery(query);
   }, []);
@@ -106,10 +97,6 @@ export default function Home() {
     if (confirm("确定要删除这个单词吗？")) {
       deleteWord.mutate({ id });
     }
-  };
-
-  const handleProficiencyChange = (id: number, level: WordCardData["proficiency"]) => {
-    updateProficiency.mutate({ id, proficiency: level });
   };
 
   const openEditForm = (word: WordCardData) => {
@@ -142,7 +129,7 @@ export default function Home() {
   if (!user) return null;
 
   const filteredWords = words || [];
-  const isEmpty = filteredWords.length === 0 && !wordsLoading && !searchQuery && proficiency === "all" && !selectedGroup && !selectedTag;
+  const isEmpty = filteredWords.length === 0 && !wordsLoading && !searchQuery && !selectedGroup && !selectedTag;
 
   return (
     <div className="min-h-screen bg-gray-50/50">
@@ -230,8 +217,6 @@ export default function Home() {
             {/* Filter Bar */}
             <div className="mb-4">
               <FilterBar
-                proficiency={proficiency}
-                onProficiencyChange={setProficiency}
                 sortBy={sortBy}
                 onSortChange={setSortBy}
                 resultCount={filteredWords.length}
@@ -251,7 +236,6 @@ export default function Home() {
                     word={word}
                     onEdit={openEditForm}
                     onDelete={handleDeleteWord}
-                    onProficiencyChange={handleProficiencyChange}
                   />
                 ))}
               </div>

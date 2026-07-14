@@ -16,7 +16,17 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { trpc } from "@/providers/trpc";
-import { X, Plus, Tag, Folder, BookOpen, Loader2, Search, Volume2 } from "lucide-react";
+import {
+  X,
+  Plus,
+  Tag,
+  Folder,
+  BookOpen,
+  Loader2,
+  Search,
+  Volume2,
+  Sparkles,
+} from "lucide-react";
 import { useState, useEffect, useCallback } from "react";
 import { useDebounce } from "@/hooks/useDebounce";
 import type { WordCardData } from "./WordCard";
@@ -39,14 +49,18 @@ export interface WordFormData {
   proficiency: "new" | "learning" | "familiar" | "mastered";
 }
 
-const proficiencyOptions = [
-  { value: "new" as const, label: "新词" },
-  { value: "learning" as const, label: "学习中" },
-  { value: "familiar" as const, label: "熟悉" },
-  { value: "mastered" as const, label: "已掌握" },
-];
+// ── iciba API (Chinese definitions) ──
+interface IcibaEntry {
+  key: string;
+  paraphrase: string;
+  means: { part: string; means: string[] }[];
+}
+interface IcibaResponse {
+  message?: IcibaEntry[];
+  status: number;
+}
 
-// ── Dictionary API Types ──
+// ── Free Dictionary API (phonetic + examples) ──
 interface DictPhonetic {
   text?: string;
   audio?: string;
@@ -66,14 +80,45 @@ interface DictEntry {
   meanings: DictMeaning[];
 }
 
-async function lookupDictionary(word: string): Promise<{
+/** Fetch Chinese definitions from iciba */
+async function fetchIciba(word: string): Promise<{
+  definitions: string;
+} | null> {
+  try {
+    const res = await fetch(
+      `https://dict-mobile.iciba.com/interface/index.php?c=word&m=getsuggest&nums=1&client=6&is_need_mean=1&word=${encodeURIComponent(word.toLowerCase())}`,
+      { signal: AbortSignal.timeout(8000) }
+    );
+    if (!res.ok) return null;
+    const data: IcibaResponse = await res.json();
+    if (!data.message || data.message.length === 0) return null;
+
+    const entry = data.message[0];
+    let definitions = "";
+
+    for (const m of entry.means) {
+      const part = m.part;
+      const means = m.means.join("，");
+      if (definitions) definitions += "\n";
+      definitions += `${part} ${means}`;
+    }
+
+    if (!definitions) return null;
+    return { definitions };
+  } catch {
+    return null;
+  }
+}
+
+/** Fetch phonetic + examples from Free Dictionary API */
+async function fetchFreeDict(word: string): Promise<{
   phonetic: string;
-  definition: string;
   example: string;
 } | null> {
   try {
     const res = await fetch(
-      `https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(word.trim().toLowerCase())}`
+      `https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(word.toLowerCase())}`,
+      { signal: AbortSignal.timeout(8000) }
     );
     if (!res.ok) return null;
     const data: DictEntry[] = await res.json();
@@ -81,7 +126,7 @@ async function lookupDictionary(word: string): Promise<{
 
     const entry = data[0];
 
-    // Extract phonetic
+    // Phonetic
     let phonetic = entry.phonetic || "";
     if (!phonetic) {
       for (const p of entry.phonetics) {
@@ -89,30 +134,40 @@ async function lookupDictionary(word: string): Promise<{
       }
     }
 
-    // Extract definition and example from all meanings
-    let definition = "";
-    let example = "";
-
+    // Examples (collect up to 2)
+    const examples: string[] = [];
     for (const meaning of entry.meanings) {
-      const pos = meaning.partOfSpeech;
       for (const def of meaning.definitions) {
-        if (!definition) {
-          definition = `(${pos}) ${def.definition}`;
-        } else {
-          definition += `\n(${pos}) ${def.definition}`;
-        }
-        if (!example && def.example) {
-          example = def.example;
+        if (def.example && examples.length < 2) {
+          examples.push(def.example);
         }
       }
     }
 
-    if (!definition) return null;
-
-    return { phonetic, definition, example };
+    return { phonetic, example: examples.join("\n") };
   } catch {
     return null;
   }
+}
+
+/** Combined lookup: Chinese defs + phonetic + examples */
+async function lookupWord(word: string): Promise<{
+  phonetic: string;
+  definition: string;
+  example: string;
+} | null> {
+  const [icibaResult, dictResult] = await Promise.all([
+    fetchIciba(word),
+    fetchFreeDict(word),
+  ]);
+
+  if (!icibaResult && !dictResult) return null;
+
+  return {
+    phonetic: dictResult?.phonetic || "",
+    definition: icibaResult?.definitions || dictResult?.phonetic || "",
+    example: dictResult?.example || "",
+  };
 }
 
 export default function WordForm({ open, onClose, onSubmit, editWord }: WordFormProps) {
@@ -188,13 +243,13 @@ export default function WordForm({ open, onClose, onSubmit, editWord }: WordForm
     }
     setIsLookingUp(true);
     setDictError("");
-    const result = await lookupDictionary(target);
+    const result = await lookupWord(target);
     setIsLookingUp(false);
-    if (result) {
+    if (result && result.definition) {
       setForm((prev) => ({
         ...prev,
         phonetic: result.phonetic || prev.phonetic,
-        definition: result.definition || prev.definition,
+        definition: result.definition,
         example: result.example || prev.example,
       }));
       setHasAutoFilled(true);
@@ -247,7 +302,6 @@ export default function WordForm({ open, onClose, onSubmit, editWord }: WordForm
   const updateForm = (updates: Partial<WordFormData>) => {
     setForm((prev) => {
       const next = { ...prev, ...updates };
-      // Reset auto-fill flag when word changes significantly
       if (updates.word !== undefined && updates.word !== prev.word) {
         setHasAutoFilled(false);
         setDictError("");
@@ -327,7 +381,7 @@ export default function WordForm({ open, onClose, onSubmit, editWord }: WordForm
             )}
             {hasAutoFilled && (
               <p className="text-xs text-green-600 flex items-center gap-1">
-                <Tag className="w-3 h-3" />
+                <Sparkles className="w-3 h-3" />
                 已从字典自动填充释义
               </p>
             )}
@@ -388,27 +442,6 @@ export default function WordForm({ open, onClose, onSubmit, editWord }: WordForm
               placeholder="添加你的学习备注、记忆技巧等"
               className="min-h-[60px] resize-none"
             />
-          </div>
-
-          {/* Proficiency */}
-          <div className="space-y-1.5">
-            <Label className="text-sm font-medium">熟练度</Label>
-            <div className="flex gap-2">
-              {proficiencyOptions.map((opt) => (
-                <button
-                  key={opt.value}
-                  type="button"
-                  onClick={() => updateForm({ proficiency: opt.value })}
-                  className={`flex-1 py-2 text-xs rounded-lg border transition-all ${
-                    form.proficiency === opt.value
-                      ? "bg-indigo-50 border-indigo-300 text-indigo-700 font-medium shadow-sm"
-                      : "bg-white border-gray-200 text-gray-500 hover:bg-gray-50"
-                  }`}
-                >
-                  {opt.label}
-                </button>
-              ))}
-            </div>
           </div>
 
           {/* Group */}

@@ -9,7 +9,6 @@ import {
   Folder,
   ChevronDown,
   ChevronUp,
-  Star,
 } from "lucide-react";
 import { useState } from "react";
 
@@ -38,19 +37,10 @@ interface WordCardProps {
   word: WordCardData;
   onEdit: (word: WordCardData) => void;
   onDelete: (id: number) => void;
-  onProficiencyChange: (id: number, level: WordCardData["proficiency"]) => void;
 }
 
-const proficiencyConfig = {
-  new: { label: "新词", color: "bg-red-50 text-red-600 border-red-200", stars: 0 },
-  learning: { label: "学习中", color: "bg-yellow-50 text-yellow-600 border-yellow-200", stars: 1 },
-  familiar: { label: "熟悉", color: "bg-blue-50 text-blue-600 border-blue-200", stars: 2 },
-  mastered: { label: "已掌握", color: "bg-green-50 text-green-600 border-green-200", stars: 3 },
-};
-
-export default function WordCard({ word, onEdit, onDelete, onProficiencyChange }: WordCardProps) {
+export default function WordCard({ word, onEdit, onDelete }: WordCardProps) {
   const [expanded, setExpanded] = useState(false);
-  const prof = proficiencyConfig[word.proficiency];
 
   const handleSpeak = () => {
     if ("speechSynthesis" in window) {
@@ -58,12 +48,6 @@ export default function WordCard({ word, onEdit, onDelete, onProficiencyChange }
       utterance.lang = "en-US";
       window.speechSynthesis.speak(utterance);
     }
-  };
-
-  const nextProficiency = (): WordCardData["proficiency"] => {
-    const levels: WordCardData["proficiency"][] = ["new", "learning", "familiar", "mastered"];
-    const idx = levels.indexOf(word.proficiency);
-    return levels[(idx + 1) % levels.length];
   };
 
   return (
@@ -88,27 +72,10 @@ export default function WordCard({ word, onEdit, onDelete, onProficiencyChange }
               </div>
 
               {/* Definition */}
-              <p className="text-sm text-gray-700 mt-1.5 leading-relaxed">{word.definition}</p>
+              <p className="text-sm text-gray-700 mt-1.5 leading-relaxed whitespace-pre-line">{word.definition}</p>
 
               {/* Tags and Group */}
               <div className="flex flex-wrap items-center gap-1.5 mt-2">
-                {/* Proficiency badge */}
-                <button
-                  onClick={() => onProficiencyChange(word.id, nextProficiency())}
-                  className={`inline-flex items-center gap-1 px-2 py-0.5 text-xs rounded-full border cursor-pointer transition-all hover:shadow-sm ${prof.color}`}
-                  title="点击切换熟练度"
-                >
-                  <div className="flex">
-                    {[1, 2, 3].map((i) => (
-                      <Star
-                        key={i}
-                        className={`w-3 h-3 ${i <= prof.stars ? "fill-current" : ""}`}
-                      />
-                    ))}
-                  </div>
-                  {prof.label}
-                </button>
-
                 {/* Group */}
                 {word.groupName && (
                   <Badge
@@ -185,7 +152,7 @@ export default function WordCard({ word, onEdit, onDelete, onProficiencyChange }
             {word.example && (
               <div className="mt-3">
                 <p className="text-xs text-gray-400 mb-1">例句</p>
-                <p className="text-sm text-gray-600 italic bg-gray-50 rounded-lg p-2.5">
+                <p className="text-sm text-gray-600 italic bg-gray-50 rounded-lg p-2.5 whitespace-pre-line">
                   {word.example}
                 </p>
               </div>
