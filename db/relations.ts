@@ -1,1 +1,36 @@
-import {} from "./schema";
+import { relations } from "drizzle-orm";
+import { users, wordGroups, words, tags, wordTags, wordLogs } from "./schema";
+
+export const usersRelations = relations(users, ({ many }) => ({
+  wordGroups: many(wordGroups),
+  words: many(words),
+  tags: many(tags),
+  wordLogs: many(wordLogs),
+}));
+
+export const wordGroupsRelations = relations(wordGroups, ({ one, many }) => ({
+  user: one(users, { fields: [wordGroups.userId], references: [users.id] }),
+  words: many(words),
+}));
+
+export const wordsRelations = relations(words, ({ one, many }) => ({
+  user: one(users, { fields: [words.userId], references: [users.id] }),
+  group: one(wordGroups, { fields: [words.groupId], references: [wordGroups.id] }),
+  wordTags: many(wordTags),
+  logs: many(wordLogs),
+}));
+
+export const tagsRelations = relations(tags, ({ one, many }) => ({
+  user: one(users, { fields: [tags.userId], references: [users.id] }),
+  wordTags: many(wordTags),
+}));
+
+export const wordTagsRelations = relations(wordTags, ({ one }) => ({
+  word: one(words, { fields: [wordTags.wordId], references: [words.id] }),
+  tag: one(tags, { fields: [wordTags.tagId], references: [tags.id] }),
+}));
+
+export const wordLogsRelations = relations(wordLogs, ({ one }) => ({
+  word: one(words, { fields: [wordLogs.wordId], references: [words.id] }),
+  user: one(users, { fields: [wordLogs.userId], references: [users.id] }),
+}));
