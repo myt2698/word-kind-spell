@@ -1,9 +1,9 @@
 /**
  * Dictionary Lookup Router
  * Combines multiple free APIs:
- * - iciba: Chinese definitions
- * - Free Dictionary API: phonetic
- * - Tatoeba: bilingual example sentences (EN/ZH)
+ * - iciba: Chinese definitions (fast)
+ * - Free Dictionary API: phonetic (fast)
+ * - Tatoeba: bilingual example sentences (slow, may timeout)
  */
 
 import { z } from "zod";
@@ -13,7 +13,7 @@ import { createRouter, publicQuery } from "./middleware";
 async function fetchIciba(word: string): Promise<{ definitions: string } | null> {
   try {
     const url = `https://dict-mobile.iciba.com/interface/index.php?c=word&m=getsuggest&nums=1&client=6&is_need_mean=1&word=${encodeURIComponent(word.toLowerCase())}`;
-    const res = await fetch(url, { signal: AbortSignal.timeout(10000) });
+    const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
     if (!res.ok) return null;
     const data = (await res.json()) as {
       message?: Array<{
@@ -52,7 +52,7 @@ async function fetchIciba(word: string): Promise<{ definitions: string } | null>
 async function fetchPhonetic(word: string): Promise<string> {
   try {
     const url = `https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(word.toLowerCase())}`;
-    const res = await fetch(url, { signal: AbortSignal.timeout(10000) });
+    const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
     if (!res.ok) return "";
     const data = (await res.json()) as Array<{
       phonetic?: string;
@@ -75,7 +75,6 @@ async function fetchPhonetic(word: string): Promise<string> {
 
 /** Check if sentence contains the target word as a whole word */
 function sentenceContainsWord(sentence: string, word: string): boolean {
-  // Match as whole word (word boundary), case-insensitive
   const pattern = new RegExp(
     "(?:^|[^a-zA-Z])" + word.replace(/[.*+?^${}()|[\]\\]/g, "\\$") + "(?:[^a-zA-Z]|$)",
     "i"
@@ -89,7 +88,7 @@ async function fetchExamples(word: string): Promise<string> {
     const lowerWord = word.toLowerCase();
     // Use = prefix for exact word match on Tatoeba
     const url = `https://tatoeba.org/en/api_v0/search?from=eng&to=cmn&query=${encodeURIComponent("=" + lowerWord)}&sort=relevance&limit=10`;
-    const res = await fetch(url, { signal: AbortSignal.timeout(10000) });
+    const res = await fetch(url, { signal: AbortSignal.timeout(20000) });
     if (!res.ok) return "";
     const data = (await res.json()) as {
       results: Array<{
@@ -103,11 +102,7 @@ async function fetchExamples(word: string): Promise<string> {
       if (examples.length >= 2) break;
 
       const en = result.text;
-
-      // Filter: only keep sentences that actually contain the target word
-      if (!sentenceContainsWord(en, lowerWord)) {
-        continue;
-      }
+      if (!sentenceContainsWord(en, lowerWord)) continue;
 
       let zh = "";
       for (const transGroup of result.translations) {
@@ -136,16 +131,23 @@ export const dictRouter = createRouter({
     .mutation(async ({ input }) => {
       const word = input.word.trim().toLowerCase();
 
-      // Query all 3 APIs in parallel
-      const [icibaResult, phonetic, example] = await Promise.all([
+      // Query fast APIs (iciba + phonetic) first
+      const [icibaResult, phonetic] = await Promise.all([
         fetchIciba(word),
         fetchPhonetic(word),
-        fetchExamples(word),
       ]);
 
-      if (!icibaResult && !phonetic && !example) {
-        return { found: false as const, phonetic: "", definition: "", example: "" };
+      // If neither fast API returned data, try Tatoeba as last resort
+      if (!icibaResult && !phonetic) {
+        const example = await fetchExamples(word);
+        if (!example) {
+          return { found: false as const, phonetic: "", definition: "", example: "" };
+        }
+        return { found: true as const, phonetic: "", definition: "", example };
       }
+
+      // Query Tatoeba separately with longer timeout (doesn't block fast APIs)
+      const example = await fetchExamples(word);
 
       return {
         found: true as const,
