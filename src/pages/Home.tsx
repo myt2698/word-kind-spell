@@ -1,4 +1,5 @@
 import { useState, useCallback } from "react";
+import { useNavigate } from "react-router";
 import { useAuth } from "@/hooks/useAuth";
 import { trpc } from "@/providers/trpc";
 import AppHeader from "@/components/AppHeader";
@@ -27,6 +28,7 @@ import { Button } from "@/components/ui/button";
 import { Plus, GraduationCap } from "lucide-react";
 
 export default function Home() {
+  const navigate = useNavigate();
   const { user, isLoading: authLoading } = useAuth({ redirectOnUnauthenticated: true });
   const utils = trpc.useUtils();
 
@@ -113,7 +115,7 @@ export default function Home() {
     if (tab === "groups") {
       setShowGroupManager(true);
     } else if (tab === "tags") {
-      setShowTagManager(true);
+      navigate("/tags");
     } else if (tab === "stats") {
       setShowStats(true);
     }
@@ -152,7 +154,6 @@ export default function Home() {
             selectedTag={selectedTag}
             onSelectTag={setSelectedTag}
             onOpenGroupManager={() => setShowGroupManager(true)}
-            onOpenTagManager={() => setShowTagManager(true)}
             onOpenStats={() => setShowStats(true)}
           />
         </aside>
@@ -173,10 +174,6 @@ export default function Home() {
               }}
               onOpenGroupManager={() => {
                 setShowGroupManager(true);
-                setShowMobileSidebar(false);
-              }}
-              onOpenTagManager={() => {
-                setShowTagManager(true);
                 setShowMobileSidebar(false);
               }}
               onOpenStats={() => {

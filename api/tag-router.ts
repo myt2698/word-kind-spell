@@ -40,6 +40,7 @@ export const tagRouter = createRouter({
     .input(
       z.object({
         name: z.string().min(1).max(50),
+        description: z.string().optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {
@@ -59,6 +60,7 @@ export const tagRouter = createRouter({
       const result = await db.insert(tags).values({
         userId: ctx.user.id,
         name: input.name,
+        description: input.description,
       });
       return { id: Number(result[0].insertId), created: true };
     }),
@@ -68,6 +70,7 @@ export const tagRouter = createRouter({
       z.object({
         id: z.number(),
         name: z.string().min(1).max(50).optional(),
+        description: z.string().optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {

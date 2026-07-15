@@ -1,5 +1,6 @@
 import { trpc } from "@/providers/trpc";
 import { Button } from "@/components/ui/button";
+import { useNavigate } from "react-router";
 import {
   LayoutGrid,
   Settings,
@@ -23,7 +24,6 @@ interface AppSidebarProps {
   selectedTag: number | null;
   onSelectTag: (id: number | null) => void;
   onOpenGroupManager: () => void;
-  onOpenTagManager: () => void;
   onOpenStats: () => void;
   mobile?: boolean;
   onClose?: () => void;
@@ -35,11 +35,11 @@ export default function AppSidebar({
   selectedTag,
   onSelectTag,
   onOpenGroupManager,
-  onOpenTagManager,
   onOpenStats,
   mobile,
   onClose,
 }: AppSidebarProps) {
+  const navigate = useNavigate();
   const { data: groups } = trpc.wordGroup.list.useQuery();
   const { data: tags } = trpc.tag.listWithCount.useQuery();
   const { data: userSettings } = trpc.wordGroup.getSettings.useQuery();
@@ -126,7 +126,7 @@ export default function AppSidebar({
               variant="ghost"
               size="icon"
               className="h-6 w-6 text-gray-400 hover:text-emerald-600"
-              onClick={onOpenTagManager}
+              onClick={() => navigate("/tags")}
             >
               <Settings className="w-3.5 h-3.5" />
             </Button>

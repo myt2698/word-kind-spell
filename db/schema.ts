@@ -87,6 +87,7 @@ export const tags = mysqlTable("tags", {
     .notNull()
     .references(() => users.id, { onDelete: "cascade" }),
   name: varchar("name", { length: 50 }).notNull(),
+  description: text("description"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
 
