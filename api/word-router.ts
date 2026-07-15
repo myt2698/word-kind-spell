@@ -2,7 +2,7 @@ import { z } from "zod";
 import { createRouter, authedQuery } from "./middleware";
 import { getDb } from "./queries/connection";
 import { words, wordTags, tags, wordLogs, wordGroups } from "@db/schema";
-import { eq, and, like, or, desc, asc, sql } from "drizzle-orm";
+import { eq, and, like, or, desc, asc, sql, inArray } from "drizzle-orm";
 
 export const wordRouter = createRouter({
   // 获取用户的单词列表（支持搜索和分组筛选）
@@ -12,7 +12,6 @@ export const wordRouter = createRouter({
         groupId: z.number().optional(),
         tagId: z.number().optional(),
         search: z.string().optional(),
-        proficiency: z.enum(["new", "learning", "familiar", "mastered"]).optional(),
         sortBy: z.enum(["newest", "oldest", "alphabetical"]).default("newest"),
       }).optional()
     )
@@ -22,10 +21,6 @@ export const wordRouter = createRouter({
 
       if (input?.groupId) {
         conditions.push(eq(words.groupId, input.groupId));
-      }
-
-      if (input?.proficiency) {
-        conditions.push(eq(words.proficiency, input.proficiency));
       }
 
       if (input?.search) {
@@ -39,7 +34,7 @@ export const wordRouter = createRouter({
         );
       }
 
-      // 确定排序方式
+      // Determine sort order
       const orderColumn =
         input?.sortBy === "oldest"
           ? words.createdAt
@@ -48,6 +43,7 @@ export const wordRouter = createRouter({
             : words.createdAt;
       const orderFn = input?.sortBy === "oldest" ? asc : desc;
 
+      // Query 1: Get word list
       const wordList = await db
         .select({
           id: words.id,
@@ -66,48 +62,62 @@ export const wordRouter = createRouter({
         .where(and(...conditions))
         .orderBy(orderFn(orderColumn));
 
-      // 获取每个单词的标签
-      const wordsWithTags = await Promise.all(
-        wordList.map(async (word) => {
-          const tagList = await db
+      if (wordList.length === 0) {
+        return [];
+      }
+
+      const wordIds = wordList.map((w) => w.id);
+      const groupIds = [...new Set(wordList.map((w) => w.groupId).filter(Boolean))] as number[];
+
+      // Query 2: Batch fetch all tags for these words
+      const allTagRows = wordIds.length > 0
+        ? await db
             .select({
-              id: tags.id,
-              name: tags.name,
+              wordId: wordTags.wordId,
+              tagId: tags.id,
+              tagName: tags.name,
             })
             .from(wordTags)
             .innerJoin(tags, eq(wordTags.tagId, tags.id))
-            .where(eq(wordTags.wordId, word.id));
+            .where(inArray(wordTags.wordId, wordIds))
+        : [];
 
-          // 获取分组信息
-          let groupName = null;
-          if (word.groupId) {
-            const groupResult = await db
-              .select()
-              .from(wordGroups)
-              .where(eq(wordGroups.id, word.groupId))
-              .limit(1);
-            if (groupResult.length > 0) {
-              groupName = groupResult[0].name;
-            }
-          }
+      // Build wordId -> tags[] map
+      const tagMap = new Map<number, { id: number; name: string }[]>();
+      for (const row of allTagRows) {
+        const existing = tagMap.get(row.wordId) ?? [];
+        existing.push({ id: row.tagId, name: row.tagName });
+        tagMap.set(row.wordId, existing);
+      }
 
-          return {
-            ...word,
-            tags: tagList,
-            groupId: word.groupId,
-            groupName,
-          };
-        })
-      );
+      // Query 3: Batch fetch all group names
+      const groupMap = new Map<number, string>();
+      if (groupIds.length > 0) {
+        const groupRows = await db
+          .select({ id: wordGroups.id, name: wordGroups.name })
+          .from(wordGroups)
+          .where(inArray(wordGroups.id, groupIds));
+        for (const g of groupRows) {
+          groupMap.set(g.id, g.name);
+        }
+      }
 
-      // 如果有 tagId 筛选，在前端过滤
+      // Assemble results
+      const results = wordList.map((word) => ({
+        ...word,
+        tags: tagMap.get(word.id) ?? [],
+        groupId: word.groupId,
+        groupName: word.groupId ? (groupMap.get(word.groupId) ?? null) : null,
+      }));
+
+      // Filter by tagId if needed
       if (input?.tagId) {
-        return wordsWithTags.filter((w) =>
+        return results.filter((w) =>
           w.tags.some((t) => t.id === input.tagId)
         );
       }
 
-      return wordsWithTags;
+      return results;
     }),
 
   // 获取单个单词详情
@@ -262,33 +272,6 @@ export const wordRouter = createRouter({
       await db
         .delete(words)
         .where(and(eq(words.id, input.id), eq(words.userId, ctx.user.id)));
-      return { success: true };
-    }),
-
-  // 更新熟练度
-  updateProficiency: authedQuery
-    .input(
-      z.object({
-        id: z.number(),
-        proficiency: z.enum(["new", "learning", "familiar", "mastered"]),
-      })
-    )
-    .mutation(async ({ ctx, input }) => {
-      const db = getDb();
-      await db
-        .update(words)
-        .set({ proficiency: input.proficiency })
-        .where(
-          and(eq(words.id, input.id), eq(words.userId, ctx.user.id))
-        );
-
-      // 记录复习日志
-      await db.insert(wordLogs).values({
-        wordId: input.id,
-        userId: ctx.user.id,
-        action: "review",
-      });
-
       return { success: true };
     }),
 
