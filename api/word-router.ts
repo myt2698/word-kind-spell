@@ -110,7 +110,7 @@ export const wordRouter = createRouter({
         groupName: word.groupId ? (groupMap.get(word.groupId) ?? null) : null,
       }));
 
-      // Filter by tagId if needed
+      // Filter by tagId in memory if needed (combined with groupId)
       if (input?.tagId) {
         return results.filter((w) =>
           w.tags.some((t) => t.id === input.tagId)

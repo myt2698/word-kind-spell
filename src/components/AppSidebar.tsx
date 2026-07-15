@@ -96,8 +96,7 @@ export default function AppSidebar({
                 <button
                   key={group.id}
                   onClick={() => {
-                    onSelectGroup(group.id);
-                    onSelectTag(null);
+                    onSelectGroup(selectedGroup === group.id ? null : group.id);
                   }}
                   className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-all ${
                     selectedGroup === group.id
@@ -138,7 +137,6 @@ export default function AppSidebar({
                 key={tag.id}
                 onClick={() => {
                   onSelectTag(selectedTag === tag.id ? null : tag.id);
-                  onSelectGroup(null);
                 }}
                 className={`inline-flex items-center gap-1 px-2.5 py-1 text-xs rounded-full border transition-all ${
                   selectedTag === tag.id

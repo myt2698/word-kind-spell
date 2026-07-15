@@ -53,6 +53,10 @@ export default function Home() {
     sortBy,
   });
 
+  // Fetch group/tag names for display
+  const { data: groupsList } = trpc.wordGroup.list.useQuery();
+  const { data: tagsList } = trpc.tag.list.useQuery();
+
   // Mutations
   const createWord = trpc.word.create.useMutation({
     onSuccess: () => {
@@ -192,11 +196,13 @@ export default function Home() {
             <div className="hidden lg:flex items-center justify-between mb-4">
               <div>
                 <h1 className="text-xl font-bold text-gray-900">
-                  {selectedGroup
-                    ? "分组单词"
-                    : selectedTag
-                      ? "标签单词"
-                      : "我的单词本"}
+                  {selectedGroup && selectedTag
+                    ? `${groupsList?.find((g) => g.id === selectedGroup)?.name ?? ""} + ${tagsList?.find((t) => t.id === selectedTag)?.name ?? ""}`
+                    : selectedGroup
+                      ? groupsList?.find((g) => g.id === selectedGroup)?.name ?? "分组单词"
+                      : selectedTag
+                        ? tagsList?.find((t) => t.id === selectedTag)?.name ?? "标签单词"
+                        : "我的单词本"}
                 </h1>
                 <p className="text-sm text-gray-500 mt-0.5">
                   共 {filteredWords.length} 个单词
