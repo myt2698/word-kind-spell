@@ -120,6 +120,68 @@ export const wordRouter = createRouter({
       return results;
     }),
 
+  // 检查单词是否已存在
+  checkExists: authedQuery
+    .input(z.object({ word: z.string().min(1) }))
+    .query(async ({ ctx, input }) => {
+      const db = getDb();
+      const wordLower = input.word.trim().toLowerCase();
+
+      // Find existing word (case-insensitive)
+      const existing = await db
+        .select()
+        .from(words)
+        .where(
+          and(
+            eq(words.userId, ctx.user.id),
+            eq(words.word, wordLower)
+          )
+        )
+        .limit(1);
+
+      if (existing.length === 0) {
+        return { exists: false as const };
+      }
+
+      const word = existing[0];
+
+      // Fetch tags
+      const tagList = await db
+        .select({ id: tags.id, name: tags.name })
+        .from(wordTags)
+        .innerJoin(tags, eq(wordTags.tagId, tags.id))
+        .where(eq(wordTags.wordId, word.id));
+
+      // Fetch group name
+      let groupName = null;
+      if (word.groupId) {
+        const groupResult = await db
+          .select({ name: wordGroups.name })
+          .from(wordGroups)
+          .where(eq(wordGroups.id, word.groupId))
+          .limit(1);
+        groupName = groupResult[0]?.name ?? null;
+      }
+
+      return {
+        exists: true as const,
+        word: {
+          id: word.id,
+          word: word.word,
+          phonetic: word.phonetic,
+          definition: word.definition,
+          example: word.example,
+          notes: word.notes,
+          proficiency: word.proficiency,
+          tags: tagList,
+          groupId: word.groupId,
+          groupName,
+          createdAt: word.createdAt,
+          updatedAt: word.updatedAt,
+        },
+      };
+    }),
+
   // 获取单个单词详情
   getById: authedQuery
     .input(z.object({ id: z.number() }))

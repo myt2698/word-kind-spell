@@ -26,6 +26,8 @@ import {
   Search,
   Volume2,
   Sparkles,
+  AlertTriangle,
+  Edit3,
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import type { WordCardData } from "./WordCard";
@@ -69,6 +71,20 @@ export default function WordForm({ open, onClose, onSubmit, editWord }: WordForm
   const [isLookingUp, setIsLookingUp] = useState(false);
   const [dictError, setDictError] = useState("");
   const [hasAutoFilled, setHasAutoFilled] = useState(false);
+  const [existingWord, setExistingWord] = useState<{
+    id: number;
+    word: string;
+    phonetic: string | null;
+    definition: string;
+    example: string | null;
+    notes: string | null;
+    proficiency: string;
+    tags: { id: number; name: string }[];
+    groupId: number | null;
+    groupName: string | null;
+    createdAt: Date;
+    updatedAt: Date;
+  } | null>(null);
 
   const lookupMutation = trpc.dict.lookup.useMutation({
     onSuccess: (result) => {
@@ -130,13 +146,28 @@ export default function WordForm({ open, onClose, onSubmit, editWord }: WordForm
     }
   }, [editWord, open, userSettings]);
 
-  const doLookup = (word: string) => {
+  const doLookup = async (word: string) => {
     if (!word || word.length < 2) {
       setDictError("请输入至少2个字母的单词");
       return;
     }
     setIsLookingUp(true);
     setDictError("");
+    setExistingWord(null);
+
+    try {
+      // 先检查单词是否已存在
+      const checkResult = await utils.word.checkExists.fetch({ word });
+      if (checkResult.exists) {
+        setIsLookingUp(false);
+        setExistingWord(checkResult.word);
+        return;
+      }
+    } catch {
+      // 检查失败，继续查询字典
+    }
+
+    // 不存在则查询字典
     lookupMutation.mutate({ word });
   };
 
@@ -280,6 +311,77 @@ export default function WordForm({ open, onClose, onSubmit, editWord }: WordForm
                 <Sparkles className="w-3 h-3" />
                 已从字典自动填充释义
               </p>
+            )}
+
+            {/* Existing word warning */}
+            {existingWord && (
+              <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 space-y-2">
+                <div className="flex items-center gap-2">
+                  <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0" />
+                  <p className="text-sm font-medium text-amber-700">
+                    该单词已添加过
+                  </p>
+                </div>
+                <div className="pl-6 space-y-1">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-sm font-semibold text-gray-900">{existingWord.word}</span>
+                    {existingWord.phonetic && (
+                      <span className="text-xs text-gray-400 font-mono">{existingWord.phonetic}</span>
+                    )}
+                  </div>
+                  <p className="text-xs text-gray-600 whitespace-pre-line">{existingWord.definition}</p>
+                  {existingWord.example && (
+                    <p className="text-xs text-gray-500 italic">{existingWord.example}</p>
+                  )}
+                  {existingWord.notes && (
+                    <p className="text-xs text-gray-500 bg-white rounded p-1.5 mt-1">{existingWord.notes}</p>
+                  )}
+                  <div className="flex items-center gap-2 flex-wrap mt-1">
+                    {existingWord.groupName && (
+                      <span className="text-[10px] bg-gray-200 text-gray-600 px-1.5 py-0.5 rounded">{existingWord.groupName}</span>
+                    )}
+                    {existingWord.tags.map((t) => (
+                      <span key={t.id} className="text-[10px] bg-indigo-100 text-indigo-600 px-1.5 py-0.5 rounded">{t.name}</span>
+                    ))}
+                  </div>
+                </div>
+                <div className="flex gap-2 pl-6 pt-1">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-7 text-xs"
+                    onClick={() => {
+                      setForm({
+                        word: existingWord.word,
+                        phonetic: existingWord.phonetic || "",
+                        definition: existingWord.definition,
+                        example: existingWord.example || "",
+                        notes: existingWord.notes || "",
+                        groupId: existingWord.groupId ?? undefined,
+                        tagIds: existingWord.tags.map((t) => t.id),
+                        proficiency: existingWord.proficiency as WordFormData["proficiency"],
+                      });
+                      setExistingWord(null);
+                    }}
+                  >
+                    <Edit3 className="w-3 h-3 mr-1" />
+                    编辑此单词
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 text-xs text-gray-500"
+                    onClick={() => {
+                      setExistingWord(null);
+                      lookupMutation.mutate({ word: form.word.trim() });
+                    }}
+                  >
+                    仍要重新查询
+                  </Button>
+                </div>
+              </div>
             )}
           </div>
 
