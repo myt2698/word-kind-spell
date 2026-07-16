@@ -1,11 +1,8 @@
 /**
- * Dictionary Lookup Router - Youdao Translation API
- * 有道智云翻译API: https://ai.youdao.com/doc.s#guide
- *
- * Sign algorithm (v2):
- *   sign = MD5(appKey + q + salt + appSecret)
- *
- * Requires env vars: YOUDAO_APP_KEY, YOUDAO_APP_SECRET
+ * Dictionary Lookup Router
+ * - Youdao suggest: Chinese definitions (free, no key needed)
+ * - Free Dictionary API: phonetic + examples
+ * - Youdao Translation API: Chinese definitions (with key, fallback)
  */
 
 import { z } from "zod";
@@ -13,93 +10,76 @@ import { createRouter, publicQuery } from "./middleware";
 import { env } from "./lib/env";
 import crypto from "crypto";
 
+// ============================================================
+// Youdao Translation API (V3 sign) - for Chinese definitions
+// ============================================================
+
 const YOUDAO_API_URL = "https://openapi.youdao.com/api";
 
-/** Generate MD5 hash */
-function md5(str: string): string {
-  return crypto.createHash("md5").update(str).digest("hex");
+function sha256(str: string): string {
+  return crypto.createHash("sha256").update(str).digest("hex");
 }
 
-/** Youdao API response type */
+function truncateInput(q: string): string {
+  const len = q.length;
+  if (len <= 20) return q;
+  return q.substring(0, 10) + len + q.substring(len - 10);
+}
+
 interface YoudaoResponse {
   errorCode?: string;
   query?: string;
   translation?: string[];
   basic?: {
-    phonetic?: string;          // 默认音标
-    "uk-phonetic"?: string;     // 英式音标
-    "us-phonetic"?: string;     // 美式音标
-    "uk-speech"?: string;
-    "us-speech"?: string;
-    explains?: string[];        // 中文释义（带词性）
+    phonetic?: string;
+    "uk-phonetic"?: string;
+    "us-phonetic"?: string;
+    explains?: string[];
   };
-  web?: Array<{
-    key: string;
-    value: string[];
-  }>;
-  l?: string;
+  web?: Array<{ key: string; value: string[] }>;
 }
 
-/** Call Youdao Translation API */
-async function fetchYoudao(word: string): Promise<{
+/** Youdao Translation API — returns Chinese translation + dict info if available */
+async function fetchYoudaoTranslate(word: string): Promise<{
   phonetic: string;
   definition: string;
   example: string;
 } | null> {
   const appKey = env.youdaoAppKey;
   const appSecret = env.youdaoAppSecret;
-
-  // If no credentials configured, skip
-  if (!appKey || !appSecret) {
-    return null;
-  }
+  if (!appKey || !appSecret) return null;
 
   const salt = crypto.randomUUID();
-  const sign = md5(appKey + word + salt + appSecret);
-
-  const body = new URLSearchParams({
-    q: word,
-    from: "en",
-    to: "zh-CHS",
-    appKey,
-    salt,
-    sign,
-  });
+  const curtime = Math.floor(Date.now() / 1000).toString();
+  const input = truncateInput(word);
+  const sign = sha256(appKey + input + salt + curtime + appSecret);
 
   try {
     const res = await fetch(YOUDAO_API_URL, {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body,
+      body: new URLSearchParams({
+        q: word, from: "en", to: "zh-CHS",
+        appKey, salt, sign, signType: "v3", curtime,
+      }),
       signal: AbortSignal.timeout(8000),
     });
-
     if (!res.ok) return null;
 
     const data = (await res.json()) as YoudaoResponse;
+    if (data.errorCode && data.errorCode !== "0") return null;
 
-    // Error code 0 means success
-    if (data.errorCode && data.errorCode !== "0") {
-      console.error(`[youdao] errorCode=${data.errorCode} for word="${word}"`);
-      return null;
-    }
+    const phonetic = data.basic
+      ? (data.basic["us-phonetic"] || data.basic["uk-phonetic"] || data.basic.phonetic || "")
+      : "";
 
-    // Extract phonetic (prefer US > UK > default)
-    let phonetic = "";
-    if (data.basic) {
-      phonetic = data.basic["us-phonetic"] || data.basic["uk-phonetic"] || data.basic.phonetic || "";
-    }
-
-    // Extract definitions with part-of-speech
     let definition = "";
     if (data.basic?.explains && data.basic.explains.length > 0) {
       definition = data.basic.explains.join("\n");
     } else if (data.translation && data.translation.length > 0) {
-      // Fallback to translation result
       definition = data.translation.join("；");
     }
 
-    // Extract examples from web definitions (first 2)
     let example = "";
     if (data.web && data.web.length > 0) {
       const examples: string[] = [];
@@ -113,64 +93,60 @@ async function fetchYoudao(word: string): Promise<{
     }
 
     if (!definition && !phonetic) return null;
-
     return { phonetic, definition, example };
-  } catch (err) {
-    console.error("[youdao] fetch error:", err);
-    return null;
-  }
-}
-
-// ========== Fallback: iciba (Chinese definitions) ==========
-
-async function fetchIciba(word: string): Promise<{ definitions: string } | null> {
-  try {
-    const url = `https://dict-mobile.iciba.com/interface/index.php?c=word&m=getsuggest&nums=1&client=6&is_need_mean=1&word=${encodeURIComponent(word.toLowerCase())}`;
-    const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
-    if (!res.ok) return null;
-    const data = (await res.json()) as {
-      message?: Array<{
-        key: string;
-        paraphrase: string;
-        means: Array<{ part: string; means: string[] }>;
-      }>;
-      status: number;
-    };
-    if (!data.message || data.message.length === 0) return null;
-
-    const entry = data.message[0];
-    let definitions = "";
-
-    if (entry.means && entry.means.length > 0) {
-      for (const m of entry.means) {
-        const part = m.part;
-        const means = m.means.join("，");
-        if (definitions) definitions += "\n";
-        definitions += `${part} ${means}`;
-      }
-    }
-
-    if (!definitions && entry.paraphrase) {
-      definitions = entry.paraphrase;
-    }
-
-    if (!definitions) return null;
-    return { definitions };
   } catch {
     return null;
   }
 }
 
-// ========== Fallback: Free Dictionary API (phonetic + examples) ==========
+// ============================================================
+// Youdao Suggest API — Chinese definitions (free, no key)
+// ============================================================
+
+async function fetchYoudaoSuggest(word: string): Promise<{ definitions: string } | null> {
+  try {
+    const res = await fetch(
+      `https://dict.youdao.com/suggest?q=${encodeURIComponent(word)}&doctype=json&num=1`,
+      {
+        headers: {
+          "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
+        },
+        signal: AbortSignal.timeout(8000),
+      }
+    );
+    if (!res.ok) return null;
+
+    const data = (await res.json()) as {
+      result?: { code: number; msg: string };
+      data?: {
+        entries?: Array<{ entry: string; explain: string }>;
+      };
+    };
+
+    const entry = data.data?.entries?.[0];
+    if (!entry?.explain) return null;
+
+    return { definitions: entry.explain };
+  } catch {
+    return null;
+  }
+}
+
+// ============================================================
+// Free Dictionary API — phonetic + examples
+// ============================================================
 
 async function fetchFreeDict(word: string): Promise<{
   phonetic: string;
   examples: string[];
 } | null> {
   try {
-    const url = `https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(word.toLowerCase())}`;
-    const res = await fetch(url, { signal: AbortSignal.timeout(10000) });
+    const res = await fetch(
+      `https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(word.toLowerCase())}`,
+      { signal: AbortSignal.timeout(10000) }
+    );
     if (!res.ok) return null;
+
     const data = (await res.json()) as Array<{
       phonetic?: string;
       phonetics: Array<{ text?: string; audio?: string }>;
@@ -182,7 +158,6 @@ async function fetchFreeDict(word: string): Promise<{
     if (!data || data.length === 0) return null;
 
     const entry = data[0];
-
     let phonetic = entry.phonetic || "";
     if (!phonetic) {
       for (const p of entry.phonetics) {
@@ -206,7 +181,9 @@ async function fetchFreeDict(word: string): Promise<{
   }
 }
 
-// ========== Router ==========
+// ============================================================
+// Router
+// ============================================================
 
 export const dictRouter = createRouter({
   lookup: publicQuery
@@ -214,37 +191,42 @@ export const dictRouter = createRouter({
     .mutation(async ({ input }) => {
       const word = input.word.trim().toLowerCase();
 
-      // Try Youdao first if configured
-      const hasYoudao = !!(env.youdaoAppKey && env.youdaoAppSecret);
-      if (hasYoudao) {
-        const youdaoResult = await fetchYoudao(word);
-        if (youdaoResult) {
-          return {
-            found: true as const,
-            phonetic: youdaoResult.phonetic,
-            definition: youdaoResult.definition,
-            example: youdaoResult.example,
-            source: "youdao" as const,
-          };
-        }
-      }
-
-      // Fallback: iciba + Free Dictionary API (parallel)
-      const [icibaResult, dictResult] = await Promise.all([
-        fetchIciba(word),
+      // Query all APIs in parallel for best results:
+      // 1. Youdao translate (Chinese defs + phonetic, needs key)
+      // 2. Youdao suggest (Chinese defs, free, no key)
+      // 3. FreeDict (phonetic + examples)
+      const [youdaoTrans, youdaoSuggest, freeDict] = await Promise.all([
+        fetchYoudaoTranslate(word),
+        fetchYoudaoSuggest(word),
         fetchFreeDict(word),
       ]);
 
-      if (!icibaResult && !dictResult) {
+      // Pick best definition: Youdao translate > Youdao suggest > none
+      const definition = youdaoTrans?.definition
+        || youdaoSuggest?.definitions
+        || "";
+
+      // Pick best phonetic: Youdao translate > FreeDict > none
+      const phonetic = youdaoTrans?.phonetic
+        || freeDict?.phonetic
+        || "";
+
+      // Pick best examples: FreeDict > Youdao translate web defs
+      const example = freeDict?.examples.join("\n")
+        || youdaoTrans?.example
+        || "";
+
+      // If we got nothing at all, return not found
+      if (!definition && !phonetic) {
         return { found: false as const, phonetic: "", definition: "", example: "" };
       }
 
       return {
         found: true as const,
-        phonetic: dictResult?.phonetic || "",
-        definition: icibaResult?.definitions || "",
-        example: (dictResult?.examples || []).join("\n"),
-        partial: !icibaResult || !dictResult,
+        phonetic,
+        definition,
+        example,
+        partial: !definition || !phonetic,
       };
     }),
 });
