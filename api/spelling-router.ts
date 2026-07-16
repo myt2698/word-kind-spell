@@ -10,7 +10,7 @@ import { z } from "zod";
 import { createRouter, authedQuery } from "./middleware";
 import { getDb } from "./queries/connection";
 import { words, wordSpellings, spellingErrors, spellingSessions } from "@db/schema";
-import { eq, and, gte, lte, desc, sql, count } from "drizzle-orm";
+import { eq, and, gte, lte, desc, sql, count, inArray } from "drizzle-orm";
 
 // Review intervals in minutes for each level
 const REVIEW_INTERVALS: Record<number, number[]> = {
@@ -379,7 +379,7 @@ export const spellingRouter = createRouter({
         })
         .from(words)
         .where(and(...conditions))
-        .orderBy(sql`RAND()`)
+        .orderBy(desc(words.createdAt))
         .limit(input?.limit ?? 10);
 
       // Get spelling status for these words
@@ -393,7 +393,7 @@ export const spellingRouter = createRouter({
           .where(
             and(
               eq(wordSpellings.userId, ctx.user.id),
-              sql`${wordSpellings.wordId} IN (${sql.join(wordIds)})`
+              inArray(wordSpellings.wordId, wordIds)
             )
           );
         spellingMap = new Map(spellingRecords.map((r) => [r.wordId, r]));
