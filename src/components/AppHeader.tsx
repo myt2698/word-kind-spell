@@ -13,7 +13,6 @@ import {
 import {
   BookOpen,
   LogOut,
-  Menu,
   User,
   KeyRound,
   Eye,
@@ -23,7 +22,6 @@ import {
 import { useState } from "react";
 
 interface AppHeaderProps {
-  onMenuToggle?: () => void;
   searchComponent?: React.ReactNode;
 }
 
@@ -173,7 +171,7 @@ function ChangePasswordDialog({
   );
 }
 
-export default function AppHeader({ onMenuToggle, searchComponent }: AppHeaderProps) {
+export default function AppHeader({ searchComponent }: AppHeaderProps) {
   const { user, logout } = useAuth();
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showChangePassword, setShowChangePassword] = useState(false);
@@ -184,16 +182,6 @@ export default function AppHeader({ onMenuToggle, searchComponent }: AppHeaderPr
         <div className="max-w-7xl mx-auto px-4 h-14 flex items-center justify-between gap-3">
           {/* Left section */}
           <div className="flex items-center gap-3 shrink-0">
-            {onMenuToggle && (
-              <Button
-                variant="ghost"
-                size="icon"
-                className="lg:hidden h-9 w-9"
-                onClick={onMenuToggle}
-              >
-                <Menu className="h-5 w-5 text-gray-600" />
-              </Button>
-            )}
             <div className="flex items-center gap-2">
               <div className="w-8 h-8 bg-gradient-to-br from-indigo-500 to-blue-600 rounded-lg flex items-center justify-center shadow-md">
                 <BookOpen className="w-4 h-4 text-white" />

@@ -1,51 +1,49 @@
-import { useState, useCallback } from "react";
-import { useNavigate } from "react-router";
+import { useState, useCallback, useEffect } from "react";
+import { useNavigate, useSearchParams } from "react-router";
 import { useAuth } from "@/hooks/useAuth";
 import { trpc } from "@/providers/trpc";
 import AppHeader from "@/components/AppHeader";
-import AppSidebar from "@/components/AppSidebar";
 import MobileNav from "@/components/MobileNav";
 import SearchBar from "@/components/SearchBar";
 import FilterBar, { type SortBy } from "@/components/FilterBar";
 import WordCard from "@/components/WordCard";
 import type { WordCardData } from "@/components/WordCard";
 import WordForm, { type WordFormData } from "@/components/WordForm";
-import GroupManager from "@/components/GroupManager";
-import TagManager from "@/components/TagManager";
-import StatsPanel from "@/components/StatsPanel";
 import EmptyState from "@/components/EmptyState";
-import {
-  Sheet,
-  SheetContent,
-} from "@/components/ui/sheet";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Plus, GraduationCap } from "lucide-react";
+import { Plus } from "lucide-react";
 
 export default function Home() {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { user, isLoading: authLoading } = useAuth({ redirectOnUnauthenticated: true });
   const utils = trpc.useUtils();
+
+  // Read filter params from URL
+  const urlGroupId = searchParams.get("groupId");
+  const urlTagId = searchParams.get("tagId");
 
   // Search & Filter state
   const [searchQuery, setSearchQuery] = useState("");
   const [sortBy, setSortBy] = useState<SortBy>("newest");
-  const [selectedGroup, setSelectedGroup] = useState<number | null>(null);
-  const [selectedTag, setSelectedTag] = useState<number | null>(null);
+  const [selectedGroup, setSelectedGroup] = useState<number | null>(
+    urlGroupId ? Number(urlGroupId) : null
+  );
+  const [selectedTag, setSelectedTag] = useState<number | null>(
+    urlTagId ? Number(urlTagId) : null
+  );
 
-  // Dialog/Sheet state
+  // Sync URL params to state on mount and when URL changes
+  useEffect(() => {
+    const gId = searchParams.get("groupId");
+    const tId = searchParams.get("tagId");
+    setSelectedGroup(gId ? Number(gId) : null);
+    setSelectedTag(tId ? Number(tId) : null);
+  }, [searchParams]);
+
+  // Dialog state
   const [showWordForm, setShowWordForm] = useState(false);
   const [editWord, setEditWord] = useState<WordCardData | null>(null);
-  const [showGroupManager, setShowGroupManager] = useState(false);
-  const [showTagManager, setShowTagManager] = useState(false);
-  const [showStats, setShowStats] = useState(false);
-  const [showMobileSidebar, setShowMobileSidebar] = useState(false);
-  const [mobileTab, setMobileTab] = useState("words");
 
   // Fetch words
   const { data: words, isLoading: wordsLoading } = trpc.word.list.useQuery({
@@ -110,15 +108,12 @@ export default function Home() {
     setShowWordForm(true);
   };
 
-  const handleMobileTabChange = (tab: string) => {
-    setMobileTab(tab);
-    if (tab === "groups") {
-      setShowGroupManager(true);
-    } else if (tab === "tags") {
-      navigate("/tags");
-    } else if (tab === "stats") {
-      setShowStats(true);
-    }
+  // Clear filters
+  const clearFilters = () => {
+    setSearchParams({});
+    setSelectedGroup(null);
+    setSelectedTag(null);
+    setSearchQuery("");
   };
 
   if (authLoading) {
@@ -135,122 +130,131 @@ export default function Home() {
   if (!user) return null;
 
   const filteredWords = words || [];
-  const isEmpty = filteredWords.length === 0 && !wordsLoading && !searchQuery && !selectedGroup && !selectedTag;
+  const hasActiveFilters = selectedGroup !== null || selectedTag !== null || searchQuery.length > 0;
+  const isEmpty = filteredWords.length === 0 && !wordsLoading && !hasActiveFilters;
+
+  // Build page title based on active filters
+  let pageTitle = "我的单词本";
+  if (selectedGroup && selectedTag) {
+    pageTitle = `${groupsList?.find((g) => g.id === selectedGroup)?.name ?? ""} + ${tagsList?.find((t) => t.id === selectedTag)?.name ?? ""}`;
+  } else if (selectedGroup) {
+    pageTitle = groupsList?.find((g) => g.id === selectedGroup)?.name ?? "分组单词";
+  } else if (selectedTag) {
+    pageTitle = tagsList?.find((t) => t.id === selectedTag)?.name ?? "标签单词";
+  }
 
   return (
     <div className="min-h-screen bg-gray-50/50">
       {/* Header */}
-      <AppHeader
-        onMenuToggle={() => setShowMobileSidebar(true)}
-        searchComponent={<SearchBar onSearch={handleSearch} />}
-      />
+      <AppHeader searchComponent={<SearchBar onSearch={handleSearch} />} />
 
-      <div className="max-w-7xl mx-auto flex">
-        {/* Desktop Sidebar */}
-        <aside className="hidden lg:block w-64 shrink-0 sticky top-14 h-[calc(100vh-3.5rem)] border-r border-gray-100">
-          <AppSidebar
-            selectedGroup={selectedGroup}
-            onSelectGroup={setSelectedGroup}
-            selectedTag={selectedTag}
-            onSelectTag={setSelectedTag}
-            onOpenGroupManager={() => setShowGroupManager(true)}
-            onOpenStats={() => setShowStats(true)}
-          />
-        </aside>
+      {/* Main Content */}
+      <main className="max-w-3xl mx-auto px-4 py-4 lg:px-6 lg:py-6 pb-24">
+        {/* Title & Filter Info */}
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex-1 min-w-0">
+            <h1 className="text-xl font-bold text-gray-900 truncate">{pageTitle}</h1>
+            <p className="text-sm text-gray-500 mt-0.5">
+              共 {filteredWords.length} 个单词
+              {hasActiveFilters && (
+                <button
+                  onClick={clearFilters}
+                  className="ml-2 text-indigo-500 hover:text-indigo-600 text-xs underline"
+                >
+                  清除筛选
+                </button>
+              )}
+            </p>
+          </div>
+          <Button
+            onClick={() => {
+              setEditWord(null);
+              setShowWordForm(true);
+            }}
+            className="bg-gradient-to-r from-indigo-500 to-blue-600 hover:from-indigo-600 hover:to-blue-700 shadow-lg shadow-indigo-200 shrink-0 ml-3"
+          >
+            <Plus className="w-4 h-4 mr-1.5" />
+            添加单词
+          </Button>
+        </div>
 
-        {/* Mobile Sidebar Sheet */}
-        <Sheet open={showMobileSidebar} onOpenChange={setShowMobileSidebar}>
-          <SheetContent side="left" className="w-72 p-0">
-            <AppSidebar
-              selectedGroup={selectedGroup}
-              onSelectGroup={(id) => {
-                setSelectedGroup(id);
-                setShowMobileSidebar(false);
-              }}
-              selectedTag={selectedTag}
-              onSelectTag={(id) => {
-                setSelectedTag(id);
-                setShowMobileSidebar(false);
-              }}
-              onOpenGroupManager={() => {
-                setShowGroupManager(true);
-                setShowMobileSidebar(false);
-              }}
-              onOpenStats={() => {
-                setShowStats(true);
-                setShowMobileSidebar(false);
-              }}
-              mobile
-              onClose={() => setShowMobileSidebar(false)}
-            />
-          </SheetContent>
-        </Sheet>
-
-        {/* Main Content */}
-        <main className="flex-1 min-w-0">
-          <div className="px-4 py-4 lg:px-6 lg:py-6">
-            {/* Title & Add Button (Desktop) */}
-            <div className="hidden lg:flex items-center justify-between mb-4">
-              <div>
-                <h1 className="text-xl font-bold text-gray-900">
-                  {selectedGroup && selectedTag
-                    ? `${groupsList?.find((g) => g.id === selectedGroup)?.name ?? ""} + ${tagsList?.find((t) => t.id === selectedTag)?.name ?? ""}`
-                    : selectedGroup
-                      ? groupsList?.find((g) => g.id === selectedGroup)?.name ?? "分组单词"
-                      : selectedTag
-                        ? tagsList?.find((t) => t.id === selectedTag)?.name ?? "标签单词"
-                        : "我的单词本"}
-                </h1>
-                <p className="text-sm text-gray-500 mt-0.5">
-                  共 {filteredWords.length} 个单词
-                </p>
-              </div>
-              <Button
-                onClick={() => {
-                  setEditWord(null);
-                  setShowWordForm(true);
-                }}
-                className="bg-gradient-to-r from-indigo-500 to-blue-600 hover:from-indigo-600 hover:to-blue-700 shadow-lg shadow-indigo-200"
-              >
-                <Plus className="w-4 h-4 mr-1.5" />
-                添加单词
-              </Button>
-            </div>
-
-            {/* Filter Bar */}
-            <div className="mb-4">
-              <FilterBar
-                sortBy={sortBy}
-                onSortChange={setSortBy}
-                resultCount={filteredWords.length}
-              />
-            </div>
-
-            {/* Words List */}
-            {isEmpty ? (
-              <EmptyState type="no-words" onAdd={() => setShowWordForm(true)} />
-            ) : filteredWords.length === 0 ? (
-              <EmptyState type="no-results" />
-            ) : (
-              <div className="space-y-3 pb-20 lg:pb-0">
-                {filteredWords.map((word) => (
-                  <WordCard
-                    key={word.id}
-                    word={word}
-                    onEdit={openEditForm}
-                    onDelete={handleDeleteWord}
-                  />
-                ))}
-              </div>
+        {/* Active filter chips */}
+        {hasActiveFilters && (
+          <div className="flex flex-wrap gap-2 mb-4">
+            {selectedGroup && (
+              <span className="inline-flex items-center gap-1 px-2.5 py-1 text-xs rounded-full bg-indigo-50 text-indigo-600 border border-indigo-200">
+                分组: {groupsList?.find((g) => g.id === selectedGroup)?.name ?? ""}
+                <button
+                  onClick={() => {
+                    const newParams = new URLSearchParams(searchParams);
+                    newParams.delete("groupId");
+                    setSearchParams(newParams);
+                  }}
+                  className="ml-0.5 hover:text-indigo-800"
+                >
+                  x
+                </button>
+              </span>
+            )}
+            {selectedTag && (
+              <span className="inline-flex items-center gap-1 px-2.5 py-1 text-xs rounded-full bg-emerald-50 text-emerald-600 border border-emerald-200">
+                标签: {tagsList?.find((t) => t.id === selectedTag)?.name ?? ""}
+                <button
+                  onClick={() => {
+                    const newParams = new URLSearchParams(searchParams);
+                    newParams.delete("tagId");
+                    setSearchParams(newParams);
+                  }}
+                  className="ml-0.5 hover:text-emerald-800"
+                >
+                  x
+                </button>
+              </span>
+            )}
+            {searchQuery && (
+              <span className="inline-flex items-center gap-1 px-2.5 py-1 text-xs rounded-full bg-gray-100 text-gray-600 border border-gray-200">
+                搜索: {searchQuery}
+                <button
+                  onClick={() => setSearchQuery("")}
+                  className="ml-0.5 hover:text-gray-800"
+                >
+                  x
+                </button>
+              </span>
             )}
           </div>
-        </main>
-      </div>
+        )}
+
+        {/* Filter Bar */}
+        <div className="mb-4">
+          <FilterBar
+            sortBy={sortBy}
+            onSortChange={setSortBy}
+            resultCount={filteredWords.length}
+          />
+        </div>
+
+        {/* Words List */}
+        {isEmpty ? (
+          <EmptyState type="no-words" onAdd={() => setShowWordForm(true)} />
+        ) : filteredWords.length === 0 ? (
+          <EmptyState type="no-results" />
+        ) : (
+          <div className="space-y-3 pb-4">
+            {filteredWords.map((word) => (
+              <WordCard
+                key={word.id}
+                word={word}
+                onEdit={openEditForm}
+                onDelete={handleDeleteWord}
+              />
+            ))}
+          </div>
+        )}
+      </main>
 
       {/* Mobile Bottom Nav */}
       <MobileNav
-        activeTab={mobileTab}
-        onTabChange={handleMobileTabChange}
         onAdd={() => {
           setEditWord(null);
           setShowWordForm(true);
@@ -267,31 +271,6 @@ export default function Home() {
         onSubmit={editWord ? handleEditWord : handleAddWord}
         editWord={editWord}
       />
-
-      {/* Group Manager Dialog */}
-      <GroupManager
-        open={showGroupManager}
-        onClose={() => setShowGroupManager(false)}
-      />
-
-      {/* Tag Manager Dialog */}
-      <TagManager
-        open={showTagManager}
-        onClose={() => setShowTagManager(false)}
-      />
-
-      {/* Stats Dialog */}
-      <Dialog open={showStats} onOpenChange={setShowStats}>
-        <DialogContent className="max-w-md max-h-[85vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <GraduationCap className="w-5 h-5 text-indigo-500" />
-              学习统计
-            </DialogTitle>
-          </DialogHeader>
-          <StatsPanel />
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

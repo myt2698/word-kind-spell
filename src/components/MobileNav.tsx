@@ -1,4 +1,4 @@
-import { LayoutGrid, FolderOpen, Tag, BarChart3, Plus } from "lucide-react";
+import { LayoutGrid, FolderOpen, Tag, Search, Plus } from "lucide-react";
 import { useNavigate, useLocation } from "react-router";
 
 interface MobileNavProps {
@@ -9,10 +9,10 @@ interface MobileNavProps {
 
 const tabs = [
   { key: "words", label: "单词", icon: LayoutGrid, path: "/" },
-  { key: "groups", label: "分组", icon: FolderOpen, path: "/" },
+  { key: "groups", label: "分组", icon: FolderOpen, path: "/groups" },
   { key: "add", label: "添加", icon: Plus, isAction: true },
   { key: "tags", label: "标签", icon: Tag, path: "/tags" },
-  { key: "stats", label: "统计", icon: BarChart3, path: "/" },
+  { key: "search", label: "搜索", icon: Search, path: "/search" },
 ];
 
 export default function MobileNav({ activeTab, onTabChange, onAdd }: MobileNavProps) {
@@ -21,7 +21,12 @@ export default function MobileNav({ activeTab, onTabChange, onAdd }: MobileNavPr
 
   // Determine active tab from URL if not provided
   const currentPath = location.pathname;
-  const currentTab = activeTab ?? (currentPath === "/tags" ? "tags" : "words");
+  const currentTab = activeTab ?? (
+    currentPath === "/tags" ? "tags" :
+    currentPath === "/groups" ? "groups" :
+    currentPath === "/search" ? "search" :
+    "words"
+  );
 
   const handleTabClick = (tab: typeof tabs[0]) => {
     if (tab.isAction) {
