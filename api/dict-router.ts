@@ -160,9 +160,12 @@ async function fetchFreeDict(word: string): Promise<{
     const entry = data[0];
     let phonetic = entry.phonetic || "";
     if (!phonetic) {
-      for (const p of entry.phonetics) {
-        if (p.text) { phonetic = p.text; break; }
-      }
+      // Prefer shorter/simpler phonetic (without ː) when multiple available
+      const candidates = entry.phonetics
+        .map((p) => p.text)
+        .filter((t): t is string => !!t);
+      // Pick first without ː, fallback to first with ː
+      phonetic = candidates.find((t) => !t.includes("ː")) || candidates[0] || "";
     }
     phonetic = phonetic.replace(/ɹ/g, "r");
 
