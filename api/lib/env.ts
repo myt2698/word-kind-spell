@@ -16,4 +16,7 @@ export const env = {
   kimiAuthUrl: required("KIMI_AUTH_URL"),
   kimiOpenUrl: required("KIMI_OPEN_URL"),
   ownerUnionId: process.env.OWNER_UNION_ID ?? "",
+  // Youdao Dictionary API
+  youdaoAppKey: process.env.YOUDAO_APP_KEY ?? "",
+  youdaoAppSecret: process.env.YOUDAO_APP_SECRET ?? "",
 };
