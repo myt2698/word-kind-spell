@@ -212,7 +212,7 @@ export default function TagsPage() {
         )}
       </main>
 
-      <MobileNav activeTab="tags" onTabChange={() => {}} onAdd={openCreate} />
+      <MobileNav activeTab="tags" onTabChange={() => {}} />
 
       {/* Create / Edit Dialog */}
       <Dialog

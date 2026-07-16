@@ -292,12 +292,7 @@ export default function Home() {
       </main>
 
       {/* Mobile Bottom Nav */}
-      <MobileNav
-        onAdd={() => {
-          setEditWord(null);
-          setShowWordForm(true);
-        }}
-      />
+      <MobileNav />
 
       {/* Word Form Dialog */}
       <WordForm

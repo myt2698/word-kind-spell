@@ -1,21 +1,19 @@
-import { LayoutGrid, FolderOpen, Tag, Search, Plus } from "lucide-react";
+import { LayoutGrid, FolderOpen, Tag, Search } from "lucide-react";
 import { useNavigate, useLocation } from "react-router";
 
 interface MobileNavProps {
   activeTab?: string;
   onTabChange?: (tab: string) => void;
-  onAdd?: () => void;
 }
 
 const tabs = [
   { key: "words", label: "单词", icon: LayoutGrid, path: "/" },
   { key: "groups", label: "分组", icon: FolderOpen, path: "/groups" },
-  { key: "add", label: "添加", icon: Plus, isAction: true },
   { key: "tags", label: "标签", icon: Tag, path: "/tags" },
   { key: "search", label: "搜索", icon: Search, path: "/search" },
 ];
 
-export default function MobileNav({ activeTab, onTabChange, onAdd }: MobileNavProps) {
+export default function MobileNav({ activeTab, onTabChange }: MobileNavProps) {
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -29,16 +27,9 @@ export default function MobileNav({ activeTab, onTabChange, onAdd }: MobileNavPr
   );
 
   const handleTabClick = (tab: typeof tabs[0]) => {
-    if (tab.isAction) {
-      onAdd?.();
-      return;
-    }
-
     if (tab.path) {
       navigate(tab.path);
     }
-
-    // Also call onTabChange for backward compat
     onTabChange?.(tab.key);
   };
 
@@ -46,20 +37,6 @@ export default function MobileNav({ activeTab, onTabChange, onAdd }: MobileNavPr
     <nav className="fixed bottom-0 left-0 right-0 z-50 bg-white/90 backdrop-blur-lg border-t border-gray-100 safe-area-pb">
       <div className="flex items-center justify-around h-16 max-w-lg mx-auto">
         {tabs.map((tab) => {
-          if (tab.isAction) {
-            return (
-              <button
-                key={tab.key}
-                onClick={() => handleTabClick(tab)}
-                className="flex flex-col items-center justify-center -mt-4"
-              >
-                <div className="w-12 h-12 rounded-full bg-gradient-to-r from-indigo-500 to-blue-600 flex items-center justify-center shadow-lg shadow-indigo-200">
-                  <Plus className="w-5 h-5 text-white" />
-                </div>
-              </button>
-            );
-          }
-
           const Icon = tab.icon;
           const isActive = currentTab === tab.key || currentPath === tab.path;
 
