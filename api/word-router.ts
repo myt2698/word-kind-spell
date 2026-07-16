@@ -5,7 +5,7 @@ import { words, wordTags, tags, wordLogs, wordGroups } from "@db/schema";
 import { eq, and, like, or, desc, asc, sql, inArray } from "drizzle-orm";
 
 export const wordRouter = createRouter({
-  // 获取用户的单词列表（支持搜索、多分组和多标签联合筛选）
+  // 获取用户的单词列表（支持搜索、多分组、多标签、课本联合筛选）
   list: authedQuery
     .input(
       z.object({
@@ -13,6 +13,7 @@ export const wordRouter = createRouter({
         groupIds: z.array(z.number()).optional(),
         tagId: z.number().optional(),
         tagIds: z.array(z.number()).optional(),
+        textbookId: z.number().optional(),
         search: z.string().optional(),
         sortBy: z.enum(["newest", "oldest", "alphabetical"]).default("newest"),
       }).optional()
@@ -21,12 +22,32 @@ export const wordRouter = createRouter({
       const db = getDb();
       const conditions = [eq(words.userId, ctx.user.id)];
 
-      // Handle group filter (single or multiple)
-      const effectiveGroupIds = input?.groupIds
+      // Handle textbook filter: find all groups in the textbook
+      let effectiveGroupIds = input?.groupIds
         ? input.groupIds
         : input?.groupId
           ? [input.groupId]
           : [];
+
+      if (input?.textbookId) {
+        const textbookGroups = await db
+          .select({ id: wordGroups.id })
+          .from(wordGroups)
+          .where(
+            and(
+              eq(wordGroups.textbookId, input.textbookId),
+              eq(wordGroups.userId, ctx.user.id)
+            )
+          );
+        const textbookGroupIds = textbookGroups.map((g) => g.id);
+        if (effectiveGroupIds.length > 0) {
+          // Intersection: only keep groups that are in both the textbook and the requested groups
+          effectiveGroupIds = effectiveGroupIds.filter((id) => textbookGroupIds.includes(id));
+        } else {
+          effectiveGroupIds = textbookGroupIds;
+        }
+      }
+
       if (effectiveGroupIds.length > 0) {
         conditions.push(inArray(words.groupId, effectiveGroupIds));
       }

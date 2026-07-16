@@ -4,6 +4,7 @@ import { wordRouter } from "./word-router";
 import { tagRouter } from "./tag-router";
 import { dictRouter } from "./dict-router";
 import { spellingRouter } from "./spelling-router";
+import { textbookRouter } from "./textbook-router";
 import { createRouter, publicQuery } from "./middleware";
 
 export const appRouter = createRouter({
@@ -14,6 +15,7 @@ export const appRouter = createRouter({
   tag: tagRouter,
   dict: dictRouter,
   spelling: spellingRouter,
+  textbook: textbookRouter,
 });
 
 export type AppRouter = typeof appRouter;

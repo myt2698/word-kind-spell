@@ -34,12 +34,33 @@ export const users = mysqlTable("users", {
 export type User = typeof users.$inferSelect;
 export type InsertUser = typeof users.$inferInsert;
 
-// 单词分组表
+// 课本表
+export const textbooks = mysqlTable("textbooks", {
+  id: serial("id").primaryKey(),
+  userId: bigint("userId", { mode: "number", unsigned: true })
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  name: varchar("name", { length: 100 }).notNull(),
+  description: text("description"),
+  sortOrder: int("sortOrder").default(0).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt")
+    .defaultNow()
+    .notNull()
+    .$onUpdate(() => new Date()),
+});
+
+export type Textbook = typeof textbooks.$inferSelect;
+export type InsertTextbook = typeof textbooks.$inferInsert;
+
+// 单词分组表（单元）
 export const wordGroups = mysqlTable("word_groups", {
   id: serial("id").primaryKey(),
   userId: bigint("userId", { mode: "number", unsigned: true })
     .notNull()
     .references(() => users.id, { onDelete: "cascade" }),
+  textbookId: bigint("textbookId", { mode: "number", unsigned: true })
+    .references(() => textbooks.id, { onDelete: "set null" }),
   name: varchar("name", { length: 100 }).notNull(),
   description: text("description"),
   sortOrder: int("sortOrder").default(0).notNull(),

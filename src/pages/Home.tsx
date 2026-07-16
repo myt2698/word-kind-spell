@@ -29,6 +29,10 @@ export default function Home() {
   // Read filter params from URL
   const urlGroupIds = useMemo(() => parseIdList(searchParams.get("groupIds")), [searchParams]);
   const urlTagIds = useMemo(() => parseIdList(searchParams.get("tagIds")), [searchParams]);
+  const urlTextbookId = useMemo(() => {
+    const val = searchParams.get("textbookId");
+    return val ? Number(val) : null;
+  }, [searchParams]);
 
   // Search & Filter state
   const [searchQuery, setSearchQuery] = useState("");
@@ -42,13 +46,15 @@ export default function Home() {
   const { data: words, isLoading: wordsLoading } = trpc.word.list.useQuery({
     groupIds: urlGroupIds.length > 0 ? urlGroupIds : undefined,
     tagIds: urlTagIds.length > 0 ? urlTagIds : undefined,
+    textbookId: urlTextbookId ?? undefined,
     search: searchQuery || undefined,
     sortBy,
   });
 
-  // Fetch group/tag names for display
+  // Fetch group/tag/textbook names for display
   const { data: groupsList } = trpc.wordGroup.list.useQuery();
   const { data: tagsList } = trpc.tag.list.useQuery();
+  const { data: textbooksList } = trpc.textbook.list.useQuery();
 
   // Mutations
   const createWord = trpc.word.create.useMutation({
@@ -131,6 +137,13 @@ export default function Home() {
     setSearchParams(newParams);
   };
 
+  // Remove textbook filter
+  const removeTextbookFilter = () => {
+    const newParams = new URLSearchParams(searchParams);
+    newParams.delete("textbookId");
+    setSearchParams(newParams);
+  };
+
   if (authLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
@@ -145,12 +158,15 @@ export default function Home() {
   if (!user) return null;
 
   const filteredWords = words || [];
-  const hasActiveFilters = urlGroupIds.length > 0 || urlTagIds.length > 0 || searchQuery.length > 0;
+  const hasActiveFilters = urlGroupIds.length > 0 || urlTagIds.length > 0 || urlTextbookId !== null || searchQuery.length > 0;
   const isEmpty = filteredWords.length === 0 && !wordsLoading && !hasActiveFilters;
 
   // Build page title based on active filters
   let pageTitle = "我的单词本";
-  if (urlGroupIds.length > 0 && urlTagIds.length > 0) {
+  const textbookName = urlTextbookId ? textbooksList?.find((t) => t.id === urlTextbookId)?.name : null;
+  if (urlTextbookId && textbookName) {
+    pageTitle = textbookName;
+  } else if (urlGroupIds.length > 0 && urlTagIds.length > 0) {
     const groupNames = urlGroupIds
       .map((id) => groupsList?.find((g) => g.id === id)?.name)
       .filter(Boolean)
@@ -212,6 +228,12 @@ export default function Home() {
         {/* Active filter chips */}
         {hasActiveFilters && (
           <div className="flex flex-wrap gap-2 mb-4">
+            {urlTextbookId && textbookName && (
+              <span className="inline-flex items-center gap-1 px-2.5 py-1 text-xs rounded-full bg-purple-50 text-purple-600 border border-purple-200">
+                课本: {textbookName}
+                <button onClick={removeTextbookFilter} className="ml-0.5 hover:text-purple-800">x</button>
+              </span>
+            )}
             {urlGroupIds.map((groupId) => {
               const group = groupsList?.find((g) => g.id === groupId);
               if (!group) return null;

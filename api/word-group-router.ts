@@ -5,35 +5,42 @@ import { wordGroups, users, words } from "@db/schema";
 import { eq, and, asc, sql } from "drizzle-orm";
 
 export const wordGroupRouter = createRouter({
-  list: authedQuery.query(async ({ ctx }) => {
-    const db = getDb();
-    const groups = await db
-      .select()
-      .from(wordGroups)
-      .where(eq(wordGroups.userId, ctx.user.id))
-      .orderBy(asc(wordGroups.sortOrder));
+  list: authedQuery
+    .input(z.object({ textbookId: z.number().optional() }).optional())
+    .query(async ({ ctx, input }) => {
+      const db = getDb();
+      const conditions = [eq(wordGroups.userId, ctx.user.id)];
+      if (input?.textbookId) {
+        conditions.push(eq(wordGroups.textbookId, input.textbookId));
+      }
 
-    // Get word count for each group
-    const groupsWithCount = await Promise.all(
-      groups.map(async (group) => {
-        const countResult = await db
-          .select({ count: sql<number>`count(*)` })
-          .from(words)
-          .where(
-            and(
-              eq(words.groupId, group.id),
-              eq(words.userId, ctx.user.id)
-            )
-          );
-        return {
-          ...group,
-          wordCount: countResult[0]?.count ?? 0,
-        };
-      })
-    );
+      const groups = await db
+        .select()
+        .from(wordGroups)
+        .where(and(...conditions))
+        .orderBy(asc(wordGroups.sortOrder));
 
-    return groupsWithCount;
-  }),
+      // Get word count for each group
+      const groupsWithCount = await Promise.all(
+        groups.map(async (group) => {
+          const countResult = await db
+            .select({ count: sql<number>`count(*)` })
+            .from(words)
+            .where(
+              and(
+                eq(words.groupId, group.id),
+                eq(words.userId, ctx.user.id)
+              )
+            );
+          return {
+            ...group,
+            wordCount: countResult[0]?.count ?? 0,
+          };
+        })
+      );
+
+      return groupsWithCount;
+    }),
 
   getById: authedQuery
     .input(z.object({ id: z.number() }))
@@ -58,6 +65,7 @@ export const wordGroupRouter = createRouter({
         name: z.string().min(1).max(100),
         description: z.string().optional(),
         sortOrder: z.number().optional(),
+        textbookId: z.number().optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {
@@ -78,6 +86,7 @@ export const wordGroupRouter = createRouter({
         userId: ctx.user.id,
         name: input.name,
         description: input.description,
+        textbookId: input.textbookId || null,
         sortOrder,
       });
       return { id: Number(result[0].insertId) };
@@ -90,6 +99,7 @@ export const wordGroupRouter = createRouter({
         name: z.string().min(1).max(100).optional(),
         description: z.string().optional(),
         sortOrder: z.number().optional(),
+        textbookId: z.number().nullable().optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {
