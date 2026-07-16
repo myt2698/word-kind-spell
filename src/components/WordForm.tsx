@@ -159,15 +159,14 @@ export default function WordForm({ open, onClose, onSubmit, editWord }: WordForm
       // 先检查单词是否已存在
       const checkResult = await utils.word.checkExists.fetch({ word });
       if (checkResult.exists) {
-        setIsLookingUp(false);
+        // 已存在：记录已有数据用于提示，但仍继续查询字典获取最新数据
         setExistingWord(checkResult.word);
-        return;
       }
     } catch {
       // 检查失败，继续查询字典
     }
 
-    // 不存在则查询字典
+    // 始终查询字典（无论是否已存在，都获取最新音标和释义）
     lookupMutation.mutate({ word });
   };
 
