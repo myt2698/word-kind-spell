@@ -4,6 +4,7 @@ import { trpc } from "@/providers/trpc";
 import AppHeader from "@/components/AppHeader";
 import MobileNav from "@/components/MobileNav";
 import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 import {
   Search,
   FolderOpen,
@@ -11,6 +12,8 @@ import {
   Loader2,
   ArrowLeft,
   Star,
+  Check,
+  X,
 } from "lucide-react";
 import { useNavigate } from "react-router";
 
@@ -23,10 +26,38 @@ export default function SearchPage() {
   const { data: userSettings } = trpc.wordGroup.getSettings.useQuery();
 
   const [searchQuery, setSearchQuery] = useState("");
+  const [selectedGroupIds, setSelectedGroupIds] = useState<Set<number>>(new Set());
+  const [selectedTagIds, setSelectedTagIds] = useState<Set<number>>(new Set());
 
   const isLoading = groupsLoading || tagsLoading;
 
-  // Filter groups by search
+  // Toggle group selection
+  const toggleGroup = (groupId: number) => {
+    setSelectedGroupIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(groupId)) {
+        next.delete(groupId);
+      } else {
+        next.add(groupId);
+      }
+      return next;
+    });
+  };
+
+  // Toggle tag selection
+  const toggleTag = (tagId: number) => {
+    setSelectedTagIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(tagId)) {
+        next.delete(tagId);
+      } else {
+        next.add(tagId);
+      }
+      return next;
+    });
+  };
+
+  // Filter groups by search text
   const filteredGroups = groups?.filter((g) =>
     searchQuery
       ? g.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -34,7 +65,7 @@ export default function SearchPage() {
       : true
   );
 
-  // Filter tags by search
+  // Filter tags by search text
   const filteredTags = tags?.filter((t) =>
     searchQuery
       ? t.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -42,13 +73,28 @@ export default function SearchPage() {
       : true
   );
 
-  const handleSelectGroup = (groupId: number) => {
-    navigate(`/?groupId=${groupId}`);
+  // Navigate to results
+  const handleViewResults = () => {
+    const params = new URLSearchParams();
+    if (selectedGroupIds.size > 0) {
+      params.set("groupIds", Array.from(selectedGroupIds).join(","));
+    }
+    if (selectedTagIds.size > 0) {
+      params.set("tagIds", Array.from(selectedTagIds).join(","));
+    }
+    const queryString = params.toString();
+    navigate(queryString ? `/?${queryString}` : "/");
   };
 
-  const handleSelectTag = (tagId: number) => {
-    navigate(`/?tagId=${tagId}`);
-  };
+  const totalSelected = selectedGroupIds.size + selectedTagIds.size;
+
+  // Get names for selected chips
+  const selectedGroupNames = Array.from(selectedGroupIds)
+    .map((id) => groups?.find((g) => g.id === id))
+    .filter(Boolean);
+  const selectedTagNames = Array.from(selectedTagIds)
+    .map((id) => tags?.find((t) => t.id === id))
+    .filter(Boolean);
 
   if (authLoading) {
     return (
@@ -64,7 +110,7 @@ export default function SearchPage() {
     <div className="min-h-screen bg-gray-50/50">
       <AppHeader />
 
-      <main className="max-w-3xl mx-auto px-4 py-6 pb-24">
+      <main className="max-w-3xl mx-auto px-4 py-6 pb-32">
         {/* Header */}
         <div className="flex items-center gap-3 mb-6">
           <button
@@ -79,7 +125,7 @@ export default function SearchPage() {
               搜索
             </h1>
             <p className="text-sm text-gray-500 mt-0.5">
-              点击分组或标签查看对应单词
+              选择分组和标签进行联合筛选
             </p>
           </div>
         </div>
@@ -96,6 +142,42 @@ export default function SearchPage() {
             autoFocus
           />
         </div>
+
+        {/* Selected chips */}
+        {totalSelected > 0 && (
+          <div className="flex flex-wrap gap-2 mb-4">
+            {selectedGroupNames.map((g) => (
+              <span
+                key={`g-${g!.id}`}
+                className="inline-flex items-center gap-1 px-2.5 py-1 text-xs rounded-full bg-indigo-50 text-indigo-600 border border-indigo-200"
+              >
+                <FolderOpen className="w-3 h-3" />
+                {g!.name}
+                <button
+                  onClick={() => toggleGroup(g!.id)}
+                  className="ml-0.5 hover:text-indigo-800"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </span>
+            ))}
+            {selectedTagNames.map((t) => (
+              <span
+                key={`t-${t!.id}`}
+                className="inline-flex items-center gap-1 px-2.5 py-1 text-xs rounded-full bg-emerald-50 text-emerald-600 border border-emerald-200"
+              >
+                <Tag className="w-3 h-3" />
+                {t!.name}
+                <button
+                  onClick={() => toggleTag(t!.id)}
+                  className="ml-0.5 hover:text-emerald-800"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </span>
+            ))}
+          </div>
+        )}
 
         {isLoading ? (
           <div className="flex justify-center py-12">
@@ -122,14 +204,27 @@ export default function SearchPage() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   {filteredGroups.map((group) => {
                     const isDefault = userSettings?.defaultGroupId === group.id;
+                    const isSelected = selectedGroupIds.has(group.id);
                     return (
                       <button
                         key={group.id}
-                        onClick={() => handleSelectGroup(group.id)}
-                        className="flex items-center gap-3 p-3 bg-white rounded-xl border border-gray-100 hover:shadow-md hover:border-indigo-200 transition-all text-left"
+                        onClick={() => toggleGroup(group.id)}
+                        className={`flex items-center gap-3 p-3 rounded-xl border transition-all text-left ${
+                          isSelected
+                            ? "bg-indigo-50 border-indigo-300 ring-1 ring-indigo-200 shadow-sm"
+                            : "bg-white border-gray-100 hover:shadow-md hover:border-indigo-200"
+                        }`}
                       >
-                        <div className="w-10 h-10 rounded-lg bg-indigo-50 flex items-center justify-center shrink-0">
-                          <FolderOpen className="w-5 h-5 text-indigo-500" />
+                        <div
+                          className={`w-10 h-10 rounded-lg flex items-center justify-center shrink-0 ${
+                            isSelected ? "bg-indigo-100" : "bg-indigo-50"
+                          }`}
+                        >
+                          {isSelected ? (
+                            <Check className="w-5 h-5 text-indigo-600" />
+                          ) : (
+                            <FolderOpen className="w-5 h-5 text-indigo-500" />
+                          )}
                         </div>
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-1.5">
@@ -170,27 +265,70 @@ export default function SearchPage() {
                 </div>
               ) : (
                 <div className="flex flex-wrap gap-2">
-                  {filteredTags.map((tag) => (
-                    <button
-                      key={tag.id}
-                      onClick={() => handleSelectTag(tag.id)}
-                      className="inline-flex flex-col items-start px-3 py-2 bg-white rounded-xl border border-gray-100 hover:shadow-md hover:border-emerald-200 transition-all"
-                    >
-                      <span className="text-sm font-medium text-gray-800">{tag.name}</span>
-                      <span className="text-xs text-gray-400">{tag.wordCount} 个单词</span>
-                      {tag.description && (
-                        <span className="text-xs text-gray-400 mt-0.5 line-clamp-1 max-w-[200px]">
-                          {tag.description}
-                        </span>
-                      )}
-                    </button>
-                  ))}
+                  {filteredTags.map((tag) => {
+                    const isSelected = selectedTagIds.has(tag.id);
+                    return (
+                      <button
+                        key={tag.id}
+                        onClick={() => toggleTag(tag.id)}
+                        className={`inline-flex items-center gap-2 px-3 py-2 rounded-xl border transition-all ${
+                          isSelected
+                            ? "bg-emerald-50 border-emerald-300 ring-1 ring-emerald-200 shadow-sm"
+                            : "bg-white border-gray-100 hover:shadow-md hover:border-emerald-200"
+                        }`}
+                      >
+                        {isSelected ? (
+                          <Check className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                        ) : (
+                          <Tag className="w-3.5 h-3.5 text-gray-400 shrink-0" />
+                        )}
+                        <div className="flex flex-col items-start">
+                          <span
+                            className={`text-sm font-medium ${
+                              isSelected ? "text-emerald-700" : "text-gray-800"
+                            }`}
+                          >
+                            {tag.name}
+                          </span>
+                          <span className="text-xs text-gray-400">
+                            {tag.wordCount} 个单词
+                          </span>
+                        </div>
+                      </button>
+                    );
+                  })}
                 </div>
               )}
             </section>
           </div>
         )}
       </main>
+
+      {/* Bottom action bar */}
+      {totalSelected > 0 && (
+        <div className="fixed bottom-16 left-0 right-0 z-40 bg-white/90 backdrop-blur-lg border-t border-gray-100 px-4 py-3">
+          <div className="max-w-3xl mx-auto flex items-center justify-between gap-3">
+            <p className="text-sm text-gray-500">
+              已选
+              {selectedGroupIds.size > 0 && (
+                <span className="text-indigo-600 font-medium"> {selectedGroupIds.size} 个分组</span>
+              )}
+              {selectedGroupIds.size > 0 && selectedTagIds.size > 0 && (
+                <span className="text-gray-400"> + </span>
+              )}
+              {selectedTagIds.size > 0 && (
+                <span className="text-emerald-600 font-medium">{selectedTagIds.size} 个标签</span>
+              )}
+            </p>
+            <Button
+              onClick={handleViewResults}
+              className="bg-gradient-to-r from-indigo-500 to-blue-600 hover:from-indigo-600 hover:to-blue-700 shadow-lg px-6"
+            >
+              查看结果
+            </Button>
+          </div>
+        </div>
+      )}
 
       <MobileNav activeTab="search" />
     </div>

@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useMemo } from "react";
 import { useNavigate, useSearchParams } from "react-router";
 import { useAuth } from "@/hooks/useAuth";
 import { trpc } from "@/providers/trpc";
@@ -13,6 +13,14 @@ import EmptyState from "@/components/EmptyState";
 import { Button } from "@/components/ui/button";
 import { Plus } from "lucide-react";
 
+function parseIdList(param: string | null): number[] {
+  if (!param) return [];
+  return param
+    .split(",")
+    .map((s) => Number(s.trim()))
+    .filter((n) => !isNaN(n) && n > 0);
+}
+
 export default function Home() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -20,26 +28,12 @@ export default function Home() {
   const utils = trpc.useUtils();
 
   // Read filter params from URL
-  const urlGroupId = searchParams.get("groupId");
-  const urlTagId = searchParams.get("tagId");
+  const urlGroupIds = useMemo(() => parseIdList(searchParams.get("groupIds")), [searchParams]);
+  const urlTagIds = useMemo(() => parseIdList(searchParams.get("tagIds")), [searchParams]);
 
   // Search & Filter state
   const [searchQuery, setSearchQuery] = useState("");
   const [sortBy, setSortBy] = useState<SortBy>("newest");
-  const [selectedGroup, setSelectedGroup] = useState<number | null>(
-    urlGroupId ? Number(urlGroupId) : null
-  );
-  const [selectedTag, setSelectedTag] = useState<number | null>(
-    urlTagId ? Number(urlTagId) : null
-  );
-
-  // Sync URL params to state on mount and when URL changes
-  useEffect(() => {
-    const gId = searchParams.get("groupId");
-    const tId = searchParams.get("tagId");
-    setSelectedGroup(gId ? Number(gId) : null);
-    setSelectedTag(tId ? Number(tId) : null);
-  }, [searchParams]);
 
   // Dialog state
   const [showWordForm, setShowWordForm] = useState(false);
@@ -47,8 +41,8 @@ export default function Home() {
 
   // Fetch words
   const { data: words, isLoading: wordsLoading } = trpc.word.list.useQuery({
-    groupId: selectedGroup ?? undefined,
-    tagId: selectedTag ?? undefined,
+    groupIds: urlGroupIds.length > 0 ? urlGroupIds : undefined,
+    tagIds: urlTagIds.length > 0 ? urlTagIds : undefined,
     search: searchQuery || undefined,
     sortBy,
   });
@@ -111,9 +105,31 @@ export default function Home() {
   // Clear filters
   const clearFilters = () => {
     setSearchParams({});
-    setSelectedGroup(null);
-    setSelectedTag(null);
     setSearchQuery("");
+  };
+
+  // Remove single group filter
+  const removeGroupFilter = (groupId: number) => {
+    const newIds = urlGroupIds.filter((id) => id !== groupId);
+    const newParams = new URLSearchParams(searchParams);
+    if (newIds.length > 0) {
+      newParams.set("groupIds", newIds.join(","));
+    } else {
+      newParams.delete("groupIds");
+    }
+    setSearchParams(newParams);
+  };
+
+  // Remove single tag filter
+  const removeTagFilter = (tagId: number) => {
+    const newIds = urlTagIds.filter((id) => id !== tagId);
+    const newParams = new URLSearchParams(searchParams);
+    if (newIds.length > 0) {
+      newParams.set("tagIds", newIds.join(","));
+    } else {
+      newParams.delete("tagIds");
+    }
+    setSearchParams(newParams);
   };
 
   if (authLoading) {
@@ -130,17 +146,33 @@ export default function Home() {
   if (!user) return null;
 
   const filteredWords = words || [];
-  const hasActiveFilters = selectedGroup !== null || selectedTag !== null || searchQuery.length > 0;
+  const hasActiveFilters = urlGroupIds.length > 0 || urlTagIds.length > 0 || searchQuery.length > 0;
   const isEmpty = filteredWords.length === 0 && !wordsLoading && !hasActiveFilters;
 
   // Build page title based on active filters
   let pageTitle = "我的单词本";
-  if (selectedGroup && selectedTag) {
-    pageTitle = `${groupsList?.find((g) => g.id === selectedGroup)?.name ?? ""} + ${tagsList?.find((t) => t.id === selectedTag)?.name ?? ""}`;
-  } else if (selectedGroup) {
-    pageTitle = groupsList?.find((g) => g.id === selectedGroup)?.name ?? "分组单词";
-  } else if (selectedTag) {
-    pageTitle = tagsList?.find((t) => t.id === selectedTag)?.name ?? "标签单词";
+  if (urlGroupIds.length > 0 && urlTagIds.length > 0) {
+    const groupNames = urlGroupIds
+      .map((id) => groupsList?.find((g) => g.id === id)?.name)
+      .filter(Boolean)
+      .join("、");
+    const tagNames = urlTagIds
+      .map((id) => tagsList?.find((t) => t.id === id)?.name)
+      .filter(Boolean)
+      .join("、");
+    pageTitle = `${groupNames} + ${tagNames}`;
+  } else if (urlGroupIds.length > 0) {
+    const names = urlGroupIds
+      .map((id) => groupsList?.find((g) => g.id === id)?.name)
+      .filter(Boolean)
+      .join("、");
+    pageTitle = names || "分组单词";
+  } else if (urlTagIds.length > 0) {
+    const names = urlTagIds
+      .map((id) => tagsList?.find((t) => t.id === id)?.name)
+      .filter(Boolean)
+      .join("、");
+    pageTitle = names || "标签单词";
   }
 
   return (
@@ -181,36 +213,42 @@ export default function Home() {
         {/* Active filter chips */}
         {hasActiveFilters && (
           <div className="flex flex-wrap gap-2 mb-4">
-            {selectedGroup && (
-              <span className="inline-flex items-center gap-1 px-2.5 py-1 text-xs rounded-full bg-indigo-50 text-indigo-600 border border-indigo-200">
-                分组: {groupsList?.find((g) => g.id === selectedGroup)?.name ?? ""}
-                <button
-                  onClick={() => {
-                    const newParams = new URLSearchParams(searchParams);
-                    newParams.delete("groupId");
-                    setSearchParams(newParams);
-                  }}
-                  className="ml-0.5 hover:text-indigo-800"
+            {urlGroupIds.map((groupId) => {
+              const group = groupsList?.find((g) => g.id === groupId);
+              if (!group) return null;
+              return (
+                <span
+                  key={`g-${groupId}`}
+                  className="inline-flex items-center gap-1 px-2.5 py-1 text-xs rounded-full bg-indigo-50 text-indigo-600 border border-indigo-200"
                 >
-                  x
-                </button>
-              </span>
-            )}
-            {selectedTag && (
-              <span className="inline-flex items-center gap-1 px-2.5 py-1 text-xs rounded-full bg-emerald-50 text-emerald-600 border border-emerald-200">
-                标签: {tagsList?.find((t) => t.id === selectedTag)?.name ?? ""}
-                <button
-                  onClick={() => {
-                    const newParams = new URLSearchParams(searchParams);
-                    newParams.delete("tagId");
-                    setSearchParams(newParams);
-                  }}
-                  className="ml-0.5 hover:text-emerald-800"
+                  分组: {group.name}
+                  <button
+                    onClick={() => removeGroupFilter(groupId)}
+                    className="ml-0.5 hover:text-indigo-800"
+                  >
+                    x
+                  </button>
+                </span>
+              );
+            })}
+            {urlTagIds.map((tagId) => {
+              const tag = tagsList?.find((t) => t.id === tagId);
+              if (!tag) return null;
+              return (
+                <span
+                  key={`t-${tagId}`}
+                  className="inline-flex items-center gap-1 px-2.5 py-1 text-xs rounded-full bg-emerald-50 text-emerald-600 border border-emerald-200"
                 >
-                  x
-                </button>
-              </span>
-            )}
+                  标签: {tag.name}
+                  <button
+                    onClick={() => removeTagFilter(tagId)}
+                    className="ml-0.5 hover:text-emerald-800"
+                  >
+                    x
+                  </button>
+                </span>
+              );
+            })}
             {searchQuery && (
               <span className="inline-flex items-center gap-1 px-2.5 py-1 text-xs rounded-full bg-gray-100 text-gray-600 border border-gray-200">
                 搜索: {searchQuery}

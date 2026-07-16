@@ -5,12 +5,14 @@ import { words, wordTags, tags, wordLogs, wordGroups } from "@db/schema";
 import { eq, and, like, or, desc, asc, sql, inArray } from "drizzle-orm";
 
 export const wordRouter = createRouter({
-  // 获取用户的单词列表（支持搜索和分组筛选）
+  // 获取用户的单词列表（支持搜索、多分组和多标签联合筛选）
   list: authedQuery
     .input(
       z.object({
         groupId: z.number().optional(),
+        groupIds: z.array(z.number()).optional(),
         tagId: z.number().optional(),
+        tagIds: z.array(z.number()).optional(),
         search: z.string().optional(),
         sortBy: z.enum(["newest", "oldest", "alphabetical"]).default("newest"),
       }).optional()
@@ -19,8 +21,14 @@ export const wordRouter = createRouter({
       const db = getDb();
       const conditions = [eq(words.userId, ctx.user.id)];
 
-      if (input?.groupId) {
-        conditions.push(eq(words.groupId, input.groupId));
+      // Handle group filter (single or multiple)
+      const effectiveGroupIds = input?.groupIds
+        ? input.groupIds
+        : input?.groupId
+          ? [input.groupId]
+          : [];
+      if (effectiveGroupIds.length > 0) {
+        conditions.push(inArray(words.groupId, effectiveGroupIds));
       }
 
       if (input?.search) {
@@ -67,7 +75,7 @@ export const wordRouter = createRouter({
       }
 
       const wordIds = wordList.map((w) => w.id);
-      const groupIds = [...new Set(wordList.map((w) => w.groupId).filter(Boolean))] as number[];
+      const groupIdsForNames = [...new Set(wordList.map((w) => w.groupId).filter(Boolean))] as number[];
 
       // Query 2: Batch fetch all tags for these words
       const allTagRows = wordIds.length > 0
@@ -92,28 +100,33 @@ export const wordRouter = createRouter({
 
       // Query 3: Batch fetch all group names
       const groupMap = new Map<number, string>();
-      if (groupIds.length > 0) {
+      if (groupIdsForNames.length > 0) {
         const groupRows = await db
           .select({ id: wordGroups.id, name: wordGroups.name })
           .from(wordGroups)
-          .where(inArray(wordGroups.id, groupIds));
+          .where(inArray(wordGroups.id, groupIdsForNames));
         for (const g of groupRows) {
           groupMap.set(g.id, g.name);
         }
       }
 
       // Assemble results
-      const results = wordList.map((word) => ({
+      let results = wordList.map((word) => ({
         ...word,
         tags: tagMap.get(word.id) ?? [],
         groupId: word.groupId,
         groupName: word.groupId ? (groupMap.get(word.groupId) ?? null) : null,
       }));
 
-      // Filter by tagId in memory if needed (combined with groupId)
-      if (input?.tagId) {
-        return results.filter((w) =>
-          w.tags.some((t) => t.id === input.tagId)
+      // Filter by tag (single or multiple) in memory
+      const effectiveTagIds = input?.tagIds
+        ? input.tagIds
+        : input?.tagId
+          ? [input.tagId]
+          : [];
+      if (effectiveTagIds.length > 0) {
+        results = results.filter((w) =>
+          w.tags.some((t) => effectiveTagIds.includes(t.id))
         );
       }
 
