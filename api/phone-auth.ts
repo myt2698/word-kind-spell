@@ -1,5 +1,6 @@
 /**
- * Phone Password Authentication Module
+ * Name + Password Authentication Module
+ * 使用昵称+密码登录注册，昵称唯一
  */
 
 import bcrypt from "bcryptjs";
@@ -8,10 +9,6 @@ import { users } from "@db/schema";
 import { eq } from "drizzle-orm";
 
 const SALT_ROUNDS = 10;
-
-function isValidPhone(phone: string): boolean {
-  return /^1[3-9]\d{9}$/.test(phone);
-}
 
 function isValidPassword(password: string): boolean {
   return password.length >= 6;
@@ -26,20 +23,23 @@ async function verifyPassword(password: string, hash: string): Promise<boolean> 
 }
 
 /**
- * Register a new user with phone and password
+ * Register a new user with name and password
  */
 export async function register(
-  phone: string,
-  password: string,
-  name?: string
+  name: string,
+  password: string
 ): Promise<{
   success: boolean;
   userId?: number;
   message?: string;
 }> {
   try {
-    if (!isValidPhone(phone)) {
-      return { success: false, message: "请输入有效的手机号" };
+    const trimmedName = name.trim();
+    if (!trimmedName) {
+      return { success: false, message: "请输入昵称" };
+    }
+    if (trimmedName.length > 20) {
+      return { success: false, message: "昵称最多20个字符" };
     }
 
     if (!isValidPassword(password)) {
@@ -48,26 +48,24 @@ export async function register(
 
     const db = getDb();
 
-    // Check if phone already registered
+    // Check if name already exists
     const existing = await db
-      .select()
+      .select({ id: users.id })
       .from(users)
-      .where(eq(users.phone, phone))
-      .limit(1)
-      .then((rows) => rows[0] || null);
+      .where(eq(users.name, trimmedName))
+      .limit(1);
 
-    if (existing) {
-      return { success: false, message: "该手机号已注册，请直接登录" };
+    if (existing.length > 0) {
+      return { success: false, message: "该昵称已被使用，请换一个" };
     }
 
     // Hash password and create user
     const passwordHash = await hashPassword(password);
-    console.log("[auth] Register - phone:", phone, "hash length:", passwordHash.length);
+    console.log("[auth] Register - name:", trimmedName, "hash length:", passwordHash.length);
 
     const result = await db.insert(users).values({
-      phone,
+      name: trimmedName,
       password: passwordHash,
-      name: name || `用户${phone.slice(-4)}`,
       lastSignInAt: new Date(),
     });
 
@@ -76,15 +74,19 @@ export async function register(
     return { success: true, userId, message: "注册成功" };
   } catch (err: any) {
     console.error("[auth] Register exception:", err);
+    // Handle unique constraint violation
+    if (err.message?.includes("Duplicate") || err.message?.includes("unique")) {
+      return { success: false, message: "该昵称已被使用，请换一个" };
+    }
     return { success: false, message: "注册异常: " + (err.message || "未知错误") };
   }
 }
 
 /**
- * Login with phone and password
+ * Login with name and password
  */
 export async function login(
-  phone: string,
+  name: string,
   password: string
 ): Promise<{
   success: boolean;
@@ -92,41 +94,38 @@ export async function login(
   message?: string;
 }> {
   try {
-    if (!isValidPhone(phone)) {
-      return { success: false, message: "请输入有效的手机号" };
+    const trimmedName = name.trim();
+    if (!trimmedName) {
+      return { success: false, message: "请输入昵称" };
     }
-
     if (!password) {
       return { success: false, message: "请输入密码" };
     }
 
     const db = getDb();
 
-    // Explicitly select password field to ensure it's included
     const rows = await db
       .select({
         id: users.id,
-        phone: users.phone,
+        name: users.name,
         password: users.password,
       })
       .from(users)
-      .where(eq(users.phone, phone))
+      .where(eq(users.name, trimmedName))
       .limit(1);
 
     const user = rows[0] || null;
 
-    console.log("[auth] Login - phone:", phone, "user found:", !!user);
+    console.log("[auth] Login - name:", trimmedName, "user found:", !!user);
 
     if (!user) {
-      return { success: false, message: "手机号未注册" };
+      return { success: false, message: "昵称不存在，请先注册" };
     }
 
     if (!user.password) {
-      console.log("[auth] Login - user has no password, userId:", user.id);
       return { success: false, message: "账号异常，请联系管理员" };
     }
 
-    console.log("[auth] Login - verifying password, hash length:", user.password.length);
     const valid = await verifyPassword(password, user.password);
     console.log("[auth] Login - password valid:", valid);
 

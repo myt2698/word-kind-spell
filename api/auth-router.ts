@@ -11,24 +11,23 @@ import { Session } from "@contracts/constants";
 import * as cookie from "cookie";
 
 export const authRouter = createRouter({
-  // Register with phone + password
+  // Register with name + password
   register: publicQuery
     .input(
       z.object({
-        phone: z.string().regex(/^1[3-9]\d{9}$/, "请输入有效的手机号"),
+        name: z.string().min(1, "请输入昵称").max(20, "昵称最多20个字符"),
         password: z.string().min(6, "密码至少6位字符"),
-        name: z.string().max(50).optional(),
       })
     )
     .mutation(async ({ input, ctx }) => {
       try {
-        const result = await registerUser(input.phone, input.password, input.name);
+        const result = await registerUser(input.name, input.password);
         if (!result.success || !result.userId) {
           return { success: false as const, message: result.message || "注册失败" };
         }
 
         // Generate session token and set cookie
-        const token = await signPhoneSessionToken(result.userId, input.phone);
+        const token = await signPhoneSessionToken(result.userId, input.name);
         const cookieOpts = getSessionCookieOptions(ctx.req.headers);
         ctx.resHeaders.append(
           "set-cookie",
@@ -48,23 +47,23 @@ export const authRouter = createRouter({
       }
     }),
 
-  // Login with phone + password
+  // Login with name + password
   login: publicQuery
     .input(
       z.object({
-        phone: z.string().regex(/^1[3-9]\d{9}$/, "请输入有效的手机号"),
+        name: z.string().min(1, "请输入昵称"),
         password: z.string().min(1, "请输入密码"),
       })
     )
     .mutation(async ({ input, ctx }) => {
       try {
-        const result = await loginUser(input.phone, input.password);
+        const result = await loginUser(input.name, input.password);
         if (!result.success || !result.userId) {
           return { success: false as const, message: result.message || "登录失败" };
         }
 
         // Generate session token and set cookie
-        const token = await signPhoneSessionToken(result.userId, input.phone);
+        const token = await signPhoneSessionToken(result.userId, input.name);
         const cookieOpts = getSessionCookieOptions(ctx.req.headers);
         ctx.resHeaders.append(
           "set-cookie",

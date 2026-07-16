@@ -15,6 +15,7 @@ export const users = mysqlTable("users", {
   unionId: varchar("unionId", { length: 255 }),
   phone: varchar("phone", { length: 20 }),
   password: varchar("password", { length: 255 }),
+  // 昵称（必填，唯一，作为登录凭证）
   name: varchar("name", { length: 255 }),
   email: varchar("email", { length: 320 }),
   avatar: text("avatar"),
@@ -27,7 +28,7 @@ export const users = mysqlTable("users", {
     .$onUpdate(() => new Date()),
   lastSignInAt: timestamp("lastSignInAt").defaultNow().notNull(),
 }, (table) => [
-  uniqueIndex("phone_idx").on(table.phone),
+  uniqueIndex("name_idx").on(table.name),
 ]);
 
 export type User = typeof users.$inferSelect;

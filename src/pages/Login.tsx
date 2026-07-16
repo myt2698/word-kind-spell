@@ -4,23 +4,21 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { trpc } from "@/providers/trpc";
-import { BookOpen, Smartphone, Lock, User, Loader2, Eye, EyeOff } from "lucide-react";
+import { BookOpen, User, Lock, Loader2, Eye, EyeOff } from "lucide-react";
 
 type Mode = "login" | "register";
 
 export default function Login() {
   const [mode, setMode] = useState<Mode>("login");
-  const [phone, setPhone] = useState("");
+  const [name, setName] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-  const [name, setName] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const [error, setError] = useState("");
 
   const loginMutation = trpc.auth.login.useMutation({
     onSuccess: (data) => {
-      console.log("[Login] onSuccess:", data);
       if (data.success) {
         window.location.href = "/";
       } else {
@@ -28,14 +26,12 @@ export default function Login() {
       }
     },
     onError: (err) => {
-      console.error("[Login] onError:", err);
       setError(err.message || "登录失败，请检查网络");
     },
   });
 
   const registerMutation = trpc.auth.register.useMutation({
     onSuccess: (data) => {
-      console.log("[Register] onSuccess:", data);
       if (data.success) {
         window.location.href = "/";
       } else {
@@ -43,7 +39,6 @@ export default function Login() {
       }
     },
     onError: (err) => {
-      console.error("[Register] onError:", err);
       setError(err.message || "注册失败，请检查网络");
     },
   });
@@ -51,8 +46,13 @@ export default function Login() {
   const handleSubmit = () => {
     setError("");
 
-    if (!/^1[3-9]\d{9}$/.test(phone)) {
-      setError("请输入有效的11位手机号");
+    const trimmedName = name.trim();
+    if (!trimmedName) {
+      setError("请输入昵称");
+      return;
+    }
+    if (trimmedName.length > 20) {
+      setError("昵称最多20个字符");
       return;
     }
     if (!password) {
@@ -70,12 +70,11 @@ export default function Login() {
         return;
       }
       registerMutation.mutate({
-        phone,
+        name: trimmedName,
         password,
-        name: name || undefined,
       });
     } else {
-      loginMutation.mutate({ phone, password });
+      loginMutation.mutate({ name: trimmedName, password });
     }
   };
 
@@ -107,40 +106,24 @@ export default function Login() {
             </div>
           )}
 
-          {/* Phone */}
+          {/* Nickname */}
           <div className="space-y-1.5">
-            <Label className="text-sm">手机号</Label>
+            <Label className="text-sm">昵称</Label>
             <div className="relative">
-              <Smartphone className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+              <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
               <Input
-                type="tel"
-                value={phone}
+                type="text"
+                value={name}
                 onChange={(e) => {
-                  setPhone(e.target.value.replace(/\D/g, "").slice(0, 11));
+                  setName(e.target.value.slice(0, 20));
                   setError("");
                 }}
-                placeholder="请输入手机号"
+                placeholder={mode === "register" ? "起一个唯一的昵称" : "请输入昵称"}
                 className="h-11 pl-10"
-                maxLength={11}
+                autoFocus
               />
             </div>
           </div>
-
-          {/* Nickname (register only) */}
-          {mode === "register" && (
-            <div className="space-y-1.5">
-              <Label className="text-sm">昵称（可选）</Label>
-              <div className="relative">
-                <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                <Input
-                  value={name}
-                  onChange={(e) => setName(e.target.value.slice(0, 20))}
-                  placeholder="给自己起个名字"
-                  className="h-11 pl-10"
-                />
-              </div>
-            </div>
-          )}
 
           {/* Password */}
           <div className="space-y-1.5">
