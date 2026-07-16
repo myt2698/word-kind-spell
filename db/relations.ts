@@ -1,11 +1,14 @@
 import { relations } from "drizzle-orm";
-import { users, wordGroups, words, tags, wordTags, wordLogs } from "./schema";
+import { users, wordGroups, words, tags, wordTags, wordLogs, wordSpellings, spellingErrors, spellingSessions } from "./schema";
 
 export const usersRelations = relations(users, ({ many }) => ({
   wordGroups: many(wordGroups),
   words: many(words),
   tags: many(tags),
   wordLogs: many(wordLogs),
+  wordSpellings: many(wordSpellings),
+  spellingErrors: many(spellingErrors),
+  spellingSessions: many(spellingSessions),
 }));
 
 export const wordGroupsRelations = relations(wordGroups, ({ one, many }) => ({
@@ -18,6 +21,8 @@ export const wordsRelations = relations(words, ({ one, many }) => ({
   group: one(wordGroups, { fields: [words.groupId], references: [wordGroups.id] }),
   wordTags: many(wordTags),
   logs: many(wordLogs),
+  wordSpellings: many(wordSpellings),
+  spellingErrors: many(spellingErrors),
 }));
 
 export const tagsRelations = relations(tags, ({ one, many }) => ({
@@ -33,4 +38,18 @@ export const wordTagsRelations = relations(wordTags, ({ one }) => ({
 export const wordLogsRelations = relations(wordLogs, ({ one }) => ({
   word: one(words, { fields: [wordLogs.wordId], references: [words.id] }),
   user: one(users, { fields: [wordLogs.userId], references: [users.id] }),
+}));
+
+export const wordSpellingsRelations = relations(wordSpellings, ({ one }) => ({
+  word: one(words, { fields: [wordSpellings.wordId], references: [words.id] }),
+  user: one(users, { fields: [wordSpellings.userId], references: [users.id] }),
+}));
+
+export const spellingErrorsRelations = relations(spellingErrors, ({ one }) => ({
+  word: one(words, { fields: [spellingErrors.wordId], references: [words.id] }),
+  user: one(users, { fields: [spellingErrors.userId], references: [users.id] }),
+}));
+
+export const spellingSessionsRelations = relations(spellingSessions, ({ one }) => ({
+  user: one(users, { fields: [spellingSessions.userId], references: [users.id] }),
 }));

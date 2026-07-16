@@ -1,4 +1,4 @@
-import { LayoutGrid, FolderOpen, Tag, Search } from "lucide-react";
+import { LayoutGrid, PenLine, FolderKanban, User } from "lucide-react";
 import { useNavigate, useLocation } from "react-router";
 
 interface MobileNavProps {
@@ -8,21 +8,20 @@ interface MobileNavProps {
 
 const tabs = [
   { key: "words", label: "单词", icon: LayoutGrid, path: "/" },
-  { key: "groups", label: "分组", icon: FolderOpen, path: "/groups" },
-  { key: "tags", label: "标签", icon: Tag, path: "/tags" },
-  { key: "search", label: "搜索", icon: Search, path: "/search" },
+  { key: "spell", label: "拼写", icon: PenLine, path: "/spell" },
+  { key: "manage", label: "管理", icon: FolderKanban, path: "/manage" },
+  { key: "profile", label: "我的", icon: User, path: "/profile" },
 ];
 
 export default function MobileNav({ activeTab, onTabChange }: MobileNavProps) {
   const navigate = useNavigate();
   const location = useLocation();
 
-  // Determine active tab from URL if not provided
   const currentPath = location.pathname;
   const currentTab = activeTab ?? (
-    currentPath === "/tags" ? "tags" :
-    currentPath === "/groups" ? "groups" :
-    currentPath === "/search" ? "search" :
+    currentPath === "/spell" ? "spell" :
+    currentPath === "/manage" ? "manage" :
+    currentPath === "/profile" ? "profile" :
     "words"
   );
 

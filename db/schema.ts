@@ -126,3 +126,86 @@ export const wordLogs = mysqlTable("word_logs", {
 
 export type WordLog = typeof wordLogs.$inferSelect;
 export type InsertWordLog = typeof wordLogs.$inferInsert;
+
+// ========== 拼写练习相关表 ==========
+
+// 单词拼写复习状态表（艾宾浩斯遗忘曲线）
+export const wordSpellings = mysqlTable("word_spellings", {
+  id: serial("id").primaryKey(),
+  wordId: bigint("wordId", { mode: "number", unsigned: true })
+    .notNull()
+    .references(() => words.id, { onDelete: "cascade" }),
+  userId: bigint("userId", { mode: "number", unsigned: true })
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  // 熟练度等级：1=陌生(拔高) 2=熟悉(中等) 3=掌握(基础)
+  level: int("level").default(1).notNull(),
+  // 下次复习时间
+  nextReviewAt: timestamp("nextReviewAt").defaultNow().notNull(),
+  // 上次复习时间
+  lastReviewAt: timestamp("lastReviewAt"),
+  // 连续正确次数
+  streak: int("streak").default(0).notNull(),
+  // 累计错误次数
+  errorCount: int("errorCount").default(0).notNull(),
+  // 总练习次数
+  totalAttempts: int("totalAttempts").default(0).notNull(),
+  // 总正确次数
+  totalCorrect: int("totalCorrect").default(0).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt")
+    .defaultNow()
+    .notNull()
+    .$onUpdate(() => new Date()),
+});
+
+export type WordSpelling = typeof wordSpellings.$inferSelect;
+export type InsertWordSpelling = typeof wordSpellings.$inferInsert;
+
+// 拼写错误记录表（错题本）
+export const spellingErrors = mysqlTable("spelling_errors", {
+  id: serial("id").primaryKey(),
+  wordId: bigint("wordId", { mode: "number", unsigned: true })
+    .notNull()
+    .references(() => words.id, { onDelete: "cascade" }),
+  userId: bigint("userId", { mode: "number", unsigned: true })
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  // 用户输入的错误拼写
+  userInput: varchar("userInput", { length: 255 }).notNull(),
+  // 错误类型：wrong_letter=字母错误, wrong_order=顺序错误, missing_letter=漏字母, extra_letter=多字母
+  errorType: mysqlEnum("errorType", ["wrong_letter", "wrong_order", "missing_letter", "extra_letter", "other"])
+    .default("other")
+    .notNull(),
+  // 出错的字母位置（JSON数组）
+  errorPositions: text("errorPositions"),
+  // 练习模式
+  practiceMode: mysqlEnum("practiceMode", ["blocks", "fillblank", "flash"])
+    .notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type SpellingError = typeof spellingErrors.$inferSelect;
+export type InsertSpellingError = typeof spellingErrors.$inferInsert;
+
+// 练习会话记录表
+export const spellingSessions = mysqlTable("spelling_sessions", {
+  id: serial("id").primaryKey(),
+  userId: bigint("userId", { mode: "number", unsigned: true })
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  // 练习模式
+  mode: mysqlEnum("mode", ["blocks", "fillblank", "flash"]).notNull(),
+  // 练习的单词数量
+  wordCount: int("wordCount").default(0).notNull(),
+  // 正确数量
+  correctCount: int("correctCount").default(0).notNull(),
+  // 用时（秒）
+  duration: int("duration"),
+  // 练习的单词IDs（JSON）
+  wordIds: text("wordIds"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type SpellingSession = typeof spellingSessions.$inferSelect;
+export type InsertSpellingSession = typeof spellingSessions.$inferInsert;

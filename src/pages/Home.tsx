@@ -1,5 +1,5 @@
-import { useState, useCallback, useEffect, useMemo } from "react";
-import { useNavigate, useSearchParams } from "react-router";
+import { useState, useCallback, useMemo } from "react";
+import { useSearchParams } from "react-router";
 import { useAuth } from "@/hooks/useAuth";
 import { trpc } from "@/providers/trpc";
 import AppHeader from "@/components/AppHeader";
@@ -22,7 +22,6 @@ function parseIdList(param: string | null): number[] {
 }
 
 export default function Home() {
-  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { user, isLoading: authLoading } = useAuth({ redirectOnUnauthenticated: true });
   const utils = trpc.useUtils();
