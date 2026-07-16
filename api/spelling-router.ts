@@ -63,7 +63,43 @@ export const spellingRouter = createRouter({
     const db = getDb();
     const now = new Date();
 
-    // Get all due wordSpellings with word details
+    // Auto-init: create spelling records for existing words that don't have one
+    const existingWords = await db
+      .select({ id: words.id })
+      .from(words)
+      .where(eq(words.userId, ctx.user.id));
+
+    if (existingWords.length > 0) {
+      const existingSpellings = await db
+        .select({ wordId: wordSpellings.wordId })
+        .from(wordSpellings)
+        .where(eq(wordSpellings.userId, ctx.user.id));
+
+      const spelledWordIds = new Set(existingSpellings.map((s) => s.wordId));
+      const wordsToInit = existingWords.filter((w) => !spelledWordIds.has(w.id));
+
+      if (wordsToInit.length > 0) {
+        // Batch insert in chunks of 50 to avoid too large query
+        const chunkSize = 50;
+        for (let i = 0; i < wordsToInit.length; i += chunkSize) {
+          const chunk = wordsToInit.slice(i, i + chunkSize);
+          await db.insert(wordSpellings).values(
+            chunk.map((w) => ({
+              wordId: w.id,
+              userId: ctx.user.id,
+              level: 1 as const,
+              nextReviewAt: new Date(), // Due immediately
+              streak: 0,
+              errorCount: 0,
+              totalAttempts: 0,
+              totalCorrect: 0,
+            }))
+          );
+        }
+      }
+    }
+
+    // Now get all due wordSpellings with word details
     const dueRecords = await db
       .select()
       .from(wordSpellings)
@@ -76,29 +112,7 @@ export const spellingRouter = createRouter({
       .orderBy(wordSpellings.level);
 
     if (dueRecords.length === 0) {
-      // If no due words, return 5 newest words that haven't been practiced
-      const unpracticed = await db
-        .select({
-          id: words.id,
-          word: words.word,
-          phonetic: words.phonetic,
-          definition: words.definition,
-          example: words.example,
-          groupId: words.groupId,
-        })
-        .from(words)
-        .where(eq(words.userId, ctx.user.id))
-        .orderBy(desc(words.createdAt))
-        .limit(5);
-
-      return unpracticed.map((w) => ({
-        ...w,
-        level: 1 as const,
-        streak: 0,
-        errorCount: 0,
-        totalAttempts: 0,
-        isNew: true as const,
-      }));
+      return [];
     }
 
     // Fetch word details for due records
