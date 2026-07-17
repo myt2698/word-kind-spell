@@ -28,7 +28,7 @@ import {
   AlertTriangle,
   Edit3,
 } from "lucide-react";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import type { WordCardData } from "./WordCard";
 
 const LAST_TEXTBOOK_KEY = "wordmind:lastTextbookId";
@@ -75,6 +75,7 @@ export default function WordForm({ open, onClose, onSubmit, editWord }: WordForm
     proficiency: "new",
   });
 
+  const prevOpenRef = useRef(false);
   const [newTagName, setNewTagName] = useState("");
   const [isLookingUp, setIsLookingUp] = useState(false);
   const [dictError, setDictError] = useState("");
@@ -122,9 +123,9 @@ export default function WordForm({ open, onClose, onSubmit, editWord }: WordForm
     },
   });
 
-  // Reset form when dialog opens
+  // Reset form only when dialog opens (open transitions from false to true)
   useEffect(() => {
-    if (open) {
+    if (open && !prevOpenRef.current) {
       setDictError("");
       setHasAutoFilled(false);
       lookupMutation.reset();
@@ -163,6 +164,8 @@ export default function WordForm({ open, onClose, onSubmit, editWord }: WordForm
         });
       }
     }
+    // Track previous open state
+    prevOpenRef.current = open;
   }, [editWord, open, userSettings, textbooks]);
 
   const doLookup = async (word: string) => {
