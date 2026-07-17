@@ -31,8 +31,8 @@ import {
 import { useState, useEffect, useRef } from "react";
 import type { WordCardData } from "./WordCard";
 
-const LAST_TEXTBOOK_KEY = "wordmind:lastTextbookId";
-const LAST_UNIT_KEY = "wordmind:lastUnitId";
+const LAST_TEXTBOOK_KEY = "wordmind:lastTextbookId:v2";
+const LAST_UNIT_KEY = "wordmind:lastUnitId:v2";
 
 interface WordFormProps {
   open: boolean;
