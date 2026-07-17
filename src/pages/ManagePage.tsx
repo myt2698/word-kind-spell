@@ -12,14 +12,13 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog";
 import {
-  FolderOpen, Tag, BookOpen, Edit3, Trash2, ChevronUp, ChevronDown,
-  Star, GripVertical, X, Loader2, Plus,
+  Tag, BookOpen, Edit3, Trash2, ChevronUp, ChevronDown,
+  Star, GripVertical, X, Loader2, Plus, ChevronRight, FolderOpen,
 } from "lucide-react";
 
-type ManageTab = "textbooks" | "groups" | "tags";
+type ManageTab = "textbooks" | "tags";
 
 export default function ManagePage() {
   const { user, isLoading: authLoading } = useAuth({ redirectOnUnauthenticated: true });
@@ -30,22 +29,24 @@ export default function ManagePage() {
   const { data: textbooks, isLoading: textbooksLoading } = trpc.textbook.list.useQuery();
   const [textbookForm, setTextbookForm] = useState({ name: "", description: "" });
   const [editingTextbookId, setEditingTextbookId] = useState<number | null>(null);
-  const [selectedTextbookId, setSelectedTextbookId] = useState<number | null>(null);
+  const [expandedTextbookId, setExpandedTextbookId] = useState<number | null>(null);
 
-  // Group state
-  const { data: groups, isLoading: groupsLoading } = trpc.wordGroup.list.useQuery(
-    selectedTextbookId ? { textbookId: selectedTextbookId } : undefined
-  );
-  const { data: userSettings } = trpc.wordGroup.getSettings.useQuery();
-  const [groupForm, setGroupForm] = useState({ name: "", description: "", textbookId: null as number | null });
-  const [editingGroupId, setEditingGroupId] = useState<number | null>(null);
-  const [groupDialogOpen, setGroupDialogOpen] = useState(false);
+  // Unit (group) dialog state
+  const [unitDialogOpen, setUnitDialogOpen] = useState(false);
+  const [unitForm, setUnitForm] = useState({ name: "", description: "", textbookId: null as number | null });
+  const [editingUnitId, setEditingUnitId] = useState<number | null>(null);
 
   // Tag state
   const { data: allTags, isLoading: tagsLoading } = trpc.tag.listWithCount.useQuery();
   const [tagForm, setTagForm] = useState({ name: "", description: "" });
   const [editingTagId, setEditingTagId] = useState<number | null>(null);
   const [error, setError] = useState("");
+
+  // Fetch units for expanded textbook
+  const { data: expandedTextbook } = trpc.textbook.getWithGroups.useQuery(
+    { id: expandedTextbookId! },
+    { enabled: !!expandedTextbookId }
+  );
 
   // Mutations
   const createTextbook = trpc.textbook.create.useMutation({
@@ -57,32 +58,34 @@ export default function ManagePage() {
     onError: (err) => setError(err.message),
   });
   const deleteTextbook = trpc.textbook.delete.useMutation({
-    onSuccess: () => utils.textbook.list.invalidate(),
+    onSuccess: () => { utils.textbook.list.invalidate(); setExpandedTextbookId(null); },
     onError: (err) => setError(err.message),
   });
 
-  const createGroup = trpc.wordGroup.create.useMutation({
+  const createUnit = trpc.wordGroup.create.useMutation({
     onSuccess: () => {
-      utils.wordGroup.list.invalidate();
-      setGroupForm({ name: "", description: "", textbookId: null });
-      setEditingGroupId(null);
-      setGroupDialogOpen(false);
+      utils.textbook.getWithGroups.invalidate({ id: unitForm.textbookId! });
+      utils.textbook.list.invalidate();
+      setUnitForm({ name: "", description: "", textbookId: null });
+      setEditingUnitId(null);
+      setUnitDialogOpen(false);
     },
   });
-  const updateGroup = trpc.wordGroup.update.useMutation({
+  const updateUnit = trpc.wordGroup.update.useMutation({
     onSuccess: () => {
-      utils.wordGroup.list.invalidate();
-      setEditingGroupId(null);
-      setGroupDialogOpen(false);
+      utils.textbook.getWithGroups.invalidate({ id: unitForm.textbookId! });
+      utils.textbook.list.invalidate();
+      setEditingUnitId(null);
+      setUnitDialogOpen(false);
     },
   });
-  const deleteGroup = trpc.wordGroup.delete.useMutation({
-    onSuccess: () => utils.wordGroup.list.invalidate(),
+  const deleteUnit = trpc.wordGroup.delete.useMutation({
+    onSuccess: () => {
+      utils.textbook.getWithGroups.invalidate({ id: expandedTextbookId! });
+      utils.textbook.list.invalidate();
+    },
   });
-  const reorderGroup = trpc.wordGroup.reorder.useMutation({
-    onSuccess: () => utils.wordGroup.list.invalidate(),
-  });
-  const setDefaultGroup = trpc.wordGroup.setDefault.useMutation({
+  const setDefaultUnit = trpc.wordGroup.setDefault.useMutation({
     onSuccess: () => utils.wordGroup.getSettings.invalidate(),
   });
 
@@ -96,23 +99,23 @@ export default function ManagePage() {
     onSuccess: () => utils.tag.list.invalidate(),
   });
 
-  const openCreateGroupDialog = () => {
-    setEditingGroupId(null);
-    setGroupForm({ name: "", description: "", textbookId: selectedTextbookId });
-    setGroupDialogOpen(true);
+  const openCreateUnitDialog = (textbookId: number) => {
+    setEditingUnitId(null);
+    setUnitForm({ name: "", description: "", textbookId });
+    setUnitDialogOpen(true);
   };
 
-  const openEditGroupDialog = (group: any) => {
-    setEditingGroupId(group.id);
-    setGroupForm({ name: group.name, description: group.description || "", textbookId: group.textbookId || null });
-    setGroupDialogOpen(true);
+  const openEditUnitDialog = (unit: any) => {
+    setEditingUnitId(unit.id);
+    setUnitForm({ name: unit.name, description: unit.description || "", textbookId: unit.textbookId || null });
+    setUnitDialogOpen(true);
   };
 
-  const handleGroupSubmit = () => {
-    if (editingGroupId) {
-      updateGroup.mutate({ id: editingGroupId, ...groupForm, textbookId: groupForm.textbookId });
+  const handleUnitSubmit = () => {
+    if (editingUnitId) {
+      updateUnit.mutate({ id: editingUnitId, ...unitForm, textbookId: unitForm.textbookId });
     } else {
-      createGroup.mutate({ name: groupForm.name, description: groupForm.description, textbookId: groupForm.textbookId ?? undefined });
+      createUnit.mutate({ name: unitForm.name, description: unitForm.description, textbookId: unitForm.textbookId ?? undefined });
     }
   };
 
@@ -127,32 +130,27 @@ export default function ManagePage() {
       <main className="max-w-3xl mx-auto px-4 py-6 pb-24">
         <h1 className="text-xl font-bold text-gray-900 mb-4">管理</h1>
 
-        {/* Error display */}
         {error && (
-          <div className="bg-red-50 text-red-600 text-sm px-4 py-2.5 rounded-lg mb-4">
-            {error}
-          </div>
+          <div className="bg-red-50 text-red-600 text-sm px-4 py-2.5 rounded-lg mb-4">{error}</div>
         )}
 
-        {/* Tab Switcher */}
+        {/* Tab Switcher: only 2 tabs now */}
         <div className="flex gap-1 bg-gray-100 rounded-lg p-1 mb-6">
           <button onClick={() => setActiveTab("textbooks")} className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-md text-sm font-medium transition-all ${activeTab === "textbooks" ? "bg-white text-purple-600 shadow-sm" : "text-gray-500 hover:text-gray-700"}`}>
             <BookOpen className="w-4 h-4" /> 课本 ({textbooks?.length ?? 0})
-          </button>
-          <button onClick={() => setActiveTab("groups")} className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-md text-sm font-medium transition-all ${activeTab === "groups" ? "bg-white text-indigo-600 shadow-sm" : "text-gray-500 hover:text-gray-700"}`}>
-            <FolderOpen className="w-4 h-4" /> 分组 ({groups?.length ?? 0})
           </button>
           <button onClick={() => setActiveTab("tags")} className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-md text-sm font-medium transition-all ${activeTab === "tags" ? "bg-white text-emerald-600 shadow-sm" : "text-gray-500 hover:text-gray-700"}`}>
             <Tag className="w-4 h-4" /> 标签 ({allTags?.length ?? 0})
           </button>
         </div>
 
-        {/* ========== TEXTBOOKS ========== */}
+        {/* ========== TEXTBOOKS + UNITS ========== */}
         {activeTab === "textbooks" && (
           <div className="space-y-4">
+            {/* Create textbook form */}
             <div className="bg-white rounded-xl border border-gray-100 p-4 space-y-3">
               <Label className="text-sm">{editingTextbookId ? "编辑课本" : "新建课本"}</Label>
-              <Input value={textbookForm.name} onChange={(e) => setTextbookForm((p) => ({ ...p, name: e.target.value }))} placeholder="课本名称，如：新概念英语第一册" className="h-10" />
+              <Input value={textbookForm.name} onChange={(e) => setTextbookForm((p) => ({ ...p, name: e.target.value }))} placeholder="课本名称" className="h-10" />
               <Input value={textbookForm.description} onChange={(e) => setTextbookForm((p) => ({ ...p, description: e.target.value }))} placeholder="描述（可选）" className="h-10" />
               <div className="flex gap-2">
                 {editingTextbookId && (
@@ -169,140 +167,103 @@ export default function ManagePage() {
               </div>
             </div>
 
+            {/* Textbook list with expandable units */}
             {textbooksLoading ? <Loader2 className="w-6 h-6 animate-spin text-gray-400 mx-auto" /> :
             !textbooks?.length ? <p className="text-center text-gray-400 py-8">暂无课本</p> :
             <div className="space-y-2">
-              {textbooks.map((tb) => (
-                <div key={tb.id} className="flex items-center gap-2 p-3 bg-white rounded-xl border border-gray-100">
-                  <BookOpen className="w-5 h-5 text-purple-400 shrink-0" />
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-sm font-medium truncate">{tb.name}</span>
-                      <span className="text-xs text-gray-400">{(tb as any).groupCount ?? 0}个单元</span>
-                    </div>
-                    {tb.description && <p className="text-xs text-gray-400 truncate">{tb.description}</p>}
-                  </div>
-                  <div className="flex gap-0.5 shrink-0">
-                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => { setEditingTextbookId(tb.id); setTextbookForm({ name: tb.name, description: tb.description || "" }); }}>
-                      <Edit3 className="w-3.5 h-3.5 text-gray-400" />
-                    </Button>
-                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => { if (confirm(`删除"${tb.name}"？其下分组将变为未关联`)) deleteTextbook.mutate({ id: tb.id }); }}>
-                      <Trash2 className="w-3.5 h-3.5 text-gray-400" />
-                    </Button>
-                  </div>
-                </div>
-              ))}
-            </div>}
-          </div>
-        )}
-
-        {/* ========== GROUPS ========== */}
-        {activeTab === "groups" && (
-          <div className="space-y-4">
-            {/* Textbook filter + Add button */}
-            <div className="flex items-center gap-2">
-              <div className="flex gap-2 overflow-x-auto flex-1 pb-1">
-                <button onClick={() => setSelectedTextbookId(null)} className={`shrink-0 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${!selectedTextbookId ? "bg-indigo-100 text-indigo-600" : "bg-gray-100 text-gray-500"}`}>
-                  全部课本
-                </button>
-                {textbooks?.map((tb) => (
-                  <button key={tb.id} onClick={() => setSelectedTextbookId(tb.id)} className={`shrink-0 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${selectedTextbookId === tb.id ? "bg-indigo-100 text-indigo-600" : "bg-gray-100 text-gray-500"}`}>
-                    {tb.name}
-                  </button>
-                ))}
-              </div>
-              <Button size="sm" className="h-8 bg-gradient-to-r from-indigo-500 to-blue-600 shrink-0" onClick={openCreateGroupDialog}>
-                <Plus className="w-4 h-4 mr-1" />新建
-              </Button>
-            </div>
-
-            {/* Group List */}
-            {groupsLoading ? <Loader2 className="w-6 h-6 animate-spin text-gray-400 mx-auto" /> :
-            !groups?.length ? <p className="text-center text-gray-400 py-8">暂无分组</p> :
-            <div className="space-y-2">
-              {groups.map((group, index) => {
-                const isDefault = userSettings?.defaultGroupId === group.id;
+              {textbooks.map((tb) => {
+                const isExpanded = expandedTextbookId === tb.id;
                 return (
-                  <div key={group.id} className="flex items-center gap-2 p-3 bg-white rounded-xl border border-gray-100">
-                    <GripVertical className="w-4 h-4 text-gray-300 shrink-0" />
-                    <button onClick={() => setDefaultGroup.mutate({ groupId: isDefault ? null : group.id })} className={`shrink-0 ${isDefault ? "text-amber-400" : "text-gray-300"}`}>
-                      <Star className={`w-4 h-4 ${isDefault ? "fill-current" : ""}`} />
-                    </button>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-sm font-medium truncate">{group.name}</span>
-                        <span className="text-xs text-gray-400">{(group as any).wordCount ?? 0}词</span>
-                        {isDefault && <span className="text-[10px] bg-amber-50 text-amber-600 px-1.5 rounded border border-amber-200">默认</span>}
+                  <div key={tb.id} className="bg-white rounded-xl border border-gray-100 overflow-hidden">
+                    {/* Textbook header */}
+                    <div
+                      className="flex items-center gap-2 p-3 cursor-pointer hover:bg-gray-50 transition-colors"
+                      onClick={() => setExpandedTextbookId(isExpanded ? null : tb.id)}
+                    >
+                      <ChevronRight className={`w-4 h-4 text-gray-400 transition-transform ${isExpanded ? "rotate-90" : ""}`} />
+                      <BookOpen className="w-5 h-5 text-purple-400 shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-sm font-medium truncate">{tb.name}</span>
+                          <span className="text-xs text-gray-400">{(tb as any).groupCount ?? 0}个单元</span>
+                        </div>
+                        {tb.description && <p className="text-xs text-gray-400 truncate">{tb.description}</p>}
+                      </div>
+                      <div className="flex gap-0.5 shrink-0" onClick={(e) => e.stopPropagation()}>
+                        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => { setEditingTextbookId(tb.id); setTextbookForm({ name: tb.name, description: tb.description || "" }); }}>
+                          <Edit3 className="w-3.5 h-3.5 text-gray-400" />
+                        </Button>
+                        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => { if (confirm(`删除"${tb.name}"？`)) deleteTextbook.mutate({ id: tb.id }); }}>
+                          <Trash2 className="w-3.5 h-3.5 text-gray-400" />
+                        </Button>
                       </div>
                     </div>
-                    <div className="flex gap-0.5 shrink-0">
-                      <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => { if (index > 0) { const newOrder = [...groups]; [newOrder[index-1], newOrder[index]] = [newOrder[index], newOrder[index-1]]; reorderGroup.mutate({ orders: newOrder.map((g,i) => ({ id: g.id, sortOrder: i })) }); } }} disabled={index === 0}>
-                        <ChevronUp className="w-4 h-4 text-gray-400" />
-                      </Button>
-                      <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => { if (index < groups.length - 1) { const newOrder = [...groups]; [newOrder[index], newOrder[index+1]] = [newOrder[index+1], newOrder[index]]; reorderGroup.mutate({ orders: newOrder.map((g,i) => ({ id: g.id, sortOrder: i })) }); } }} disabled={index === groups.length - 1}>
-                        <ChevronDown className="w-4 h-4 text-gray-400" />
-                      </Button>
-                      <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openEditGroupDialog(group)}>
-                        <Edit3 className="w-3.5 h-3.5 text-gray-400" />
-                      </Button>
-                      <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => { if (confirm(`删除"${group.name}"？`)) deleteGroup.mutate({ id: group.id }); }}>
-                        <Trash2 className="w-3.5 h-3.5 text-gray-400" />
-                      </Button>
-                    </div>
+
+                    {/* Expanded units list */}
+                    {isExpanded && (
+                      <div className="border-t border-gray-50 px-3 pb-3">
+                        <div className="flex items-center justify-between py-2">
+                          <span className="text-xs text-gray-400 font-medium">单元列表</span>
+                          <Button size="sm" variant="ghost" className="h-7 text-xs text-indigo-600" onClick={() => openCreateUnitDialog(tb.id)}>
+                            <Plus className="w-3.5 h-3.5 mr-1" />新建单元
+                          </Button>
+                        </div>
+                        {!expandedTextbook ? <Loader2 className="w-4 h-4 animate-spin text-gray-300" /> :
+                        !expandedTextbook.groups?.length ? <p className="text-xs text-gray-400 py-2">暂无单元</p> :
+                        <div className="space-y-1">
+                          {expandedTextbook.groups.map((unit: any, index: number) => (
+                            <div key={unit.id} className="flex items-center gap-2 p-2 rounded-lg bg-gray-50">
+                              <GripVertical className="w-3.5 h-3.5 text-gray-300 shrink-0" />
+                              <FolderOpen className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-1.5">
+                                  <span className="text-sm truncate">{unit.name}</span>
+                                  <span className="text-xs text-gray-400">{unit.wordCount ?? 0}词</span>
+                                </div>
+                              </div>
+                              <div className="flex gap-0.5 shrink-0">
+                                <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => { if (index > 0) { const newOrder = [...expandedTextbook.groups]; [newOrder[index-1], newOrder[index]] = [newOrder[index], newOrder[index-1]]; } }} disabled={index === 0}>
+                                  <ChevronUp className="w-3.5 h-3.5 text-gray-400" />
+                                </Button>
+                                <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => { if (index < expandedTextbook.groups.length - 1) { const newOrder = [...expandedTextbook.groups]; [newOrder[index], newOrder[index+1]] = [newOrder[index+1], newOrder[index]]; } }} disabled={index === expandedTextbook.groups.length - 1}>
+                                  <ChevronDown className="w-3.5 h-3.5 text-gray-400" />
+                                </Button>
+                                <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => openEditUnitDialog(unit)}>
+                                  <Edit3 className="w-3 h-3 text-gray-400" />
+                                </Button>
+                                <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => { if (confirm(`删除"${unit.name}"？`)) deleteUnit.mutate({ id: unit.id }); }}>
+                                  <Trash2 className="w-3 h-3 text-gray-400" />
+                                </Button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>}
+                      </div>
+                    )}
                   </div>
                 );
               })}
             </div>}
 
-            {/* Group Dialog */}
-            <Dialog open={groupDialogOpen} onOpenChange={setGroupDialogOpen}>
+            {/* Unit Dialog */}
+            <Dialog open={unitDialogOpen} onOpenChange={setUnitDialogOpen}>
               <DialogContent className="sm:max-w-md">
                 <DialogHeader>
-                  <DialogTitle>{editingGroupId ? "编辑分组" : "新建分组"}</DialogTitle>
+                  <DialogTitle>{editingUnitId ? "编辑单元" : "新建单元"}</DialogTitle>
                 </DialogHeader>
                 <div className="space-y-4 pt-2">
                   <div>
-                    <Label className="text-sm">分组名称</Label>
-                    <Input
-                      value={groupForm.name}
-                      onChange={(e) => setGroupForm((p) => ({ ...p, name: e.target.value }))}
-                      placeholder="如：Unit 1"
-                      className="h-10 mt-1"
-                      autoFocus
-                    />
+                    <Label className="text-sm">单元名称</Label>
+                    <Input value={unitForm.name} onChange={(e) => setUnitForm((p) => ({ ...p, name: e.target.value }))} placeholder="如：Unit 1" className="h-10 mt-1" autoFocus />
                   </div>
                   <div>
                     <Label className="text-sm">描述（可选）</Label>
-                    <Input
-                      value={groupForm.description}
-                      onChange={(e) => setGroupForm((p) => ({ ...p, description: e.target.value }))}
-                      placeholder="分组描述"
-                      className="h-10 mt-1"
-                    />
-                  </div>
-                  <div>
-                    <Label className="text-sm">所属课本（可选）</Label>
-                    <select
-                      value={groupForm.textbookId ?? ""}
-                      onChange={(e) => setGroupForm((p) => ({ ...p, textbookId: e.target.value ? Number(e.target.value) : null }))}
-                      className="w-full h-10 px-3 rounded-md border border-gray-200 text-sm bg-white mt-1"
-                    >
-                      <option value="">不关联课本</option>
-                      {textbooks?.map((tb) => (
-                        <option key={tb.id} value={tb.id}>{tb.name}</option>
-                      ))}
-                    </select>
+                    <Input value={unitForm.description} onChange={(e) => setUnitForm((p) => ({ ...p, description: e.target.value }))} placeholder="描述" className="h-10 mt-1" />
                   </div>
                   <div className="flex gap-2 pt-2">
-                    <Button variant="outline" className="flex-1 h-10" onClick={() => setGroupDialogOpen(false)}>
-                      取消
-                    </Button>
-                    <Button
-                      className="flex-1 h-10 bg-gradient-to-r from-indigo-500 to-blue-600"
-                      disabled={!groupForm.name.trim() || createGroup.isPending || updateGroup.isPending}
-                      onClick={handleGroupSubmit}
-                    >
-                      {createGroup.isPending || updateGroup.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : editingGroupId ? "保存" : "创建"}
+                    <Button variant="outline" className="flex-1 h-10" onClick={() => setUnitDialogOpen(false)}>取消</Button>
+                    <Button className="flex-1 h-10 bg-gradient-to-r from-indigo-500 to-blue-600" disabled={!unitForm.name.trim() || createUnit.isPending || updateUnit.isPending} onClick={handleUnitSubmit}>
+                      {createUnit.isPending || updateUnit.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : editingUnitId ? "保存" : "创建"}
                     </Button>
                   </div>
                 </div>

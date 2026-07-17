@@ -20,7 +20,6 @@ import {
   X,
   Plus,
   Tag,
-  Folder,
   BookOpen,
   Loader2,
   Search,
@@ -31,6 +30,9 @@ import {
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import type { WordCardData } from "./WordCard";
+
+const LAST_TEXTBOOK_KEY = "wordmind:lastTextbookId";
+const LAST_UNIT_KEY = "wordmind:lastUnitId";
 
 interface WordFormProps {
   open: boolean;
@@ -52,9 +54,15 @@ export interface WordFormData {
 
 export default function WordForm({ open, onClose, onSubmit, editWord }: WordFormProps) {
   const utils = trpc.useUtils();
-  const { data: groups } = trpc.wordGroup.list.useQuery();
+  const { data: textbooks } = trpc.textbook.list.useQuery();
   const { data: allTags } = trpc.tag.list.useQuery();
   const { data: userSettings } = trpc.wordGroup.getSettings.useQuery();
+
+  const [selectedTextbookId, setSelectedTextbookId] = useState<number | null>(null);
+  const { data: units } = trpc.wordGroup.list.useQuery(
+    selectedTextbookId ? { textbookId: selectedTextbookId } : undefined,
+    { enabled: !!selectedTextbookId }
+  );
 
   const [form, setForm] = useState<WordFormData>({
     word: "",
@@ -131,20 +139,31 @@ export default function WordForm({ open, onClose, onSubmit, editWord }: WordForm
           tagIds: editWord.tags.map((t) => t.id),
           proficiency: editWord.proficiency,
         });
+        // Find textbook for this unit
+        const allUnits = textbooks?.flatMap((tb: any) => tb.groups || []);
+        const unit = allUnits?.find((u: any) => u.id === editWord.groupId);
+        if (unit?.textbookId) setSelectedTextbookId(unit.textbookId);
       } else {
+        // Load last selected textbook & unit from localStorage
+        const lastTextbookId = localStorage.getItem(LAST_TEXTBOOK_KEY);
+        const lastUnitId = localStorage.getItem(LAST_UNIT_KEY);
+        const savedTextbookId = lastTextbookId ? Number(lastTextbookId) : null;
+        const savedUnitId = lastUnitId ? Number(lastUnitId) : null;
+
+        setSelectedTextbookId(savedTextbookId);
         setForm({
           word: "",
           phonetic: "",
           definition: "",
           example: "",
           notes: "",
-          groupId: userSettings?.defaultGroupId ?? undefined,
+          groupId: savedUnitId ?? userSettings?.defaultGroupId ?? undefined,
           tagIds: [],
           proficiency: "new",
         });
       }
     }
-  }, [editWord, open, userSettings]);
+  }, [editWord, open, userSettings, textbooks]);
 
   const doLookup = async (word: string) => {
     if (!word || word.length < 2) {
@@ -183,6 +202,13 @@ export default function WordForm({ open, onClose, onSubmit, editWord }: WordForm
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.word.trim() || !form.definition.trim()) return;
+    // Save last selection to localStorage
+    if (selectedTextbookId) {
+      localStorage.setItem(LAST_TEXTBOOK_KEY, String(selectedTextbookId));
+    }
+    if (form.groupId) {
+      localStorage.setItem(LAST_UNIT_KEY, String(form.groupId));
+    }
     onSubmit(form);
     onClose();
   };
@@ -441,29 +467,54 @@ export default function WordForm({ open, onClose, onSubmit, editWord }: WordForm
             />
           </div>
 
-          {/* Group */}
-          <div className="space-y-1.5">
+          {/* Textbook + Unit (cascade) */}
+          <div className="space-y-2">
             <Label className="text-sm font-medium flex items-center gap-1">
-              <Folder className="w-3.5 h-3.5" /> 分组
+              <BookOpen className="w-3.5 h-3.5" /> 课本 & 单元
             </Label>
+            {/* Textbook selector */}
             <Select
-              value={form.groupId?.toString() || "none"}
-              onValueChange={(v) =>
-                updateForm({ groupId: v === "none" ? undefined : parseInt(v) })
-              }
+              value={selectedTextbookId?.toString() || "none"}
+              onValueChange={(v) => {
+                const tbId = v === "none" ? null : parseInt(v);
+                setSelectedTextbookId(tbId);
+                updateForm({ groupId: undefined });
+              }}
             >
               <SelectTrigger className="h-10">
-                <SelectValue placeholder="选择分组（可选）" />
+                <SelectValue placeholder="选择课本（可选）" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="none">不分组</SelectItem>
-                {groups?.map((g) => (
-                  <SelectItem key={g.id} value={g.id.toString()}>
-                    {g.name}
+                <SelectItem value="none">不选课本</SelectItem>
+                {textbooks?.map((tb) => (
+                  <SelectItem key={tb.id} value={tb.id.toString()}>
+                    {tb.name}
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
+
+            {/* Unit selector - only show when textbook selected */}
+            {selectedTextbookId && (
+              <Select
+                value={form.groupId?.toString() || "none"}
+                onValueChange={(v) =>
+                  updateForm({ groupId: v === "none" ? undefined : parseInt(v) })
+                }
+              >
+                <SelectTrigger className="h-10">
+                  <SelectValue placeholder="选择单元" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">不选单元</SelectItem>
+                  {units?.map((u) => (
+                    <SelectItem key={u.id} value={u.id.toString()}>
+                      {u.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
           </div>
 
           {/* Tags */}
