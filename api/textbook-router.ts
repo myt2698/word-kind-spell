@@ -2,7 +2,7 @@ import { z } from "zod";
 import { createRouter, authedQuery } from "./middleware";
 import { getDb } from "./queries/connection";
 import { textbooks, wordGroups, words } from "@db/schema";
-import { eq, and, desc, count } from "drizzle-orm";
+import { eq, and, count } from "drizzle-orm";
 
 export const textbookRouter = createRouter({
   // Create textbook

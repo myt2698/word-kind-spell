@@ -37,16 +37,20 @@ export default function ManagePage() {
   const { data: allTags, isLoading: tagsLoading } = trpc.tag.listWithCount.useQuery();
   const [tagForm, setTagForm] = useState({ name: "", description: "" });
   const [editingTagId, setEditingTagId] = useState<number | null>(null);
+  const [error, setError] = useState("");
 
   // Mutations
   const createTextbook = trpc.textbook.create.useMutation({
-    onSuccess: () => { utils.textbook.list.invalidate(); setTextbookForm({ name: "", description: "" }); },
+    onSuccess: () => { utils.textbook.list.invalidate(); setTextbookForm({ name: "", description: "" }); setError(""); },
+    onError: (err) => setError(err.message),
   });
   const updateTextbook = trpc.textbook.update.useMutation({
-    onSuccess: () => { utils.textbook.list.invalidate(); setEditingTextbookId(null); },
+    onSuccess: () => { utils.textbook.list.invalidate(); setEditingTextbookId(null); setError(""); },
+    onError: (err) => setError(err.message),
   });
   const deleteTextbook = trpc.textbook.delete.useMutation({
     onSuccess: () => utils.textbook.list.invalidate(),
+    onError: (err) => setError(err.message),
   });
 
   const createGroup = trpc.wordGroup.create.useMutation({
@@ -85,6 +89,13 @@ export default function ManagePage() {
       <AppHeader />
       <main className="max-w-3xl mx-auto px-4 py-6 pb-24">
         <h1 className="text-xl font-bold text-gray-900 mb-4">管理</h1>
+
+        {/* Error display */}
+        {error && (
+          <div className="bg-red-50 text-red-600 text-sm px-4 py-2.5 rounded-lg mb-4">
+            {error}
+          </div>
+        )}
 
         {/* Tab Switcher */}
         <div className="flex gap-1 bg-gray-100 rounded-lg p-1 mb-6">
