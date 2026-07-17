@@ -153,6 +153,7 @@ export default function WordForm({ open, onClose, onSubmit, editWord }: WordForm
         const savedTextbookId = lastTextbookId ? Number(lastTextbookId) : null;
         const savedUnitId = lastUnitId ? Number(lastUnitId) : null;
 
+        // If previously selected a textbook, restore it; otherwise default to "none"
         setSelectedTextbookId(savedTextbookId);
         setForm({
           word: "",
@@ -160,7 +161,7 @@ export default function WordForm({ open, onClose, onSubmit, editWord }: WordForm
           definition: "",
           example: "",
           notes: "",
-          groupId: savedUnitId ?? userSettings?.defaultGroupId ?? undefined,
+          groupId: savedUnitId ?? undefined,
           tagIds: [],
           proficiency: "new",
         });
