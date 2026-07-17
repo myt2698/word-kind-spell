@@ -1,31 +1,19 @@
-import { useState, useEffect } from "react";
-import { useAuth } from "@/hooks/useAuth";
+import { useState } from "react";
 import { trpc } from "@/providers/trpc";
-import AppHeader from "@/components/AppHeader";
 import MobileNav from "@/components/MobileNav";
 import FilterBar, { type SortBy } from "@/components/FilterBar";
 import WordCard from "@/components/WordCard";
-import type { WordCardData } from "@/components/WordCard";
-import WordForm, { type WordFormData } from "@/components/WordForm";
 import EmptyState from "@/components/EmptyState";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Plus, Search, X } from "lucide-react";
+import { Search, X, BookOpen } from "lucide-react";
 
 export default function Home() {
-  const { user, isLoading: authLoading } = useAuth({ redirectOnUnauthenticated: true });
-  const utils = trpc.useUtils();
-
   // Filter state
   const [searchQuery, setSearchQuery] = useState("");
   const [sortBy, setSortBy] = useState<SortBy>("newest");
   const [selectedTextbookId, setSelectedTextbookId] = useState<number | null>(null);
   const [selectedUnitId, setSelectedUnitId] = useState<number | null>(null);
   const [selectedTagId, setSelectedTagId] = useState<number | null>(null);
-
-  // Dialog state
-  const [showWordForm, setShowWordForm] = useState(false);
-  const [editWord, setEditWord] = useState<WordCardData | null>(null);
 
   // Fetch data
   const { data: words, isLoading: wordsLoading } = trpc.word.list.useQuery({
@@ -54,24 +42,6 @@ export default function Home() {
     ? allTags?.find((t) => t.id === selectedTagId)?.name || "标签"
     : "全部标签";
 
-  // Mutations
-  const createWord = trpc.word.create.useMutation({
-    onSuccess: () => { utils.word.list.invalidate(); utils.tag.listWithCount.invalidate(); },
-  });
-  const updateWord = trpc.word.update.useMutation({
-    onSuccess: () => { utils.word.list.invalidate(); utils.tag.listWithCount.invalidate(); },
-  });
-  const deleteWord = trpc.word.delete.useMutation({
-    onSuccess: () => { utils.word.list.invalidate(); utils.tag.listWithCount.invalidate(); },
-  });
-
-  const handleAddWord = (data: WordFormData) => createWord.mutate(data);
-  const handleEditWord = (data: WordFormData) => {
-    if (editWord) { updateWord.mutate({ id: editWord.id, ...data }); setEditWord(null); }
-  };
-  const handleDeleteWord = (id: number) => { if (confirm("确定删除这个单词吗？")) deleteWord.mutate({ id }); };
-  const openEditForm = (word: WordCardData) => { setEditWord(word); setShowWordForm(true); };
-
   const clearFilters = () => {
     setSearchQuery("");
     setSelectedTextbookId(null);
@@ -79,170 +49,156 @@ export default function Home() {
     setSelectedTagId(null);
   };
 
-  if (authLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="w-10 h-10 border-3 border-indigo-200 border-t-indigo-500 rounded-full animate-spin" />
-      </div>
-    );
-  }
-  if (!user) return null;
-
-  const filteredWords = words || [];
-  const hasFilters = searchQuery || selectedTextbookId || selectedUnitId || selectedTagId;
+  const activeFilterCount = [
+    selectedTextbookId,
+    selectedUnitId,
+    selectedTagId,
+  ].filter(Boolean).length;
 
   return (
-    <div className="min-h-screen bg-gray-50/50">
-      <AppHeader />
-
-      <main className="max-w-3xl mx-auto px-4 py-4 pb-24">
-        {/* ===== Filter Bar: dropdowns + search ===== */}
-        <div className="bg-white rounded-xl border border-gray-100 p-3 mb-4 space-y-2.5">
-          {/* Row 1: Three dropdowns + search */}
-          <div className="flex flex-wrap items-center gap-2">
-            {/* Textbook dropdown */}
-            <div className="relative shrink-0">
-              <select
-                value={selectedTextbookId ?? ""}
-                onChange={(e) => {
-                  const val = e.target.value ? Number(e.target.value) : null;
-                  setSelectedTextbookId(val);
-                  setSelectedUnitId(null);
-                }}
-                className="h-9 pl-2.5 pr-7 text-xs bg-gray-50 border border-gray-200 rounded-lg text-gray-700 appearance-none cursor-pointer hover:border-gray-300 transition-colors"
-              >
-                <option value="">全部课本</option>
-                {textbooks?.map((tb) => (
-                  <option key={tb.id} value={tb.id}>{tb.name}</option>
-                ))}
-              </select>
-              <svg className="absolute right-2 top-1/2 -translate-y-1/2 w-3 h-3 text-gray-400 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-              </svg>
+    <div className="min-h-screen bg-gray-50">
+      {/* Header */}
+      <div className="bg-white border-b border-gray-100 sticky top-0 z-10">
+        <div className="max-w-3xl mx-auto px-4 py-3">
+          <div className="flex items-center gap-3 mb-3">
+            <div className="w-9 h-9 rounded-xl bg-gradient-to-r from-indigo-500 to-blue-600 flex items-center justify-center">
+              <BookOpen className="w-5 h-5 text-white" />
             </div>
+            <h1 className="text-lg font-bold text-gray-900">WordMind</h1>
+            {words && (
+              <span className="text-xs text-gray-400 ml-auto">
+                {words.length} 个单词
+              </span>
+            )}
+          </div>
 
-            {/* Unit dropdown */}
-            <div className="relative shrink-0">
-              <select
-                value={selectedUnitId ?? ""}
-                onChange={(e) => {
-                  const val = e.target.value ? Number(e.target.value) : null;
-                  setSelectedUnitId(val);
-                }}
-                disabled={!selectedTextbookId}
-                className="h-9 pl-2.5 pr-7 text-xs bg-gray-50 border border-gray-200 rounded-lg text-gray-700 appearance-none cursor-pointer hover:border-gray-300 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-              >
-                <option value="">全部单元</option>
-                {units?.map((u) => (
-                  <option key={u.id} value={u.id}>{u.name}</option>
-                ))}
-              </select>
-              <svg className="absolute right-2 top-1/2 -translate-y-1/2 w-3 h-3 text-gray-400 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-              </svg>
-            </div>
-
-            {/* Tag dropdown */}
-            <div className="relative shrink-0">
-              <select
-                value={selectedTagId ?? ""}
-                onChange={(e) => {
-                  const val = e.target.value ? Number(e.target.value) : null;
-                  setSelectedTagId(val);
-                }}
-                className="h-9 pl-2.5 pr-7 text-xs bg-gray-50 border border-gray-200 rounded-lg text-gray-700 appearance-none cursor-pointer hover:border-gray-300 transition-colors"
-              >
-                <option value="">全部标签</option>
-                {allTags?.map((t) => (
-                  <option key={t.id} value={t.id}>{t.name}</option>
-                ))}
-              </select>
-              <svg className="absolute right-2 top-1/2 -translate-y-1/2 w-3 h-3 text-gray-400 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-              </svg>
-            </div>
-
-            {/* Search input */}
-            <div className="relative flex-1 min-w-[120px]">
-              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
+          {/* Search bar */}
+          <div className="flex items-center gap-2">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
               <Input
-                type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="搜索..."
-                className="h-9 pl-8 pr-7 text-xs bg-gray-50 border-gray-200 rounded-lg"
+                placeholder="搜索单词、释义..."
+                className="pl-9 h-10"
               />
               {searchQuery && (
-                <button
-                  onClick={() => setSearchQuery("")}
-                  className="absolute right-2 top-1/2 -translate-y-1/2"
-                >
-                  <X className="w-3 h-3 text-gray-400" />
+                <button onClick={() => setSearchQuery("")} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                  <X className="w-4 h-4" />
                 </button>
               )}
             </div>
           </div>
+        </div>
+      </div>
 
-          {/* Active filter summary */}
-          {hasFilters && (
-            <div className="flex items-center gap-2 text-xs">
-              <span className="text-gray-400">当前筛选:</span>
-              {selectedTextbookId && (
-                <span className="px-2 py-0.5 bg-purple-50 text-purple-600 rounded-full">{selectedTextbookName}</span>
-              )}
-              {selectedUnitId && (
-                <span className="px-2 py-0.5 bg-indigo-50 text-indigo-600 rounded-full">{selectedUnitName}</span>
-              )}
-              {selectedTagId && (
-                <span className="px-2 py-0.5 bg-emerald-50 text-emerald-600 rounded-full">{selectedTagName}</span>
-              )}
-              {searchQuery && (
-                <span className="px-2 py-0.5 bg-gray-100 text-gray-600 rounded-full">"{searchQuery}"</span>
-              )}
-              <button onClick={clearFilters} className="text-indigo-500 hover:text-indigo-600 underline ml-auto">
-                清除全部
-              </button>
-            </div>
+      {/* Filters */}
+      <div className="max-w-3xl mx-auto px-4 py-3">
+        <div className="flex flex-wrap items-center gap-2 mb-2">
+          {/* Textbook dropdown */}
+          <select
+            value={selectedTextbookId ?? ""}
+            onChange={(e) => {
+              const v = e.target.value;
+              setSelectedTextbookId(v ? Number(v) : null);
+              setSelectedUnitId(null);
+            }}
+            className="h-9 px-2.5 rounded-lg border border-gray-200 bg-white text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          >
+            <option value="">全部课本</option>
+            {textbooks?.map((tb) => (
+              <option key={tb.id} value={tb.id}>{tb.name}</option>
+            ))}
+          </select>
+
+          {/* Unit dropdown */}
+          {selectedTextbookId && (
+            <select
+              value={selectedUnitId ?? ""}
+              onChange={(e) => setSelectedUnitId(e.target.value ? Number(e.target.value) : null)}
+              className="h-9 px-2.5 rounded-lg border border-gray-200 bg-white text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            >
+              <option value="">全部单元</option>
+              {units?.map((u) => (
+                <option key={u.id} value={u.id}>{u.name}</option>
+              ))}
+            </select>
+          )}
+
+          {/* Tag dropdown */}
+          <select
+            value={selectedTagId ?? ""}
+            onChange={(e) => setSelectedTagId(e.target.value ? Number(e.target.value) : null)}
+            className="h-9 px-2.5 rounded-lg border border-gray-200 bg-white text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          >
+            <option value="">全部标签</option>
+            {allTags?.map((t) => (
+              <option key={t.id} value={t.id}>{t.name}</option>
+            ))}
+          </select>
+
+          {/* Sort */}
+          <FilterBar sortBy={sortBy} onSortChange={setSortBy} />
+
+          {/* Clear filters */}
+          {(activeFilterCount > 0 || searchQuery) && (
+            <button
+              onClick={clearFilters}
+              className="h-9 px-2.5 text-sm text-gray-500 hover:text-gray-700 flex items-center gap-1"
+            >
+              <X className="w-3.5 h-3.5" /> 清除
+            </button>
           )}
         </div>
 
-        {/* Title + Add */}
-        <div className="flex items-center justify-between mb-3">
-          <p className="text-xs text-gray-500">
-            共 {filteredWords.length} 个单词
-          </p>
-          <Button
-            onClick={() => { setEditWord(null); setShowWordForm(true); }}
-            className="bg-gradient-to-r from-indigo-500 to-blue-600 hover:from-indigo-600 hover:to-blue-700 shadow-lg shadow-indigo-200 shrink-0 ml-3 h-9"
-          >
-            <Plus className="w-4 h-4 mr-1" />添加
-          </Button>
-        </div>
-
-        {/* Sort */}
-        <div className="mb-3">
-          <FilterBar sortBy={sortBy} onSortChange={setSortBy} resultCount={filteredWords.length} />
-        </div>
-
-        {/* Words List */}
-        {filteredWords.length === 0 && !wordsLoading ? (
-          <EmptyState type={hasFilters ? "no-results" : "no-words"} onAdd={() => setShowWordForm(true)} />
-        ) : (
-          <div className="space-y-3 pb-4">
-            {filteredWords.map((word) => (
-              <WordCard key={word.id} word={word} onEdit={openEditForm} onDelete={handleDeleteWord} />
-            ))}
+        {/* Active filter tags */}
+        {activeFilterCount > 0 && (
+          <div className="flex flex-wrap gap-1.5">
+            {selectedTextbookId && (
+              <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 bg-purple-50 text-purple-600 rounded-full">
+                {selectedTextbookName}
+                <button onClick={() => { setSelectedTextbookId(null); setSelectedUnitId(null); }}><X className="w-3 h-3" /></button>
+              </span>
+            )}
+            {selectedUnitId && (
+              <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 bg-gray-100 text-gray-600 rounded-full">
+                {selectedUnitName}
+                <button onClick={() => setSelectedUnitId(null)}><X className="w-3 h-3" /></button>
+              </span>
+            )}
+            {selectedTagId && (
+              <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 bg-indigo-50 text-indigo-600 rounded-full">
+                {selectedTagName}
+                <button onClick={() => setSelectedTagId(null)}><X className="w-3 h-3" /></button>
+              </span>
+            )}
           </div>
         )}
+      </div>
 
-        <WordForm
-          open={showWordForm}
-          onClose={() => { setShowWordForm(false); setEditWord(null); }}
-          onSubmit={editWord ? handleEditWord : handleAddWord}
-          editWord={editWord}
-        />
-      </main>
+      {/* Word list */}
+      <div className="max-w-3xl mx-auto px-4 pb-24">
+        {wordsLoading ? (
+          <div className="space-y-3">
+            {[...Array(5)].map((_, i) => (
+              <div key={i} className="h-24 bg-white rounded-xl border border-gray-100 animate-pulse" />
+            ))}
+          </div>
+        ) : words && words.length > 0 ? (
+          <div className="space-y-3">
+            {words.map((word: any) => (
+              <WordCard key={word.id} word={word} onEdit={() => {}} onDelete={() => {}} />
+            ))}
+          </div>
+        ) : (
+          <EmptyState
+            title={searchQuery || activeFilterCount > 0 ? "没有找到匹配的单词" : "还没有单词"}
+            description={searchQuery || activeFilterCount > 0 ? "尝试调整搜索或筛选条件" : "去管理后台添加一些单词吧"}
+          />
+        )}
+      </div>
 
+      {/* Bottom nav */}
       <MobileNav />
     </div>
   );
