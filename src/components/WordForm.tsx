@@ -481,37 +481,43 @@ export default function WordForm({ open, onClose, onSubmit, editWord }: WordForm
               <BookOpen className="w-3.5 h-3.5" /> 课本 & 单元
             </Label>
             {/* Textbook selector */}
-            <Select
-              value={selectedTextbookId == null ? "none" : String(selectedTextbookId)}
-              onValueChange={(v) => {
-                const tbId = v === "none" ? null : parseInt(v);
-                setSelectedTextbookId(tbId);
-                updateForm({ groupId: undefined });
-              }}
-            >
-              <SelectTrigger className="h-10">
-                <SelectValue placeholder="不选课本" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none">不选课本</SelectItem>
-                {textbooks?.map((tb) => (
-                  <SelectItem key={tb.id} value={tb.id.toString()}>
-                    {tb.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            {textbooks === undefined ? (
+              <div className="h-10 border rounded-md bg-gray-50 flex items-center px-3 text-sm text-gray-400">
+                加载中...
+              </div>
+            ) : (
+              <Select
+                value={selectedTextbookId == null ? "none" : String(selectedTextbookId)}
+                onValueChange={(v) => {
+                  const tbId = v === "none" ? null : parseInt(v);
+                  setSelectedTextbookId(tbId);
+                  updateForm({ groupId: undefined });
+                }}
+              >
+                <SelectTrigger className="h-10 w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">不选课本</SelectItem>
+                  {textbooks.map((tb) => (
+                    <SelectItem key={tb.id} value={tb.id.toString()}>
+                      {tb.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
 
             {/* Unit selector - only show when textbook selected */}
-            {selectedTextbookId && (
+            {selectedTextbookId && textbooks !== undefined && (
               <Select
                 value={form.groupId == null ? "none" : String(form.groupId)}
                 onValueChange={(v) =>
                   updateForm({ groupId: v === "none" ? undefined : parseInt(v) })
                 }
               >
-                <SelectTrigger className="h-10">
-                  <SelectValue placeholder="不选单元" />
+                <SelectTrigger className="h-10 w-full">
+                  <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="none">不选单元</SelectItem>
