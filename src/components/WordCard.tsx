@@ -1,8 +1,17 @@
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { trpc } from "@/providers/trpc";
 import TagDetailDialog from "./TagDetailDialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   Volume2,
   Edit3,
@@ -14,6 +23,7 @@ import {
   GraduationCap,
   Pause,
   CheckCircle2,
+  Loader2,
 } from "lucide-react";
 import { useState } from "react";
 
@@ -48,8 +58,19 @@ export default function WordCard({ word, onEdit, onDelete }: WordCardProps) {
   const [expanded, setExpanded] = useState(false);
   const [localStatus, setLocalStatus] = useState(word.learningStatus || "idle");
   const [tagDialogId, setTagDialogId] = useState<number | null>(null);
+  const [editTagOpen, setEditTagOpen] = useState(false);
+  const [editTagForm, setEditTagForm] = useState({ id: 0, name: "", description: "" });
 
   const utils = trpc.useUtils();
+
+  const updateTag = trpc.tag.update.useMutation({
+    onSuccess: () => {
+      utils.tag.list.invalidate();
+      utils.tag.listWithCount.invalidate();
+      utils.word.list.invalidate();
+      setEditTagOpen(false);
+    },
+  });
 
   const addToLearning = trpc.spelling.addToLearning.useMutation({
     onSuccess: () => {
@@ -252,7 +273,60 @@ export default function WordCard({ word, onEdit, onDelete }: WordCardProps) {
         tagId={tagDialogId}
         open={!!tagDialogId}
         onClose={() => setTagDialogId(null)}
+        onEdit={(tag) => {
+          setEditTagForm({ id: tag.id, name: tag.name, description: tag.description || "" });
+          setEditTagOpen(true);
+        }}
       />
+
+      {/* Tag Edit Dialog */}
+      <Dialog open={editTagOpen} onOpenChange={setEditTagOpen}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Edit3 className="w-4 h-4 text-emerald-500" />
+              编辑标签
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 pt-2">
+            <div>
+              <Label className="text-sm">标签名称</Label>
+              <Input
+                value={editTagForm.name}
+                onChange={(e) => setEditTagForm((p) => ({ ...p, name: e.target.value.slice(0, 50) }))}
+                placeholder="标签名称"
+                className="h-10 mt-1"
+                autoFocus
+              />
+            </div>
+            <div>
+              <Label className="text-sm">备注（可选）</Label>
+              <Textarea
+                value={editTagForm.description}
+                onChange={(e) => setEditTagForm((p) => ({ ...p, description: e.target.value }))}
+                placeholder="备注"
+                className="min-h-[60px] resize-y mt-1"
+              />
+            </div>
+            <div className="flex gap-2 pt-1">
+              <Button variant="outline" className="flex-1 h-10" onClick={() => setEditTagOpen(false)}>
+                取消
+              </Button>
+              <Button
+                className="flex-1 h-10 bg-gradient-to-r from-emerald-500 to-teal-600"
+                disabled={!editTagForm.name.trim() || updateTag.isPending}
+                onClick={() => updateTag.mutate({
+                  id: editTagForm.id,
+                  name: editTagForm.name,
+                  description: editTagForm.description || undefined,
+                })}
+              >
+                {updateTag.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : "保存"}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }
