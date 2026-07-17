@@ -10,7 +10,7 @@ import WordForm, { type WordFormData } from "@/components/WordForm";
 import EmptyState from "@/components/EmptyState";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Plus, Search, BookOpen, FolderOpen, Tag, X } from "lucide-react";
+import { Plus, Search, X } from "lucide-react";
 
 export default function Home() {
   const { user, isLoading: authLoading } = useAuth({ redirectOnUnauthenticated: true });
@@ -43,24 +43,26 @@ export default function Home() {
   );
   const { data: allTags } = trpc.tag.list.useQuery();
 
+  // Selected names
+  const selectedTextbookName = selectedTextbookId
+    ? textbooks?.find((t) => t.id === selectedTextbookId)?.name || "课本"
+    : "全部课本";
+  const selectedUnitName = selectedUnitId
+    ? units?.find((u) => u.id === selectedUnitId)?.name || "单元"
+    : "全部单元";
+  const selectedTagName = selectedTagId
+    ? allTags?.find((t) => t.id === selectedTagId)?.name || "标签"
+    : "全部标签";
+
   // Mutations
   const createWord = trpc.word.create.useMutation({
-    onSuccess: () => {
-      utils.word.list.invalidate();
-      utils.tag.listWithCount.invalidate();
-    },
+    onSuccess: () => { utils.word.list.invalidate(); utils.tag.listWithCount.invalidate(); },
   });
   const updateWord = trpc.word.update.useMutation({
-    onSuccess: () => {
-      utils.word.list.invalidate();
-      utils.tag.listWithCount.invalidate();
-    },
+    onSuccess: () => { utils.word.list.invalidate(); utils.tag.listWithCount.invalidate(); },
   });
   const deleteWord = trpc.word.delete.useMutation({
-    onSuccess: () => {
-      utils.word.list.invalidate();
-      utils.tag.listWithCount.invalidate();
-    },
+    onSuccess: () => { utils.word.list.invalidate(); utils.tag.listWithCount.invalidate(); },
   });
 
   const handleAddWord = (data: WordFormData) => createWord.mutate(data);
@@ -70,7 +72,6 @@ export default function Home() {
   const handleDeleteWord = (id: number) => { if (confirm("确定删除这个单词吗？")) deleteWord.mutate({ id }); };
   const openEditForm = (word: WordCardData) => { setEditWord(word); setShowWordForm(true); };
 
-  // Clear all filters
   const clearFilters = () => {
     setSearchQuery("");
     setSelectedTextbookId(null);
@@ -90,147 +91,126 @@ export default function Home() {
   const filteredWords = words || [];
   const hasFilters = searchQuery || selectedTextbookId || selectedUnitId || selectedTagId;
 
-  // Build page title
-  let pageTitle = "我的单词本";
-  if (selectedUnitId) {
-    const unit = units?.find((u) => u.id === selectedUnitId);
-    pageTitle = unit?.name || "单元单词";
-  } else if (selectedTextbookId) {
-    const tb = textbooks?.find((t) => t.id === selectedTextbookId);
-    pageTitle = tb?.name || "课本单词";
-  } else if (selectedTagId) {
-    const tag = allTags?.find((t) => t.id === selectedTagId);
-    pageTitle = tag?.name ? `${tag.name} 标签` : "标签单词";
-  } else if (searchQuery) {
-    pageTitle = `"${searchQuery}" 的搜索结果`;
-  }
-
   return (
     <div className="min-h-screen bg-gray-50/50">
       <AppHeader />
 
       <main className="max-w-3xl mx-auto px-4 py-4 pb-24">
-        {/* ===== Top Filter Area ===== */}
+        {/* ===== Filter Bar: dropdowns + search ===== */}
         <div className="bg-white rounded-xl border border-gray-100 p-3 mb-4 space-y-2.5">
-          {/* Row 1: Search input */}
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-            <Input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="搜索单词、释义..."
-              className="h-9 pl-9 pr-8 text-sm bg-gray-50 border-gray-200 rounded-lg"
-            />
-            {searchQuery && (
-              <button onClick={() => setSearchQuery("")} className="absolute right-2 top-1/2 -translate-y-1/2">
-                <X className="w-3.5 h-3.5 text-gray-400" />
-              </button>
-            )}
-          </div>
-
-          {/* Row 2: Textbook selector */}
+          {/* Row 1: Three dropdowns + search */}
           <div className="flex items-center gap-2">
-            <BookOpen className="w-3.5 h-3.5 text-purple-400 shrink-0" />
-            <div className="flex gap-1.5 overflow-x-auto flex-1 no-scrollbar">
-              <button
-                onClick={() => { setSelectedTextbookId(null); setSelectedUnitId(null); }}
-                className={`shrink-0 px-2.5 py-1 text-xs rounded-full transition-all ${
-                  !selectedTextbookId ? "bg-purple-100 text-purple-700 font-medium" : "bg-gray-100 text-gray-500 hover:bg-gray-200"
-                }`}
+            {/* Textbook dropdown */}
+            <div className="relative shrink-0">
+              <select
+                value={selectedTextbookId ?? ""}
+                onChange={(e) => {
+                  const val = e.target.value ? Number(e.target.value) : null;
+                  setSelectedTextbookId(val);
+                  setSelectedUnitId(null);
+                }}
+                className="h-9 pl-2.5 pr-7 text-xs bg-gray-50 border border-gray-200 rounded-lg text-gray-700 appearance-none cursor-pointer hover:border-gray-300 transition-colors"
               >
-                全部课本
-              </button>
-              {textbooks?.map((tb) => (
+                <option value="">全部课本</option>
+                {textbooks?.map((tb) => (
+                  <option key={tb.id} value={tb.id}>{tb.name}</option>
+                ))}
+              </select>
+              <svg className="absolute right-2 top-1/2 -translate-y-1/2 w-3 h-3 text-gray-400 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+              </svg>
+            </div>
+
+            {/* Unit dropdown */}
+            <div className="relative shrink-0">
+              <select
+                value={selectedUnitId ?? ""}
+                onChange={(e) => {
+                  const val = e.target.value ? Number(e.target.value) : null;
+                  setSelectedUnitId(val);
+                }}
+                disabled={!selectedTextbookId}
+                className="h-9 pl-2.5 pr-7 text-xs bg-gray-50 border border-gray-200 rounded-lg text-gray-700 appearance-none cursor-pointer hover:border-gray-300 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                <option value="">全部单元</option>
+                {units?.map((u) => (
+                  <option key={u.id} value={u.id}>{u.name}</option>
+                ))}
+              </select>
+              <svg className="absolute right-2 top-1/2 -translate-y-1/2 w-3 h-3 text-gray-400 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+              </svg>
+            </div>
+
+            {/* Tag dropdown */}
+            <div className="relative shrink-0">
+              <select
+                value={selectedTagId ?? ""}
+                onChange={(e) => {
+                  const val = e.target.value ? Number(e.target.value) : null;
+                  setSelectedTagId(val);
+                }}
+                className="h-9 pl-2.5 pr-7 text-xs bg-gray-50 border border-gray-200 rounded-lg text-gray-700 appearance-none cursor-pointer hover:border-gray-300 transition-colors"
+              >
+                <option value="">全部标签</option>
+                {allTags?.map((t) => (
+                  <option key={t.id} value={t.id}>{t.name}</option>
+                ))}
+              </select>
+              <svg className="absolute right-2 top-1/2 -translate-y-1/2 w-3 h-3 text-gray-400 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+              </svg>
+            </div>
+
+            {/* Search input */}
+            <div className="relative flex-1 min-w-0">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
+              <Input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="搜索..."
+                className="h-9 pl-8 pr-7 text-xs bg-gray-50 border-gray-200 rounded-lg"
+              />
+              {searchQuery && (
                 <button
-                  key={tb.id}
-                  onClick={() => {
-                    if (selectedTextbookId === tb.id) {
-                      setSelectedTextbookId(null);
-                      setSelectedUnitId(null);
-                    } else {
-                      setSelectedTextbookId(tb.id);
-                      setSelectedUnitId(null);
-                    }
-                  }}
-                  className={`shrink-0 px-2.5 py-1 text-xs rounded-full transition-all ${
-                    selectedTextbookId === tb.id ? "bg-purple-100 text-purple-700 font-medium" : "bg-gray-100 text-gray-500 hover:bg-gray-200"
-                  }`}
+                  onClick={() => setSearchQuery("")}
+                  className="absolute right-2 top-1/2 -translate-y-1/2"
                 >
-                  {tb.name}
+                  <X className="w-3 h-3 text-gray-400" />
                 </button>
-              ))}
+              )}
             </div>
           </div>
 
-          {/* Row 3: Unit selector (only when textbook selected) */}
-          {selectedTextbookId && units && units.length > 0 && (
-            <div className="flex items-center gap-2">
-              <FolderOpen className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
-              <div className="flex gap-1.5 overflow-x-auto flex-1 no-scrollbar">
-                <button
-                  onClick={() => setSelectedUnitId(null)}
-                  className={`shrink-0 px-2.5 py-1 text-xs rounded-full transition-all ${
-                    !selectedUnitId ? "bg-indigo-100 text-indigo-700 font-medium" : "bg-gray-100 text-gray-500 hover:bg-gray-200"
-                  }`}
-                >
-                  全部单元
-                </button>
-                {units.map((u) => (
-                  <button
-                    key={u.id}
-                    onClick={() => setSelectedUnitId(selectedUnitId === u.id ? null : u.id)}
-                    className={`shrink-0 px-2.5 py-1 text-xs rounded-full transition-all ${
-                      selectedUnitId === u.id ? "bg-indigo-100 text-indigo-700 font-medium" : "bg-gray-100 text-gray-500 hover:bg-gray-200"
-                    }`}
-                  >
-                    {u.name}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Row 4: Tag selector */}
-          {allTags && allTags.length > 0 && (
-            <div className="flex items-center gap-2">
-              <Tag className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-              <div className="flex gap-1.5 overflow-x-auto flex-1 no-scrollbar">
-                <button
-                  onClick={() => setSelectedTagId(null)}
-                  className={`shrink-0 px-2.5 py-1 text-xs rounded-full transition-all ${
-                    !selectedTagId ? "bg-emerald-100 text-emerald-700 font-medium" : "bg-gray-100 text-gray-500 hover:bg-gray-200"
-                  }`}
-                >
-                  全部标签
-                </button>
-                {allTags.map((t) => (
-                  <button
-                    key={t.id}
-                    onClick={() => setSelectedTagId(selectedTagId === t.id ? null : t.id)}
-                    className={`shrink-0 px-2.5 py-1 text-xs rounded-full transition-all ${
-                      selectedTagId === t.id ? "bg-emerald-100 text-emerald-700 font-medium" : "bg-gray-100 text-gray-500 hover:bg-gray-200"
-                    }`}
-                  >
-                    {t.name}
-                  </button>
-                ))}
-              </div>
+          {/* Active filter summary */}
+          {hasFilters && (
+            <div className="flex items-center gap-2 text-xs">
+              <span className="text-gray-400">当前筛选:</span>
+              {selectedTextbookId && (
+                <span className="px-2 py-0.5 bg-purple-50 text-purple-600 rounded-full">{selectedTextbookName}</span>
+              )}
+              {selectedUnitId && (
+                <span className="px-2 py-0.5 bg-indigo-50 text-indigo-600 rounded-full">{selectedUnitName}</span>
+              )}
+              {selectedTagId && (
+                <span className="px-2 py-0.5 bg-emerald-50 text-emerald-600 rounded-full">{selectedTagName}</span>
+              )}
+              {searchQuery && (
+                <span className="px-2 py-0.5 bg-gray-100 text-gray-600 rounded-full">"{searchQuery}"</span>
+              )}
+              <button onClick={clearFilters} className="text-indigo-500 hover:text-indigo-600 underline ml-auto">
+                清除全部
+              </button>
             </div>
           )}
         </div>
 
-        {/* Title + Add button */}
+        {/* Title + Add */}
         <div className="flex items-center justify-between mb-3">
-          <div className="flex-1 min-w-0">
-            <h1 className="text-lg font-bold text-gray-900 truncate">{pageTitle}</h1>
-            <p className="text-xs text-gray-500 mt-0.5">
-              共 {filteredWords.length} 个单词
-              {hasFilters && (
-                <button onClick={clearFilters} className="ml-2 text-indigo-500 hover:text-indigo-600 underline">清除筛选</button>
-              )}
-            </p>
-          </div>
+          <p className="text-xs text-gray-500">
+            共 {filteredWords.length} 个单词
+          </p>
           <Button
             onClick={() => { setEditWord(null); setShowWordForm(true); }}
             className="bg-gradient-to-r from-indigo-500 to-blue-600 hover:from-indigo-600 hover:to-blue-700 shadow-lg shadow-indigo-200 shrink-0 ml-3 h-9"
@@ -239,7 +219,7 @@ export default function Home() {
           </Button>
         </div>
 
-        {/* Sort bar */}
+        {/* Sort */}
         <div className="mb-3">
           <FilterBar sortBy={sortBy} onSortChange={setSortBy} resultCount={filteredWords.length} />
         </div>
