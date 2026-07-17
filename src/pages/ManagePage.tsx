@@ -318,7 +318,7 @@ export default function ManagePage() {
             {tagsLoading ? <Loader2 className="w-6 h-6 animate-spin text-gray-400 mx-auto" /> :
             !allTags?.length ? <p className="text-center text-gray-400 py-8">暂无标签</p> :
             <div className="grid grid-cols-3 sm:grid-cols-4 gap-3">
-              {allTags.map((tag) => (
+              {[...allTags].sort((a, b) => a.name.localeCompare(b.name, "zh-CN")).map((tag) => (
                 <button
                   key={tag.id}
                   type="button"
