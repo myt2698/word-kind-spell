@@ -23,16 +23,32 @@ import WordForm from "@/components/WordForm";
 function AdminLogin({ onLogin }: { onLogin: (token: string) => void }) {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
-  const login = trpc.admin.login.useMutation({
-    onSuccess: (data) => {
-      if (data.success && data.token) {
-        localStorage.setItem("admin_token", data.token);
-        onLogin(data.token);
+  const [loading, setLoading] = useState(false);
+
+  const handleLogin = async () => {
+    if (!password.trim()) return;
+    setLoading(true);
+    setError("");
+    try {
+      const res = await fetch("/api/trpc/admin.login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ json: { password } }),
+      });
+      const data = await res.json();
+      if (data.result?.data?.json?.success && data.result?.data?.json?.token) {
+        const token = data.result.data.json.token;
+        localStorage.setItem("admin_token", token);
+        onLogin(token);
       } else {
         setError("密码错误");
       }
-    },
-  });
+    } catch (err) {
+      setError("网络错误，请重试");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
@@ -52,10 +68,10 @@ function AdminLogin({ onLogin }: { onLogin: (token: string) => void }) {
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             placeholder="输入管理密码"
-            onKeyDown={(e) => e.key === "Enter" && login.mutate({ password })}
+            onKeyDown={(e) => e.key === "Enter" && handleLogin()}
           />
-          <Button className="w-full bg-gradient-to-r from-indigo-500 to-blue-600" onClick={() => login.mutate({ password })} disabled={login.isPending}>
-            {login.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : "登录"}
+          <Button className="w-full bg-gradient-to-r from-indigo-500 to-blue-600" onClick={handleLogin} disabled={loading}>
+            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : "登录"}
           </Button>
         </div>
         <Button variant="ghost" className="w-full text-gray-400" onClick={() => window.location.href = "/"}>
