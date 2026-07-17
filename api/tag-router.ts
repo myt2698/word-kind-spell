@@ -2,7 +2,7 @@ import { z } from "zod";
 import { createRouter, authedQuery } from "./middleware";
 import { getDb } from "./queries/connection";
 import { tags, wordTags, words, wordGroups } from "@db/schema";
-import { eq, and, sql, desc } from "drizzle-orm";
+import { eq, and, sql, desc, inArray } from "drizzle-orm";
 
 export const tagRouter = createRouter({
   list: authedQuery.query(async ({ ctx }) => {
@@ -131,7 +131,7 @@ export const tagRouter = createRouter({
           updatedAt: words.updatedAt,
         })
         .from(words)
-        .where(and(eq(words.userId, ctx.user.id), sql`${words.id} IN (${sql.join(wordIds)})`))
+        .where(and(eq(words.userId, ctx.user.id), inArray(words.id, wordIds)))
         .orderBy(desc(words.createdAt));
 
       // 4. 获取单元名称
@@ -141,7 +141,7 @@ export const tagRouter = createRouter({
         const groupRows = await db
           .select({ id: wordGroups.id, name: wordGroups.name })
           .from(wordGroups)
-          .where(sql`${wordGroups.id} IN (${sql.join(groupIds)})`);
+          .where(inArray(wordGroups.id, groupIds));
         for (const g of groupRows) {
           groupMap.set(g.id, g.name);
         }
@@ -157,7 +157,7 @@ export const tagRouter = createRouter({
         })
         .from(wordTags)
         .innerJoin(tags, eq(wordTags.tagId, tags.id))
-        .where(sql`${wordTags.wordId} IN (${sql.join(allWordIds)})`);
+        .where(inArray(wordTags.wordId, allWordIds));
 
       const tagMap = new Map<number, { id: number; name: string }[]>();
       for (const row of allTagRows) {
