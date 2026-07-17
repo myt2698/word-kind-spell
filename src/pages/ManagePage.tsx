@@ -144,31 +144,42 @@ export default function ManagePage() {
           <div className="bg-red-50 text-red-600 text-sm px-4 py-2.5 rounded-lg mb-4">{error}</div>
         )}
 
-        {/* Tab Switcher: only 2 tabs now */}
-        <div className="flex gap-1 bg-gray-100 rounded-lg p-1 mb-6">
-          <button onClick={() => setActiveTab("tags")} className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-md text-sm font-medium transition-all ${activeTab === "tags" ? "bg-white text-emerald-600 shadow-sm" : "text-gray-500 hover:text-gray-700"}`}>
-            <Tag className="w-4 h-4" /> 标签 ({allTags?.length ?? 0})
-          </button>
-          <button onClick={() => setActiveTab("textbooks")} className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-md text-sm font-medium transition-all ${activeTab === "textbooks" ? "bg-white text-purple-600 shadow-sm" : "text-gray-500 hover:text-gray-700"}`}>
-            <BookOpen className="w-4 h-4" /> 课本 ({textbooks?.length ?? 0})
-          </button>
+        {/* Tab Switcher with inline add button */}
+        <div className="flex items-center gap-2 mb-6">
+          <div className="flex-1 flex gap-1 bg-gray-100 rounded-lg p-1">
+            <button onClick={() => setActiveTab("tags")} className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-md text-sm font-medium transition-all ${activeTab === "tags" ? "bg-white text-emerald-600 shadow-sm" : "text-gray-500 hover:text-gray-700"}`}>
+              <Tag className="w-4 h-4" /> 标签 ({allTags?.length ?? 0})
+            </button>
+            <button onClick={() => setActiveTab("textbooks")} className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-md text-sm font-medium transition-all ${activeTab === "textbooks" ? "bg-white text-purple-600 shadow-sm" : "text-gray-500 hover:text-gray-700"}`}>
+              <BookOpen className="w-4 h-4" /> 课本 ({textbooks?.length ?? 0})
+            </button>
+          </div>
+          <Button
+            size="icon"
+            className={`h-10 w-10 rounded-lg shrink-0 transition-colors ${
+              activeTab === "tags"
+                ? "bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700"
+                : "bg-gradient-to-r from-purple-500 to-violet-600 hover:from-purple-600 hover:to-violet-700"
+            }`}
+            onClick={() => {
+              if (activeTab === "tags") {
+                setEditingTagId(null);
+                setTagForm({ name: "", description: "" });
+                setTagDialogOpen(true);
+              } else {
+                setEditingTextbookId(null);
+                setTextbookForm({ name: "", description: "" });
+                setTextbookDialogOpen(true);
+              }
+            }}
+          >
+            <Plus className="w-4 h-4" />
+          </Button>
         </div>
 
         {/* ========== TAGS ========== */}
         {activeTab === "tags" && (
           <div className="space-y-4">
-            {/* Add button */}
-            <Button
-              className="h-9 px-4 bg-gradient-to-r from-emerald-500 to-teal-600 text-sm"
-              onClick={() => {
-                setEditingTagId(null);
-                setTagForm({ name: "", description: "" });
-                setTagDialogOpen(true);
-              }}
-            >
-              <Plus className="w-4 h-4 mr-1" />新建标签
-            </Button>
-
             {/* Tag grid - uniform fixed-width chips */}
             {tagsLoading ? <Loader2 className="w-6 h-6 animate-spin text-gray-400 mx-auto" /> :
             !allTags?.length ? <p className="text-center text-gray-400 py-8">暂无标签</p> :
@@ -309,18 +320,6 @@ export default function ManagePage() {
         {/* ========== TEXTBOOKS + UNITS ========== */}
         {activeTab === "textbooks" && (
           <div className="space-y-4">
-            {/* Add button */}
-            <Button
-              className="h-9 px-4 bg-gradient-to-r from-purple-500 to-violet-600 text-sm"
-              onClick={() => {
-                setEditingTextbookId(null);
-                setTextbookForm({ name: "", description: "" });
-                setTextbookDialogOpen(true);
-              }}
-            >
-              <Plus className="w-4 h-4 mr-1" />新建课本
-            </Button>
-
             {/* Textbook list with expandable units */}
             {textbooksLoading ? <Loader2 className="w-6 h-6 animate-spin text-gray-400 mx-auto" /> :
             !textbooks?.length ? <p className="text-center text-gray-400 py-8">暂无课本</p> :
