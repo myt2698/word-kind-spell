@@ -482,7 +482,7 @@ export default function WordForm({ open, onClose, onSubmit, editWord }: WordForm
             </Label>
             {/* Textbook selector */}
             <Select
-              value={selectedTextbookId === null ? "none" : selectedTextbookId?.toString()}
+              value={selectedTextbookId == null ? "none" : String(selectedTextbookId)}
               onValueChange={(v) => {
                 const tbId = v === "none" ? null : parseInt(v);
                 setSelectedTextbookId(tbId);
@@ -490,7 +490,7 @@ export default function WordForm({ open, onClose, onSubmit, editWord }: WordForm
               }}
             >
               <SelectTrigger className="h-10">
-                <SelectValue placeholder="不选课本" />
+                <SelectValue />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="none">不选课本</SelectItem>
@@ -505,13 +505,13 @@ export default function WordForm({ open, onClose, onSubmit, editWord }: WordForm
             {/* Unit selector - only show when textbook selected */}
             {selectedTextbookId && (
               <Select
-                value={form.groupId === undefined ? "none" : form.groupId?.toString()}
+                value={form.groupId == null ? "none" : String(form.groupId)}
                 onValueChange={(v) =>
                   updateForm({ groupId: v === "none" ? undefined : parseInt(v) })
                 }
               >
                 <SelectTrigger className="h-10">
-                  <SelectValue placeholder="不选单元" />
+                  <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="none">不选单元</SelectItem>
