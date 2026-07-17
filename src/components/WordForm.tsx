@@ -167,9 +167,8 @@ export default function WordForm({ open, onClose, onSubmit, editWord }: WordForm
             proficiency: "new",
           });
         } else {
-          // No previous selection: default to "扩展词汇" textbook
-          const defaultTb = textbooks?.find((tb: any) => tb.isDefault);
-          setSelectedTextbookId(defaultTb?.id ?? null);
+          // No previous selection: default "扩展词汇" (null = no textbook)
+          setSelectedTextbookId(null);
           setForm({
             word: "",
             phonetic: "",
@@ -186,14 +185,6 @@ export default function WordForm({ open, onClose, onSubmit, editWord }: WordForm
     // Track previous open state
     prevOpenRef.current = open;
   }, [editWord, open, userSettings, textbooks]);
-
-  // Supplement: set default "扩展词汇" textbook when data loads after dialog opens
-  useEffect(() => {
-    if (open && textbooks && selectedTextbookId === null && !localStorage.getItem(LAST_TEXTBOOK_KEY)) {
-      const defaultTb = textbooks.find((tb: any) => tb.isDefault);
-      if (defaultTb) setSelectedTextbookId(defaultTb.id);
-    }
-  }, [textbooks, open, selectedTextbookId]);
 
   const doLookup = async (word: string) => {
     if (!word || word.length < 2) {
@@ -522,10 +513,10 @@ export default function WordForm({ open, onClose, onSubmit, editWord }: WordForm
               }}
             >
               <SelectTrigger className="h-10">
-                {selectedTextbookId == null ? "不选课本" : <SelectValue />}
+                {selectedTextbookId == null ? "扩展词汇" : <SelectValue />}
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="none">不选课本</SelectItem>
+                <SelectItem value="none">扩展词汇</SelectItem>
                 {textbooks?.map((tb) => (
                   <SelectItem key={tb.id} value={tb.id.toString()}>
                     {tb.name}
