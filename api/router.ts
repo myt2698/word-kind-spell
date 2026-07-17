@@ -1,21 +1,20 @@
-import { authRouter } from "./auth-router";
-import { wordGroupRouter } from "./word-group-router";
+import { createRouter, publicQuery } from "./middleware";
 import { wordRouter } from "./word-router";
 import { tagRouter } from "./tag-router";
-import { dictRouter } from "./dict-router";
-import { spellingRouter } from "./spelling-router";
 import { textbookRouter } from "./textbook-router";
-import { createRouter, publicQuery } from "./middleware";
+import { wordGroupRouter } from "./word-group-router";
+import { spellingRouter } from "./spelling-router";
+import { dictRouter } from "./dict-router";
+import { adminRouter } from "./admin-router";
 
 export const appRouter = createRouter({
-  ping: publicQuery.query(() => ({ ok: true, ts: Date.now() })),
-  auth: authRouter,
-  wordGroup: wordGroupRouter,
   word: wordRouter,
   tag: tagRouter,
-  dict: dictRouter,
-  spelling: spellingRouter,
   textbook: textbookRouter,
+  group: wordGroupRouter,
+  spelling: spellingRouter,
+  dict: dictRouter,
+  admin: adminRouter,
 });
 
 export type AppRouter = typeof appRouter;
