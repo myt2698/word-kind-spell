@@ -43,15 +43,6 @@ export default function Home() {
   );
   const { data: allTags } = trpc.tag.list.useQuery();
 
-  // Auto-open WordForm if returning from "new tag" flow
-  useEffect(() => {
-    const hasDraft = localStorage.getItem("wordmind:formDraft");
-    const hasNewTag = localStorage.getItem("wordmind:newTagId");
-    if (hasDraft || hasNewTag) {
-      setShowWordForm(true);
-    }
-  }, []);
-
   // Selected names
   const selectedTextbookName = selectedTextbookId
     ? textbooks?.find((t) => t.id === selectedTextbookId)?.name || "课本"

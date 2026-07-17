@@ -100,15 +100,7 @@ export default function ManagePage() {
   });
 
   const createTag = trpc.tag.create.useMutation({
-    onSuccess: (data) => {
-      utils.tag.list.invalidate(); utils.tag.listWithCount.invalidate(); setTagForm({ name: "", description: "" }); setTagDialogOpen(false);
-      // If navigated from WordForm, go back to home with new tag auto-selected
-      if (data.id && localStorage.getItem("wordmind:fromWordForm") === "1") {
-        localStorage.removeItem("wordmind:fromWordForm");
-        localStorage.setItem("wordmind:newTagId", String(data.id));
-        window.location.href = "/";
-      }
-    },
+    onSuccess: () => { utils.tag.list.invalidate(); utils.tag.listWithCount.invalidate(); setTagForm({ name: "", description: "" }); setTagDialogOpen(false); },
   });
   const updateTag = trpc.tag.update.useMutation({
     onSuccess: () => { utils.tag.list.invalidate(); utils.tag.listWithCount.invalidate(); setEditingTagId(null); setTagDialogOpen(false); },
