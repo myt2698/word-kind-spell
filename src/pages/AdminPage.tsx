@@ -271,10 +271,19 @@ function TextbookManager() {
 // ========== Main Admin Page ==========
 export default function AdminPage() {
   const [token, setToken] = useState(localStorage.getItem("admin_token"));
-  const { data: checkResult } = trpc.admin.check.useQuery({ token: token || "" }, { enabled: !!token });
+  const { data: checkResult, isLoading: checkLoading } = trpc.admin.check.useQuery({ token: token || "" }, { enabled: !!token });
   const [activeTab, setActiveTab] = useState<"words" | "tags" | "textbooks">("words");
 
   const isValid = checkResult?.valid;
+
+  // Show loading while checking token validity
+  if (token && checkLoading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <Loader2 className="w-8 h-8 animate-spin text-indigo-500" />
+      </div>
+    );
+  }
 
   if (!token || !isValid) {
     return <AdminLogin onLogin={(t) => setToken(t)} />;
