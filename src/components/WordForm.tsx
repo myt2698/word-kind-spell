@@ -187,6 +187,14 @@ export default function WordForm({ open, onClose, onSubmit, editWord }: WordForm
     prevOpenRef.current = open;
   }, [editWord, open, userSettings, textbooks]);
 
+  // Supplement: set default "扩展词汇" textbook when data loads after dialog opens
+  useEffect(() => {
+    if (open && textbooks && selectedTextbookId === null && !localStorage.getItem(LAST_TEXTBOOK_KEY)) {
+      const defaultTb = textbooks.find((tb: any) => tb.isDefault);
+      if (defaultTb) setSelectedTextbookId(defaultTb.id);
+    }
+  }, [textbooks, open, selectedTextbookId]);
+
   const doLookup = async (word: string) => {
     if (!word || word.length < 2) {
       setDictError("请输入至少2个字母的单词");
