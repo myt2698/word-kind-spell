@@ -505,18 +505,18 @@ export default function WordForm({ open, onClose, onSubmit, editWord }: WordForm
             </Label>
             {/* Textbook selector */}
             <Select
-              value={selectedTextbookId == null ? "default" : String(selectedTextbookId)}
+              value={selectedTextbookId == null ? "none" : String(selectedTextbookId)}
               onValueChange={(v) => {
-                const tbId = v === "default" ? null : parseInt(v);
+                const tbId = v === "none" ? null : parseInt(v);
                 setSelectedTextbookId(tbId);
                 updateForm({ groupId: undefined });
               }}
             >
               <SelectTrigger className="h-10">
-                <SelectValue />
+                {selectedTextbookId == null ? "扩展词汇" : <SelectValue />}
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="default">扩展词汇</SelectItem>
+                <SelectItem value="none">扩展词汇</SelectItem>
                 {textbooks?.map((tb) => (
                   <SelectItem key={tb.id} value={tb.id.toString()}>
                     {tb.name}
@@ -526,7 +526,7 @@ export default function WordForm({ open, onClose, onSubmit, editWord }: WordForm
             </Select>
 
             {/* Unit selector - only show when a non-default textbook is selected */}
-            {selectedTextbookId != null && !textbooks?.find((tb: any) => tb.id === selectedTextbookId)?.isDefault && (
+            {selectedTextbookId && !textbooks?.find((tb: any) => tb.id === selectedTextbookId)?.isDefault && (
               <Select
                 value={form.groupId == null ? "none" : String(form.groupId)}
                 onValueChange={(v) =>

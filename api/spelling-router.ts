@@ -8,7 +8,7 @@
  */
 
 import { z } from "zod";
-import { createRouter, publicQuery } from "./middleware";
+import { createRouter, authedQuery } from "./middleware";
 import { getDb } from "./queries/connection";
 import { words, wordSpellings, spellingErrors, spellingSessions } from "@db/schema";
 import { eq, and, gte, lte, desc, sql, count, inArray } from "drizzle-orm";
@@ -30,7 +30,7 @@ export const spellingRouter = createRouter({
   // ========== Learning Queue (Manual) ==========
 
   // Add a word to the learning queue
-  addToLearning: publicQuery
+  addToLearning: authedQuery
     .input(z.object({ wordId: z.number() }))
     .mutation(async ({ ctx, input }) => {
       const db = getDb();
@@ -39,7 +39,7 @@ export const spellingRouter = createRouter({
       await db
         .update(words)
         .set({ learningStatus: "active" })
-        .where(eq(words.id, input.wordId));
+        .where(and(eq(words.id, input.wordId), eq(words.userId, ctx.user.id)));
 
       // 2. Create or update wordSpellings record with source=manual
       const existing = await db
@@ -48,7 +48,7 @@ export const spellingRouter = createRouter({
         .where(
           and(
             eq(wordSpellings.wordId, input.wordId),
-            sql`1=1`
+            eq(wordSpellings.userId, ctx.user.id)
           )
         )
         .limit(1);
@@ -67,7 +67,8 @@ export const spellingRouter = createRouter({
       } else {
         await db.insert(wordSpellings).values({
           wordId: input.wordId,
-                    level: 1,
+          userId: ctx.user.id,
+          level: 1,
           nextReviewAt: new Date(), // Start immediately
           streak: 0,
           errorCount: 0,
@@ -81,7 +82,7 @@ export const spellingRouter = createRouter({
     }),
 
   // Remove a word from the learning queue
-  removeFromLearning: publicQuery
+  removeFromLearning: authedQuery
     .input(z.object({ wordId: z.number() }))
     .mutation(async ({ ctx, input }) => {
       const db = getDb();
@@ -90,7 +91,7 @@ export const spellingRouter = createRouter({
       await db
         .update(words)
         .set({ learningStatus: "idle" })
-        .where(eq(words.id, input.wordId));
+        .where(and(eq(words.id, input.wordId), eq(words.userId, ctx.user.id)));
 
       // Change source back to auto
       await db
@@ -99,7 +100,7 @@ export const spellingRouter = createRouter({
         .where(
           and(
             eq(wordSpellings.wordId, input.wordId),
-            sql`1=1`
+            eq(wordSpellings.userId, ctx.user.id)
           )
         );
 
@@ -107,7 +108,7 @@ export const spellingRouter = createRouter({
     }),
 
   // Pause a word (keep in queue but temporarily skip)
-  pauseLearning: publicQuery
+  pauseLearning: authedQuery
     .input(z.object({ wordId: z.number() }))
     .mutation(async ({ ctx, input }) => {
       const db = getDb();
@@ -115,7 +116,7 @@ export const spellingRouter = createRouter({
       await db
         .update(words)
         .set({ learningStatus: "paused" })
-        .where(eq(words.id, input.wordId));
+        .where(and(eq(words.id, input.wordId), eq(words.userId, ctx.user.id)));
 
       // Push next review to tomorrow
       const tomorrow = new Date(Date.now() + 24 * 60 * 60 * 1000);
@@ -125,7 +126,7 @@ export const spellingRouter = createRouter({
         .where(
           and(
             eq(wordSpellings.wordId, input.wordId),
-            sql`1=1`
+            eq(wordSpellings.userId, ctx.user.id)
           )
         );
 
@@ -133,7 +134,7 @@ export const spellingRouter = createRouter({
     }),
 
   // Get learning status for a word
-  getStatus: publicQuery
+  getStatus: authedQuery
     .input(z.object({ wordId: z.number() }))
     .query(async ({ ctx, input }) => {
       const db = getDb();
@@ -141,7 +142,7 @@ export const spellingRouter = createRouter({
       const wordRows = await db
         .select({ learningStatus: words.learningStatus })
         .from(words)
-        .where(eq(words.id, input.wordId))
+        .where(and(eq(words.id, input.wordId), eq(words.userId, ctx.user.id)))
         .limit(1);
 
       const spellingRows = await db
@@ -150,7 +151,7 @@ export const spellingRouter = createRouter({
         .where(
           and(
             eq(wordSpellings.wordId, input.wordId),
-            sql`1=1`
+            eq(wordSpellings.userId, ctx.user.id)
           )
         )
         .limit(1);
@@ -163,14 +164,16 @@ export const spellingRouter = createRouter({
     }),
 
   // Get words currently in learning (active status)
-  getLearningQueue: publicQuery.query(async ({ ctx }) => {
+  getLearningQueue: authedQuery.query(async ({ ctx }) => {
     const db = getDb();
 
     const activeWords = await db
       .select()
       .from(words)
       .where(
-        eq(words.learningStatus, "active"
+        and(
+          eq(words.userId, ctx.user.id),
+          eq(words.learningStatus, "active")
         )
       )
       .orderBy(desc(words.createdAt));
@@ -182,7 +185,9 @@ export const spellingRouter = createRouter({
       .select()
       .from(wordSpellings)
       .where(
-        inArray(wordSpellings.wordId, wordIds
+        and(
+          eq(wordSpellings.userId, ctx.user.id),
+          inArray(wordSpellings.wordId, wordIds)
         )
       );
 
@@ -208,7 +213,7 @@ export const spellingRouter = createRouter({
   // ========== Review Queue ==========
 
   // Get review queue - prioritize manual source words first
-  getReviewQueue: publicQuery.query(async ({ ctx }) => {
+  getReviewQueue: authedQuery.query(async ({ ctx }) => {
     const db = getDb();
     const now = new Date();
 
@@ -217,7 +222,9 @@ export const spellingRouter = createRouter({
       .select()
       .from(wordSpellings)
       .where(
-        lte(wordSpellings.nextReviewAt, now
+        and(
+          eq(wordSpellings.userId, ctx.user.id),
+          lte(wordSpellings.nextReviewAt, now)
         )
       )
       .orderBy(wordSpellings.source, wordSpellings.level);
@@ -265,7 +272,7 @@ export const spellingRouter = createRouter({
 
   // ========== Practice Result ==========
 
-  submitResult: publicQuery
+  submitResult: authedQuery
     .input(
       z.object({
         wordId: z.number(),
@@ -284,7 +291,7 @@ export const spellingRouter = createRouter({
         .where(
           and(
             eq(wordSpellings.wordId, input.wordId),
-            sql`1=1`
+            eq(wordSpellings.userId, ctx.user.id)
           )
         )
         .limit(1);
@@ -294,7 +301,8 @@ export const spellingRouter = createRouter({
       if (!record) {
         const result = await db.insert(wordSpellings).values({
           wordId: input.wordId,
-                    level: 1,
+          userId: ctx.user.id,
+          level: 1,
           nextReviewAt: new Date(),
           streak: 0,
           errorCount: 0,
@@ -305,7 +313,8 @@ export const spellingRouter = createRouter({
         record = {
           id: Number(result[0].insertId),
           wordId: input.wordId,
-                    level: 1,
+          userId: ctx.user.id,
+          level: 1,
           nextReviewAt: new Date(),
           lastReviewAt: null,
           streak: 0,
@@ -350,7 +359,8 @@ export const spellingRouter = createRouter({
       if (!input.isCorrect && input.userInput) {
         await db.insert(spellingErrors).values({
           wordId: input.wordId,
-                    userInput: input.userInput,
+          userId: ctx.user.id,
+          userInput: input.userInput,
           errorType: "wrong_letter",
           practiceMode: input.practiceMode,
         });
@@ -366,12 +376,12 @@ export const spellingRouter = createRouter({
 
   // ========== Error Book ==========
 
-  getErrorBook: publicQuery.query(async ({ ctx }) => {
+  getErrorBook: authedQuery.query(async ({ ctx }) => {
     const db = getDb();
     const errors = await db
       .select()
       .from(spellingErrors)
-      .where(sql`1=1`)
+      .where(eq(spellingErrors.userId, ctx.user.id))
       .orderBy(desc(spellingErrors.createdAt))
       .limit(50);
 
@@ -395,21 +405,23 @@ export const spellingRouter = createRouter({
 
   // ========== Statistics ==========
 
-  getStats: publicQuery.query(async ({ ctx }) => {
+  getStats: authedQuery.query(async ({ ctx }) => {
     const db = getDb();
 
     // Total words
     const totalWords = await db
       .select({ count: count() })
       .from(words)
-      ;
+      .where(eq(words.userId, ctx.user.id));
 
     // Active learning words
     const learningWords = await db
       .select({ count: count() })
       .from(words)
       .where(
-        eq(words.learningStatus, "active"
+        and(
+          eq(words.userId, ctx.user.id),
+          eq(words.learningStatus, "active")
         )
       );
 
@@ -418,7 +430,9 @@ export const spellingRouter = createRouter({
       .select({ count: count() })
       .from(words)
       .where(
-        eq(words.learningStatus, "paused"
+        and(
+          eq(words.userId, ctx.user.id),
+          eq(words.learningStatus, "paused")
         )
       );
 
@@ -429,7 +443,7 @@ export const spellingRouter = createRouter({
         count: count(),
       })
       .from(wordSpellings)
-      
+      .where(eq(wordSpellings.userId, ctx.user.id))
       .groupBy(wordSpellings.level);
 
     // Due for review
@@ -438,7 +452,9 @@ export const spellingRouter = createRouter({
       .select({ count: count() })
       .from(wordSpellings)
       .where(
-        lte(wordSpellings.nextReviewAt, now
+        and(
+          eq(wordSpellings.userId, ctx.user.id),
+          lte(wordSpellings.nextReviewAt, now)
         )
       );
 
@@ -447,7 +463,9 @@ export const spellingRouter = createRouter({
       .select({ count: count() })
       .from(wordSpellings)
       .where(
-        eq(wordSpellings.source, "manual",
+        and(
+          eq(wordSpellings.userId, ctx.user.id),
+          eq(wordSpellings.source, "manual"),
           lte(wordSpellings.nextReviewAt, now)
         )
       );
@@ -456,7 +474,7 @@ export const spellingRouter = createRouter({
     const totalErrors = await db
       .select({ count: count() })
       .from(spellingErrors)
-      .where(sql`1=1`);
+      .where(eq(spellingErrors.userId, ctx.user.id));
 
     // Today's practice count
     const todayStart = new Date();
@@ -465,7 +483,9 @@ export const spellingRouter = createRouter({
       .select({ count: count() })
       .from(spellingSessions)
       .where(
-        gte(spellingSessions.createdAt, todayStart
+        and(
+          eq(spellingSessions.userId, ctx.user.id),
+          gte(spellingSessions.createdAt, todayStart)
         )
       );
 
@@ -483,7 +503,7 @@ export const spellingRouter = createRouter({
 
   // ========== Practice Words ==========
 
-  getPracticeWords: publicQuery
+  getPracticeWords: authedQuery
     .input(
       z.object({
         limit: z.number().min(1).max(50).default(10),
@@ -495,7 +515,7 @@ export const spellingRouter = createRouter({
       const db = getDb();
 
       // Build conditions
-      const conditions = [];
+      const conditions: any[] = [eq(words.userId, ctx.user.id)];
 
       if (input?.groupId) {
         conditions.push(eq(words.groupId, input.groupId));
@@ -530,7 +550,9 @@ export const spellingRouter = createRouter({
           .select()
           .from(wordSpellings)
           .where(
-            inArray(wordSpellings.wordId, wordIds
+            and(
+              eq(wordSpellings.userId, ctx.user.id),
+              inArray(wordSpellings.wordId, wordIds)
             )
           );
         spellingMap = new Map(spellingRecords.map((r) => [r.wordId, r]));
@@ -550,7 +572,7 @@ export const spellingRouter = createRouter({
     }),
 
   // Record a practice session
-  recordSession: publicQuery
+  recordSession: authedQuery
     .input(
       z.object({
         mode: z.enum(["blocks", "fillblank", "flash"]),
@@ -563,7 +585,8 @@ export const spellingRouter = createRouter({
     .mutation(async ({ ctx, input }) => {
       const db = getDb();
       await db.insert(spellingSessions).values({
-                mode: input.mode,
+        userId: ctx.user.id,
+        mode: input.mode,
         wordCount: input.wordCount,
         correctCount: input.correctCount,
         duration: input.duration ?? null,

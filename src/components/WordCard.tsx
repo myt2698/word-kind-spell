@@ -1,11 +1,29 @@
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { trpc } from "@/providers/trpc";
 import TagDetailDialog from "./TagDetailDialog";
 import {
-  Volume2, Tag, Folder, ChevronDown, ChevronUp,
-  GraduationCap, Pause, CheckCircle2,
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  Volume2,
+  Edit3,
+  Trash2,
+  Tag,
+  Folder,
+  ChevronDown,
+  ChevronUp,
+  GraduationCap,
+  Pause,
+  CheckCircle2,
+  Loader2,
 } from "lucide-react";
 import { useState } from "react";
 
@@ -32,16 +50,26 @@ export interface WordCardData {
 
 interface WordCardProps {
   word: WordCardData;
-  onEdit?: (word: WordCardData) => void;
-  onDelete?: (id: number) => void;
+  onEdit: (word: WordCardData) => void;
+  onDelete: (id: number) => void;
 }
 
-export default function WordCard({ word }: WordCardProps) {
+export default function WordCard({ word, onEdit, onDelete }: WordCardProps) {
   const [expanded, setExpanded] = useState(false);
   const [localStatus, setLocalStatus] = useState(word.learningStatus || "idle");
   const [tagDialogId, setTagDialogId] = useState<number | null>(null);
+  const [editTagOpen, setEditTagOpen] = useState(false);
+  const [editTagForm, setEditTagForm] = useState({ id: 0, name: "", description: "" });
 
   const utils = trpc.useUtils();
+
+  const updateTag = trpc.tag.update.useMutation({
+    onSuccess: () => {
+      utils.tag.list.invalidate();
+      utils.tag.listWithCount.invalidate();
+      utils.word.list.invalidate();
+    },
+  });
 
   const addToLearning = trpc.spelling.addToLearning.useMutation({
     onSuccess: () => {
@@ -83,8 +111,9 @@ export default function WordCard({ word }: WordCardProps) {
 
   return (
     <>
-      <Card className="hover:shadow-lg transition-all duration-300 border-gray-100 overflow-hidden">
+      <Card className="group hover:shadow-lg transition-all duration-300 border-gray-100 overflow-hidden">
         <CardContent className="p-0">
+          {/* Main row */}
           <div className="p-4">
             <div className="flex items-start justify-between gap-3">
               <div className="flex-1 min-w-0">
@@ -101,6 +130,7 @@ export default function WordCard({ word }: WordCardProps) {
                     <Volume2 className="w-4 h-4" />
                   </button>
 
+                  {/* Learning status badge */}
                   {isActive && (
                     <Badge className="text-[10px] px-1.5 py-0 bg-emerald-50 text-emerald-600 border-emerald-200 hover:bg-emerald-50">
                       <CheckCircle2 className="w-2.5 h-2.5 mr-0.5" />学习中
@@ -113,21 +143,24 @@ export default function WordCard({ word }: WordCardProps) {
                   )}
                 </div>
 
+                {/* Definition */}
                 <p className="text-sm text-gray-700 mt-1.5 leading-relaxed whitespace-pre-line">{word.definition}</p>
 
-                {/* Group and Tags */}
+                {/* Group and Tags - visually distinct */}
                 <div className="flex flex-wrap items-center gap-1.5 mt-2">
+                  {/* Unit (Group) - gray style, non-clickable */}
                   {word.groupName && (
-                    <Badge variant="outline" className="text-xs px-2 py-0.5 bg-gray-50 text-gray-500 border-gray-200">
+                    <Badge variant="outline" className="text-xs px-2 py-0.5 bg-gray-50 text-gray-500 border-gray-200 cursor-default">
                       <Folder className="w-3 h-3 mr-1" />
                       {word.groupName}
                     </Badge>
                   )}
+                  {/* Tags - indigo style, clickable */}
                   {word.tags.map((tag) => (
                     <button
                       key={tag.id}
                       onClick={() => setTagDialogId(tag.id)}
-                      className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-md bg-indigo-50 text-indigo-600 border border-indigo-200 hover:bg-indigo-100 transition-colors cursor-pointer"
+                      className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-md bg-indigo-50 text-indigo-600 border border-indigo-200 hover:bg-indigo-100 hover:border-indigo-300 hover:text-indigo-700 transition-colors cursor-pointer"
                     >
                       <Tag className="w-3 h-3" />
                       {tag.name}
@@ -136,13 +169,14 @@ export default function WordCard({ word }: WordCardProps) {
                 </div>
               </div>
 
-              {/* Learning actions */}
+              {/* Actions */}
               <div className="flex flex-col items-end gap-1 shrink-0">
+                {/* Learning button */}
                 {isIdle ? (
                   <Button
                     variant="outline"
                     size="sm"
-                    className="h-7 px-2 text-xs border-emerald-200 text-emerald-600 hover:bg-emerald-50"
+                    className="h-7 px-2 text-xs border-emerald-200 text-emerald-600 hover:bg-emerald-50 hover:text-emerald-700"
                     onClick={() => addToLearning.mutate({ wordId: word.id })}
                     disabled={addToLearning.isPending}
                   >
@@ -192,6 +226,16 @@ export default function WordCard({ word }: WordCardProps) {
                     </Button>
                   </div>
                 )}
+
+                {/* Edit/Delete buttons */}
+                <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <Button variant="ghost" size="icon" className="h-7 w-7 text-gray-400 hover:text-indigo-600" onClick={() => onEdit(word)}>
+                    <Edit3 className="w-3.5 h-3.5" />
+                  </Button>
+                  <Button variant="ghost" size="icon" className="h-7 w-7 text-gray-400 hover:text-red-500" onClick={() => onDelete(word.id)}>
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </Button>
+                </div>
               </div>
             </div>
 
@@ -223,11 +267,72 @@ export default function WordCard({ word }: WordCardProps) {
         </CardContent>
       </Card>
 
+      {/* Tag Detail Dialog */}
       <TagDetailDialog
         tagId={tagDialogId}
         open={!!tagDialogId}
         onClose={() => setTagDialogId(null)}
+        onEdit={(tag) => {
+          setEditTagForm({ id: tag.id, name: tag.name, description: tag.description || "" });
+          setEditTagOpen(true);
+        }}
       />
+
+      {/* Tag Edit Dialog */}
+      <Dialog open={editTagOpen} onOpenChange={setEditTagOpen}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Edit3 className="w-4 h-4 text-emerald-500" />
+              编辑标签
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 pt-2">
+            <div>
+              <Label className="text-sm">标签名称</Label>
+              <Input
+                value={editTagForm.name}
+                onChange={(e) => setEditTagForm((p) => ({ ...p, name: e.target.value.slice(0, 50) }))}
+                placeholder="标签名称"
+                className="h-10 mt-1"
+                autoFocus
+              />
+            </div>
+            <div>
+              <Label className="text-sm">备注（可选）</Label>
+              <Textarea
+                value={editTagForm.description}
+                onChange={(e) => setEditTagForm((p) => ({ ...p, description: e.target.value }))}
+                placeholder="备注"
+                className="min-h-[60px] resize-y mt-1"
+              />
+            </div>
+            <div className="flex gap-2 pt-1">
+              <Button variant="outline" className="flex-1 h-10" onClick={() => setEditTagOpen(false)}>
+                取消
+              </Button>
+              <Button
+                className="flex-1 h-10 bg-gradient-to-r from-emerald-500 to-teal-600"
+                disabled={!editTagForm.name.trim() || updateTag.isPending}
+                onClick={() => {
+                  updateTag.mutate(
+                    {
+                      id: editTagForm.id,
+                      name: editTagForm.name,
+                      description: editTagForm.description || undefined,
+                    },
+                    {
+                      onSuccess: () => setEditTagOpen(false),
+                    }
+                  );
+                }}
+              >
+                {updateTag.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : "保存"}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }

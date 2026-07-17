@@ -1,38 +1,34 @@
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { httpBatchLink } from "@trpc/client";
 import { createTRPCReact } from "@trpc/react-query";
-import { useState } from "react";
+import { httpBatchLink } from "@trpc/client";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import superjson from "superjson";
 import type { AppRouter } from "../../api/router";
+import type { ReactNode } from "react";
 
 export const trpc = createTRPCReact<AppRouter>();
 
-export function TRPCProvider({ children }: { children: React.ReactNode }) {
-  const [queryClient] = useState(() => new QueryClient({
-    defaultOptions: {
-      queries: { staleTime: 1000 * 30, retry: 1 },
-    },
-  }));
-
-  const [trpcClient] = useState(() =>
-    trpc.createClient({
+const queryClient = new QueryClient();
+const trpcClient = trpc.createClient({
+  links: [
+    httpBatchLink({
+      url: "/api/trpc",
       transformer: superjson,
-      links: [
-        httpBatchLink({
-          url: "/api/trpc",
-          headers() {
-            // Include admin token if present
-            const token = localStorage.getItem("admin_token");
-            return token ? { "x-admin-token": token } : {};
-          },
-        }),
-      ],
-    })
-  );
+      fetch(input, init) {
+        return globalThis.fetch(input, {
+          ...(init ?? {}),
+          credentials: "include",
+        });
+      },
+    }),
+  ],
+});
 
+export function TRPCProvider({ children }: { children: ReactNode }) {
   return (
     <trpc.Provider client={trpcClient} queryClient={queryClient}>
-      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+      <QueryClientProvider client={queryClient}>
+        {children}
+      </QueryClientProvider>
     </trpc.Provider>
   );
 }

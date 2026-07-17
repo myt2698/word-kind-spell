@@ -1,5 +1,7 @@
 import { useState, useEffect, useRef } from "react";
+import { useAuth } from "@/hooks/useAuth";
 import { trpc } from "@/providers/trpc";
+import AppHeader from "@/components/AppHeader";
 import MobileNav from "@/components/MobileNav";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -46,11 +48,12 @@ export default function SpellPage() {
 
   return (
     <div className="min-h-screen bg-gray-50/50">
+      <AppHeader />
       {view === "home" && <SpellHome onStart={(v) => setView(v)} />}
       {view === "blocks" && <BlocksMode onBack={() => setView("home")} />}
       {view === "fillblank" && <FillBlankMode onBack={() => setView("home")} />}
       {view === "flash" && <FlashMode onBack={() => setView("home")} />}
-      <MobileNav />
+      <MobileNav activeTab="spell" />
     </div>
   );
 }
@@ -59,9 +62,15 @@ export default function SpellPage() {
 // Spell Home - Review Queue + Mode Selection
 // ============================================================
 function SpellHome({ onStart }: { onStart: (mode: SpellView) => void }) {
+  const { user, isLoading: authLoading } = useAuth({ redirectOnUnauthenticated: true });
   const { data: reviewQueue, isLoading } = trpc.spelling.getReviewQueue.useQuery();
   const { data: learningQueue } = trpc.spelling.getLearningQueue.useQuery();
   const { data: stats } = trpc.spelling.getStats.useQuery();
+
+  if (authLoading) {
+    return <div className="min-h-screen flex items-center justify-center"><Loader2 className="w-8 h-8 animate-spin text-indigo-500" /></div>;
+  }
+  if (!user) return null;
 
   const dueCount = reviewQueue?.length ?? 0;
   const manualDue = reviewQueue?.filter((w) => w.source === "manual") ?? [];
