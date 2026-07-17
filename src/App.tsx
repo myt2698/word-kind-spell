@@ -1,6 +1,5 @@
 import { Routes, Route } from 'react-router'
 import Home from './pages/Home'
-import DiscoverPage from './pages/DiscoverPage'
 import SpellPage from './pages/SpellPage'
 import ManagePage from './pages/ManagePage'
 import ProfilePage from './pages/ProfilePage'
@@ -11,7 +10,6 @@ export default function App() {
   return (
     <Routes>
       <Route path="/" element={<Home />} />
-      <Route path="/discover" element={<DiscoverPage />} />
       <Route path="/spell" element={<SpellPage />} />
       <Route path="/spell/:mode" element={<SpellPage />} />
       <Route path="/manage" element={<ManagePage />} />
