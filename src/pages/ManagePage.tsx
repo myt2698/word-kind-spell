@@ -97,10 +97,10 @@ export default function ManagePage() {
   });
 
   const createTag = trpc.tag.create.useMutation({
-    onSuccess: () => { utils.tag.list.invalidate(); utils.tag.listWithCount.invalidate(); setTagForm({ name: "", description: "" }); },
+    onSuccess: () => { utils.tag.list.invalidate(); utils.tag.listWithCount.invalidate(); setTagForm({ name: "", description: "" }); setTagDialogOpen(false); },
   });
   const updateTag = trpc.tag.update.useMutation({
-    onSuccess: () => { utils.tag.list.invalidate(); utils.tag.listWithCount.invalidate(); setEditingTagId(null); },
+    onSuccess: () => { utils.tag.list.invalidate(); utils.tag.listWithCount.invalidate(); setEditingTagId(null); setTagDialogOpen(false); },
   });
   const deleteTag = trpc.tag.delete.useMutation({
     onSuccess: () => utils.tag.list.invalidate(),
