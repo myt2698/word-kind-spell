@@ -33,6 +33,7 @@ import type { WordCardData } from "./WordCard";
 
 const LAST_TEXTBOOK_KEY = "wordmind:lastTextbookId";
 const LAST_UNIT_KEY = "wordmind:lastUnitId";
+const FORM_DRAFT_KEY = "wordmind:formDraft";
 
 interface WordFormProps {
   open: boolean;
@@ -76,7 +77,6 @@ export default function WordForm({ open, onClose, onSubmit, editWord }: WordForm
   });
 
   const prevOpenRef = useRef(false);
-  const [newTagName, setNewTagName] = useState("");
   const [isLookingUp, setIsLookingUp] = useState(false);
   const [dictError, setDictError] = useState("");
   const [hasAutoFilled, setHasAutoFilled] = useState(false);
@@ -129,6 +129,41 @@ export default function WordForm({ open, onClose, onSubmit, editWord }: WordForm
       setDictError("");
       setHasAutoFilled(false);
       lookupMutation.reset();
+
+      // Check if there's a form draft to restore (from "new tag" flow)
+      const draftJson = localStorage.getItem(FORM_DRAFT_KEY);
+      const newTagIdStr = localStorage.getItem("wordmind:newTagId");
+
+      if (!editWord && draftJson) {
+        // Restore draft and auto-select new tag
+        try {
+          const draft = JSON.parse(draftJson);
+          const newTagId = newTagIdStr ? Number(newTagIdStr) : null;
+          const restoredTagIds = newTagId
+            ? [...new Set([...draft.tagIds, newTagId])]
+            : draft.tagIds;
+
+          setSelectedTextbookId(draft.selectedTextbookId ?? null);
+          setForm({
+            word: draft.word || "",
+            phonetic: draft.phonetic || "",
+            definition: draft.definition || "",
+            example: draft.example || "",
+            notes: draft.notes || "",
+            groupId: draft.groupId,
+            tagIds: restoredTagIds,
+            proficiency: draft.proficiency || "new",
+          });
+          // Clear draft after restoring
+          localStorage.removeItem(FORM_DRAFT_KEY);
+          localStorage.removeItem("wordmind:newTagId");
+          prevOpenRef.current = open;
+          return;
+        } catch {
+          // Fallback to default if draft parsing fails
+        }
+      }
+
       if (editWord) {
         setForm({
           word: editWord.word,
@@ -225,23 +260,7 @@ export default function WordForm({ open, onClose, onSubmit, editWord }: WordForm
     }));
   };
 
-  const createTagMutation = trpc.tag.create.useMutation({
-    onSuccess: (data) => {
-      utils.tag.list.invalidate();
-      utils.tag.listWithCount.invalidate();
-      if (data.created) {
-        setForm((prev) => ({ ...prev, tagIds: [...prev.tagIds, data.id] }));
-      } else if (!form.tagIds.includes(data.id)) {
-        setForm((prev) => ({ ...prev, tagIds: [...prev.tagIds, data.id] }));
-      }
-      setNewTagName("");
-    },
-  });
 
-  const handleCreateTag = () => {
-    if (!newTagName.trim()) return;
-    createTagMutation.mutate({ name: newTagName.trim() });
-  };
 
   const handleSpeak = () => {
     if (form.word && "speechSynthesis" in window) {
@@ -542,25 +561,33 @@ export default function WordForm({ open, onClose, onSubmit, editWord }: WordForm
                 </button>
               ))}
             </div>
-            <div className="flex gap-2 mt-2">
-              <Input
-                value={newTagName}
-                onChange={(e) => setNewTagName(e.target.value)}
-                placeholder="新建标签"
-                className="h-8 text-sm"
-                onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), handleCreateTag())}
-              />
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="h-8 px-2"
-                onClick={handleCreateTag}
-                disabled={!newTagName.trim() || createTagMutation.isPending}
-              >
-                <Plus className="w-4 h-4" />
-              </Button>
-            </div>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-7 px-2 text-xs text-indigo-500 hover:text-indigo-600 hover:bg-indigo-50 mt-1"
+              onClick={() => {
+                // Save current form draft to localStorage
+                const draft = {
+                  word: form.word,
+                  phonetic: form.phonetic,
+                  definition: form.definition,
+                  example: form.example,
+                  notes: form.notes,
+                  groupId: form.groupId,
+                  tagIds: form.tagIds,
+                  proficiency: form.proficiency,
+                  selectedTextbookId,
+                };
+                localStorage.setItem(FORM_DRAFT_KEY, JSON.stringify(draft));
+                localStorage.setItem("wordmind:fromWordForm", "1");
+                onClose();
+                window.location.href = "/manage";
+              }}
+            >
+              <Plus className="w-3.5 h-3.5 mr-1" />
+              新建标签
+            </Button>
           </div>
 
           {/* Actions */}

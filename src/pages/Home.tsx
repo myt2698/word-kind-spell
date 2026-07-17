@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { trpc } from "@/providers/trpc";
 import AppHeader from "@/components/AppHeader";
@@ -42,6 +42,15 @@ export default function Home() {
     { enabled: !!selectedTextbookId }
   );
   const { data: allTags } = trpc.tag.list.useQuery();
+
+  // Auto-open WordForm if returning from "new tag" flow
+  useEffect(() => {
+    const hasDraft = localStorage.getItem("wordmind:formDraft");
+    const hasNewTag = localStorage.getItem("wordmind:newTagId");
+    if (hasDraft || hasNewTag) {
+      setShowWordForm(true);
+    }
+  }, []);
 
   // Selected names
   const selectedTextbookName = selectedTextbookId
