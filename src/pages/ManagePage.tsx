@@ -24,7 +24,7 @@ type ManageTab = "textbooks" | "tags";
 export default function ManagePage() {
   const { user, isLoading: authLoading } = useAuth({ redirectOnUnauthenticated: true });
   const utils = trpc.useUtils();
-  const [activeTab, setActiveTab] = useState<ManageTab>("textbooks");
+  const [activeTab, setActiveTab] = useState<ManageTab>("tags");
 
   // Textbook state
   const { data: textbooks, isLoading: textbooksLoading } = trpc.textbook.list.useQuery();
@@ -146,161 +146,13 @@ export default function ManagePage() {
 
         {/* Tab Switcher: only 2 tabs now */}
         <div className="flex gap-1 bg-gray-100 rounded-lg p-1 mb-6">
-          <button onClick={() => setActiveTab("textbooks")} className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-md text-sm font-medium transition-all ${activeTab === "textbooks" ? "bg-white text-purple-600 shadow-sm" : "text-gray-500 hover:text-gray-700"}`}>
-            <BookOpen className="w-4 h-4" /> 课本 ({textbooks?.length ?? 0})
-          </button>
           <button onClick={() => setActiveTab("tags")} className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-md text-sm font-medium transition-all ${activeTab === "tags" ? "bg-white text-emerald-600 shadow-sm" : "text-gray-500 hover:text-gray-700"}`}>
             <Tag className="w-4 h-4" /> 标签 ({allTags?.length ?? 0})
           </button>
+          <button onClick={() => setActiveTab("textbooks")} className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-md text-sm font-medium transition-all ${activeTab === "textbooks" ? "bg-white text-purple-600 shadow-sm" : "text-gray-500 hover:text-gray-700"}`}>
+            <BookOpen className="w-4 h-4" /> 课本 ({textbooks?.length ?? 0})
+          </button>
         </div>
-
-        {/* ========== TEXTBOOKS + UNITS ========== */}
-        {activeTab === "textbooks" && (
-          <div className="space-y-4">
-            {/* Add button */}
-            <Button
-              className="h-9 px-4 bg-gradient-to-r from-purple-500 to-violet-600 text-sm"
-              onClick={() => {
-                setEditingTextbookId(null);
-                setTextbookForm({ name: "", description: "" });
-                setTextbookDialogOpen(true);
-              }}
-            >
-              <Plus className="w-4 h-4 mr-1" />新建课本
-            </Button>
-
-            {/* Textbook list with expandable units */}
-            {textbooksLoading ? <Loader2 className="w-6 h-6 animate-spin text-gray-400 mx-auto" /> :
-            !textbooks?.length ? <p className="text-center text-gray-400 py-8">暂无课本</p> :
-            <div className="space-y-2">
-              {textbooks.map((tb) => {
-                const isExpanded = expandedTextbookId === tb.id;
-                return (
-                  <div key={tb.id} className="bg-white rounded-xl border border-gray-100 overflow-hidden">
-                    {/* Textbook header */}
-                    <div
-                      className="flex items-center gap-2 p-3 cursor-pointer hover:bg-gray-50 transition-colors"
-                      onClick={() => setExpandedTextbookId(isExpanded ? null : tb.id)}
-                    >
-                      <ChevronRight className={`w-4 h-4 text-gray-400 transition-transform ${isExpanded ? "rotate-90" : ""}`} />
-                      <BookOpen className="w-5 h-5 text-purple-400 shrink-0" />
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-1.5">
-                          <span className="text-sm font-medium truncate">{tb.name}</span>
-                          <span className="text-xs text-gray-400">{(tb as any).groupCount ?? 0}个单元</span>
-                        </div>
-                        {tb.description && <p className="text-xs text-gray-400 truncate">{tb.description}</p>}
-                      </div>
-                      <div className="flex gap-0.5 shrink-0" onClick={(e) => e.stopPropagation()}>
-                        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => { setEditingTextbookId(tb.id); setTextbookForm({ name: tb.name, description: tb.description || "" }); setTextbookDialogOpen(true); }}>
-                          <Edit3 className="w-3.5 h-3.5 text-gray-400" />
-                        </Button>
-                        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => { if (confirm(`删除"${tb.name}"？`)) deleteTextbook.mutate({ id: tb.id }); }}>
-                          <Trash2 className="w-3.5 h-3.5 text-gray-400" />
-                        </Button>
-                      </div>
-                    </div>
-
-                    {/* Expanded units list */}
-                    {isExpanded && (
-                      <div className="border-t border-gray-50 px-3 pb-3">
-                        <div className="flex items-center justify-between py-2">
-                          <span className="text-xs text-gray-400 font-medium">单元列表</span>
-                          <Button size="sm" variant="ghost" className="h-7 text-xs text-indigo-600" onClick={() => openCreateUnitDialog(tb.id)}>
-                            <Plus className="w-3.5 h-3.5 mr-1" />新建单元
-                          </Button>
-                        </div>
-                        {!expandedTextbook ? <Loader2 className="w-4 h-4 animate-spin text-gray-300" /> :
-                        !expandedTextbook.groups?.length ? <p className="text-xs text-gray-400 py-2">暂无单元</p> :
-                        <div className="space-y-1">
-                          {expandedTextbook.groups.map((unit: any, index: number) => (
-                            <div key={unit.id} className="flex items-center gap-2 p-2 rounded-lg bg-gray-50">
-                              <GripVertical className="w-3.5 h-3.5 text-gray-300 shrink-0" />
-                              <FolderOpen className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
-                              <div className="flex-1 min-w-0">
-                                <div className="flex items-center gap-1.5">
-                                  <span className="text-sm truncate">{unit.name}</span>
-                                  <span className="text-xs text-gray-400">{unit.wordCount ?? 0}词</span>
-                                </div>
-                              </div>
-                              <div className="flex gap-0.5 shrink-0">
-                                <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => { if (index > 0) { const newOrder = [...expandedTextbook.groups]; [newOrder[index-1], newOrder[index]] = [newOrder[index], newOrder[index-1]]; } }} disabled={index === 0}>
-                                  <ChevronUp className="w-3.5 h-3.5 text-gray-400" />
-                                </Button>
-                                <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => { if (index < expandedTextbook.groups.length - 1) { const newOrder = [...expandedTextbook.groups]; [newOrder[index], newOrder[index+1]] = [newOrder[index+1], newOrder[index]]; } }} disabled={index === expandedTextbook.groups.length - 1}>
-                                  <ChevronDown className="w-3.5 h-3.5 text-gray-400" />
-                                </Button>
-                                <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => openEditUnitDialog(unit)}>
-                                  <Edit3 className="w-3 h-3 text-gray-400" />
-                                </Button>
-                                <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => { if (confirm(`删除"${unit.name}"？`)) deleteUnit.mutate({ id: unit.id }); }}>
-                                  <Trash2 className="w-3 h-3 text-gray-400" />
-                                </Button>
-                              </div>
-                            </div>
-                          ))}
-                        </div>}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>}
-
-            {/* Textbook Dialog */}
-            <Dialog open={textbookDialogOpen} onOpenChange={setTextbookDialogOpen}>
-              <DialogContent className="sm:max-w-md">
-                <DialogHeader>
-                  <DialogTitle>{editingTextbookId ? "编辑课本" : "新建课本"}</DialogTitle>
-                </DialogHeader>
-                <div className="space-y-4 pt-2">
-                  <div>
-                    <Label className="text-sm">课本名称</Label>
-                    <Input value={textbookForm.name} onChange={(e) => setTextbookForm((p) => ({ ...p, name: e.target.value }))} placeholder="课本名称" className="h-10 mt-1" autoFocus />
-                  </div>
-                  <div>
-                    <Label className="text-sm">描述（可选）</Label>
-                    <Input value={textbookForm.description} onChange={(e) => setTextbookForm((p) => ({ ...p, description: e.target.value }))} placeholder="描述" className="h-10 mt-1" />
-                  </div>
-                  <div className="flex gap-2 pt-2">
-                    <Button variant="outline" className="flex-1 h-10" onClick={() => setTextbookDialogOpen(false)}>取消</Button>
-                    <Button className="flex-1 h-10 bg-gradient-to-r from-purple-500 to-violet-600" disabled={!textbookForm.name.trim() || createTextbook.isPending || updateTextbook.isPending} onClick={() => {
-                      if (editingTextbookId) { updateTextbook.mutate({ id: editingTextbookId, ...textbookForm }); }
-                      else { createTextbook.mutate(textbookForm); }
-                    }}>
-                      {createTextbook.isPending || updateTextbook.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : editingTextbookId ? "保存" : "创建"}
-                    </Button>
-                  </div>
-                </div>
-              </DialogContent>
-            </Dialog>
-
-            {/* Unit Dialog */}
-            <Dialog open={unitDialogOpen} onOpenChange={setUnitDialogOpen}>
-              <DialogContent className="sm:max-w-md">
-                <DialogHeader>
-                  <DialogTitle>{editingUnitId ? "编辑单元" : "新建单元"}</DialogTitle>
-                </DialogHeader>
-                <div className="space-y-4 pt-2">
-                  <div>
-                    <Label className="text-sm">单元名称</Label>
-                    <Input value={unitForm.name} onChange={(e) => setUnitForm((p) => ({ ...p, name: e.target.value }))} placeholder="如：Unit 1" className="h-10 mt-1" autoFocus />
-                  </div>
-                  <div>
-                    <Label className="text-sm">描述（可选）</Label>
-                    <Input value={unitForm.description} onChange={(e) => setUnitForm((p) => ({ ...p, description: e.target.value }))} placeholder="描述" className="h-10 mt-1" />
-                  </div>
-                  <div className="flex gap-2 pt-2">
-                    <Button variant="outline" className="flex-1 h-10" onClick={() => setUnitDialogOpen(false)}>取消</Button>
-                    <Button className="flex-1 h-10 bg-gradient-to-r from-indigo-500 to-blue-600" disabled={!unitForm.name.trim() || createUnit.isPending || updateUnit.isPending} onClick={handleUnitSubmit}>
-                      {createUnit.isPending || updateUnit.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : editingUnitId ? "保存" : "创建"}
-                    </Button>
-                  </div>
-                </div>
-              </DialogContent>
-            </Dialog>
-          </div>
-        )}
 
         {/* ========== TAGS ========== */}
         {activeTab === "tags" && (
@@ -448,6 +300,154 @@ export default function ManagePage() {
                   >
                     删除
                   </Button>
+                </div>
+              </DialogContent>
+            </Dialog>
+          </div>
+        )}
+
+        {/* ========== TEXTBOOKS + UNITS ========== */}
+        {activeTab === "textbooks" && (
+          <div className="space-y-4">
+            {/* Add button */}
+            <Button
+              className="h-9 px-4 bg-gradient-to-r from-purple-500 to-violet-600 text-sm"
+              onClick={() => {
+                setEditingTextbookId(null);
+                setTextbookForm({ name: "", description: "" });
+                setTextbookDialogOpen(true);
+              }}
+            >
+              <Plus className="w-4 h-4 mr-1" />新建课本
+            </Button>
+
+            {/* Textbook list with expandable units */}
+            {textbooksLoading ? <Loader2 className="w-6 h-6 animate-spin text-gray-400 mx-auto" /> :
+            !textbooks?.length ? <p className="text-center text-gray-400 py-8">暂无课本</p> :
+            <div className="space-y-2">
+              {textbooks.map((tb) => {
+                const isExpanded = expandedTextbookId === tb.id;
+                return (
+                  <div key={tb.id} className="bg-white rounded-xl border border-gray-100 overflow-hidden">
+                    {/* Textbook header */}
+                    <div
+                      className="flex items-center gap-2 p-3 cursor-pointer hover:bg-gray-50 transition-colors"
+                      onClick={() => setExpandedTextbookId(isExpanded ? null : tb.id)}
+                    >
+                      <ChevronRight className={`w-4 h-4 text-gray-400 transition-transform ${isExpanded ? "rotate-90" : ""}`} />
+                      <BookOpen className="w-5 h-5 text-purple-400 shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-sm font-medium truncate">{tb.name}</span>
+                          <span className="text-xs text-gray-400">{(tb as any).groupCount ?? 0}个单元</span>
+                        </div>
+                        {tb.description && <p className="text-xs text-gray-400 truncate">{tb.description}</p>}
+                      </div>
+                      <div className="flex gap-0.5 shrink-0" onClick={(e) => e.stopPropagation()}>
+                        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => { setEditingTextbookId(tb.id); setTextbookForm({ name: tb.name, description: tb.description || "" }); setTextbookDialogOpen(true); }}>
+                          <Edit3 className="w-3.5 h-3.5 text-gray-400" />
+                        </Button>
+                        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => { if (confirm(`删除"${tb.name}"？`)) deleteTextbook.mutate({ id: tb.id }); }}>
+                          <Trash2 className="w-3.5 h-3.5 text-gray-400" />
+                        </Button>
+                      </div>
+                    </div>
+
+                    {/* Expanded units list */}
+                    {isExpanded && (
+                      <div className="border-t border-gray-50 px-3 pb-3">
+                        <div className="flex items-center justify-between py-2">
+                          <span className="text-xs text-gray-400 font-medium">单元列表</span>
+                          <Button size="sm" variant="ghost" className="h-7 text-xs text-indigo-600" onClick={() => openCreateUnitDialog(tb.id)}>
+                            <Plus className="w-3.5 h-3.5 mr-1" />新建单元
+                          </Button>
+                        </div>
+                        {!expandedTextbook ? <Loader2 className="w-4 h-4 animate-spin text-gray-300" /> :
+                        !expandedTextbook.groups?.length ? <p className="text-xs text-gray-400 py-2">暂无单元</p> :
+                        <div className="space-y-1">
+                          {expandedTextbook.groups.map((unit: any, index: number) => (
+                            <div key={unit.id} className="flex items-center gap-2 p-2 rounded-lg bg-gray-50">
+                              <GripVertical className="w-3.5 h-3.5 text-gray-300 shrink-0" />
+                              <FolderOpen className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-1.5">
+                                  <span className="text-sm truncate">{unit.name}</span>
+                                  <span className="text-xs text-gray-400">{unit.wordCount ?? 0}词</span>
+                                </div>
+                              </div>
+                              <div className="flex gap-0.5 shrink-0">
+                                <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => { if (index > 0) { const newOrder = [...expandedTextbook.groups]; [newOrder[index-1], newOrder[index]] = [newOrder[index], newOrder[index-1]]; } }} disabled={index === 0}>
+                                  <ChevronUp className="w-3.5 h-3.5 text-gray-400" />
+                                </Button>
+                                <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => { if (index < expandedTextbook.groups.length - 1) { const newOrder = [...expandedTextbook.groups]; [newOrder[index], newOrder[index+1]] = [newOrder[index+1], newOrder[index]]; } }} disabled={index === expandedTextbook.groups.length - 1}>
+                                  <ChevronDown className="w-3.5 h-3.5 text-gray-400" />
+                                </Button>
+                                <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => openEditUnitDialog(unit)}>
+                                  <Edit3 className="w-3 h-3 text-gray-400" />
+                                </Button>
+                                <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => { if (confirm(`删除"${unit.name}"？`)) deleteUnit.mutate({ id: unit.id }); }}>
+                                  <Trash2 className="w-3 h-3 text-gray-400" />
+                                </Button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>}
+
+            {/* Textbook Dialog */}
+            <Dialog open={textbookDialogOpen} onOpenChange={setTextbookDialogOpen}>
+              <DialogContent className="sm:max-w-md">
+                <DialogHeader>
+                  <DialogTitle>{editingTextbookId ? "编辑课本" : "新建课本"}</DialogTitle>
+                </DialogHeader>
+                <div className="space-y-4 pt-2">
+                  <div>
+                    <Label className="text-sm">课本名称</Label>
+                    <Input value={textbookForm.name} onChange={(e) => setTextbookForm((p) => ({ ...p, name: e.target.value }))} placeholder="课本名称" className="h-10 mt-1" autoFocus />
+                  </div>
+                  <div>
+                    <Label className="text-sm">描述（可选）</Label>
+                    <Input value={textbookForm.description} onChange={(e) => setTextbookForm((p) => ({ ...p, description: e.target.value }))} placeholder="描述" className="h-10 mt-1" />
+                  </div>
+                  <div className="flex gap-2 pt-2">
+                    <Button variant="outline" className="flex-1 h-10" onClick={() => setTextbookDialogOpen(false)}>取消</Button>
+                    <Button className="flex-1 h-10 bg-gradient-to-r from-purple-500 to-violet-600" disabled={!textbookForm.name.trim() || createTextbook.isPending || updateTextbook.isPending} onClick={() => {
+                      if (editingTextbookId) { updateTextbook.mutate({ id: editingTextbookId, ...textbookForm }); }
+                      else { createTextbook.mutate(textbookForm); }
+                    }}>
+                      {createTextbook.isPending || updateTextbook.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : editingTextbookId ? "保存" : "创建"}
+                    </Button>
+                  </div>
+                </div>
+              </DialogContent>
+            </Dialog>
+
+            {/* Unit Dialog */}
+            <Dialog open={unitDialogOpen} onOpenChange={setUnitDialogOpen}>
+              <DialogContent className="sm:max-w-md">
+                <DialogHeader>
+                  <DialogTitle>{editingUnitId ? "编辑单元" : "新建单元"}</DialogTitle>
+                </DialogHeader>
+                <div className="space-y-4 pt-2">
+                  <div>
+                    <Label className="text-sm">单元名称</Label>
+                    <Input value={unitForm.name} onChange={(e) => setUnitForm((p) => ({ ...p, name: e.target.value }))} placeholder="如：Unit 1" className="h-10 mt-1" autoFocus />
+                  </div>
+                  <div>
+                    <Label className="text-sm">描述（可选）</Label>
+                    <Input value={unitForm.description} onChange={(e) => setUnitForm((p) => ({ ...p, description: e.target.value }))} placeholder="描述" className="h-10 mt-1" />
+                  </div>
+                  <div className="flex gap-2 pt-2">
+                    <Button variant="outline" className="flex-1 h-10" onClick={() => setUnitDialogOpen(false)}>取消</Button>
+                    <Button className="flex-1 h-10 bg-gradient-to-r from-indigo-500 to-blue-600" disabled={!unitForm.name.trim() || createUnit.isPending || updateUnit.isPending} onClick={handleUnitSubmit}>
+                      {createUnit.isPending || updateUnit.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : editingUnitId ? "保存" : "创建"}
+                    </Button>
+                  </div>
                 </div>
               </DialogContent>
             </Dialog>

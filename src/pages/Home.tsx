@@ -99,7 +99,7 @@ export default function Home() {
         {/* ===== Filter Bar: dropdowns + search ===== */}
         <div className="bg-white rounded-xl border border-gray-100 p-3 mb-4 space-y-2.5">
           {/* Row 1: Three dropdowns + search */}
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             {/* Textbook dropdown */}
             <div className="relative shrink-0">
               <select
@@ -163,7 +163,7 @@ export default function Home() {
             </div>
 
             {/* Search input */}
-            <div className="relative flex-1 min-w-0">
+            <div className="relative flex-1 min-w-[120px]">
               <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
               <Input
                 type="text"
