@@ -106,6 +106,7 @@ export default function Login() {
             </div>
           )}
 
+          <form onSubmit={(e) => { e.preventDefault(); handleSubmit(); }} className="space-y-4">
           {/* Nickname */}
           <div className="space-y-1.5">
             <Label className="text-sm">昵称</Label>
@@ -179,8 +180,8 @@ export default function Login() {
 
           {/* Submit */}
           <Button
+            type="submit"
             className="w-full h-11 bg-gradient-to-r from-indigo-500 to-blue-600 hover:from-indigo-600 hover:to-blue-700 text-white shadow-lg"
-            onClick={handleSubmit}
             disabled={isPending}
           >
             {isPending ? (
@@ -191,6 +192,7 @@ export default function Login() {
               "注册"
             )}
           </Button>
+          </form>
 
           {/* Toggle mode */}
           <div className="text-center text-sm">
