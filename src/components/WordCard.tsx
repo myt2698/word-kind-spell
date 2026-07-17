@@ -68,7 +68,6 @@ export default function WordCard({ word, onEdit, onDelete }: WordCardProps) {
       utils.tag.list.invalidate();
       utils.tag.listWithCount.invalidate();
       utils.word.list.invalidate();
-      setEditTagOpen(false);
     },
   });
 
@@ -315,11 +314,18 @@ export default function WordCard({ word, onEdit, onDelete }: WordCardProps) {
               <Button
                 className="flex-1 h-10 bg-gradient-to-r from-emerald-500 to-teal-600"
                 disabled={!editTagForm.name.trim() || updateTag.isPending}
-                onClick={() => updateTag.mutate({
-                  id: editTagForm.id,
-                  name: editTagForm.name,
-                  description: editTagForm.description || undefined,
-                })}
+                onClick={() => {
+                  updateTag.mutate(
+                    {
+                      id: editTagForm.id,
+                      name: editTagForm.name,
+                      description: editTagForm.description || undefined,
+                    },
+                    {
+                      onSuccess: () => setEditTagOpen(false),
+                    }
+                  );
+                }}
               >
                 {updateTag.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : "保存"}
               </Button>
