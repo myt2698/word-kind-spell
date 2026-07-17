@@ -36,6 +36,9 @@ export default function ManagePage() {
   const [unitForm, setUnitForm] = useState({ name: "", description: "", textbookId: null as number | null });
   const [editingUnitId, setEditingUnitId] = useState<number | null>(null);
 
+  // Textbook dialog state
+  const [textbookDialogOpen, setTextbookDialogOpen] = useState(false);
+
   // Tag state
   const { data: allTags, isLoading: tagsLoading } = trpc.tag.listWithCount.useQuery();
   const [tagForm, setTagForm] = useState({ name: "", description: "" });
@@ -151,25 +154,17 @@ export default function ManagePage() {
         {/* ========== TEXTBOOKS + UNITS ========== */}
         {activeTab === "textbooks" && (
           <div className="space-y-4">
-            {/* Create textbook form */}
-            <div className="bg-white rounded-xl border border-gray-100 p-4 space-y-3">
-              <Label className="text-sm">{editingTextbookId ? "编辑课本" : "新建课本"}</Label>
-              <Input value={textbookForm.name} onChange={(e) => setTextbookForm((p) => ({ ...p, name: e.target.value }))} placeholder="课本名称" className="h-10" />
-              <Input value={textbookForm.description} onChange={(e) => setTextbookForm((p) => ({ ...p, description: e.target.value }))} placeholder="描述（可选）" className="h-10" />
-              <div className="flex gap-2">
-                {editingTextbookId && (
-                  <Button variant="outline" className="h-9" onClick={() => { setEditingTextbookId(null); setTextbookForm({ name: "", description: "" }); }}>
-                    <X className="w-3.5 h-3.5 mr-1" />取消
-                  </Button>
-                )}
-                <Button className="h-9 bg-gradient-to-r from-purple-500 to-violet-600" disabled={!textbookForm.name.trim()} onClick={() => {
-                  if (editingTextbookId) { updateTextbook.mutate({ id: editingTextbookId, ...textbookForm }); }
-                  else { createTextbook.mutate(textbookForm); }
-                }}>
-                  {editingTextbookId ? "保存" : "创建课本"}
-                </Button>
-              </div>
-            </div>
+            {/* Add button */}
+            <Button
+              className="h-9 px-4 bg-gradient-to-r from-purple-500 to-violet-600 text-sm"
+              onClick={() => {
+                setEditingTextbookId(null);
+                setTextbookForm({ name: "", description: "" });
+                setTextbookDialogOpen(true);
+              }}
+            >
+              <Plus className="w-4 h-4 mr-1" />新建课本
+            </Button>
 
             {/* Textbook list with expandable units */}
             {textbooksLoading ? <Loader2 className="w-6 h-6 animate-spin text-gray-400 mx-auto" /> :
@@ -194,7 +189,7 @@ export default function ManagePage() {
                         {tb.description && <p className="text-xs text-gray-400 truncate">{tb.description}</p>}
                       </div>
                       <div className="flex gap-0.5 shrink-0" onClick={(e) => e.stopPropagation()}>
-                        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => { setEditingTextbookId(tb.id); setTextbookForm({ name: tb.name, description: tb.description || "" }); }}>
+                        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => { setEditingTextbookId(tb.id); setTextbookForm({ name: tb.name, description: tb.description || "" }); setTextbookDialogOpen(true); }}>
                           <Edit3 className="w-3.5 h-3.5 text-gray-400" />
                         </Button>
                         <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => { if (confirm(`删除"${tb.name}"？`)) deleteTextbook.mutate({ id: tb.id }); }}>
@@ -249,6 +244,34 @@ export default function ManagePage() {
               })}
             </div>}
 
+            {/* Textbook Dialog */}
+            <Dialog open={textbookDialogOpen} onOpenChange={setTextbookDialogOpen}>
+              <DialogContent className="sm:max-w-md">
+                <DialogHeader>
+                  <DialogTitle>{editingTextbookId ? "编辑课本" : "新建课本"}</DialogTitle>
+                </DialogHeader>
+                <div className="space-y-4 pt-2">
+                  <div>
+                    <Label className="text-sm">课本名称</Label>
+                    <Input value={textbookForm.name} onChange={(e) => setTextbookForm((p) => ({ ...p, name: e.target.value }))} placeholder="课本名称" className="h-10 mt-1" autoFocus />
+                  </div>
+                  <div>
+                    <Label className="text-sm">描述（可选）</Label>
+                    <Input value={textbookForm.description} onChange={(e) => setTextbookForm((p) => ({ ...p, description: e.target.value }))} placeholder="描述" className="h-10 mt-1" />
+                  </div>
+                  <div className="flex gap-2 pt-2">
+                    <Button variant="outline" className="flex-1 h-10" onClick={() => setTextbookDialogOpen(false)}>取消</Button>
+                    <Button className="flex-1 h-10 bg-gradient-to-r from-purple-500 to-violet-600" disabled={!textbookForm.name.trim() || createTextbook.isPending || updateTextbook.isPending} onClick={() => {
+                      if (editingTextbookId) { updateTextbook.mutate({ id: editingTextbookId, ...textbookForm }); }
+                      else { createTextbook.mutate(textbookForm); }
+                    }}>
+                      {createTextbook.isPending || updateTextbook.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : editingTextbookId ? "保存" : "创建"}
+                    </Button>
+                  </div>
+                </div>
+              </DialogContent>
+            </Dialog>
+
             {/* Unit Dialog */}
             <Dialog open={unitDialogOpen} onOpenChange={setUnitDialogOpen}>
               <DialogContent className="sm:max-w-md">
@@ -281,14 +304,14 @@ export default function ManagePage() {
           <div className="space-y-4">
             {/* Add button */}
             <Button
-              className="w-full h-11 bg-gradient-to-r from-emerald-500 to-teal-600"
+              className="h-9 px-4 bg-gradient-to-r from-emerald-500 to-teal-600 text-sm"
               onClick={() => {
                 setEditingTagId(null);
                 setTagForm({ name: "", description: "" });
                 setTagDialogOpen(true);
               }}
             >
-              <Plus className="w-4 h-4 mr-1.5" />新建标签
+              <Plus className="w-4 h-4 mr-1" />新建标签
             </Button>
 
             {/* Tag grid - uniform fixed-width chips */}
