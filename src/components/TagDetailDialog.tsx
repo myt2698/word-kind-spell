@@ -15,9 +15,10 @@ interface TagDetailDialogProps {
   open: boolean;
   onClose: () => void;
   onEdit?: (tag: { id: number; name: string; description: string | null }) => void;
+  onEditWord?: (word: { id: number; word: string; phonetic: string | null; definition: string; example: string | null; notes: string | null; proficiency: string; groupId: number | null; groupName: string | null; tags: { id: number; name: string }[] }) => void;
 }
 
-export default function TagDetailDialog({ tagId, open, onClose, onEdit }: TagDetailDialogProps) {
+export default function TagDetailDialog({ tagId, open, onClose, onEdit, onEditWord }: TagDetailDialogProps) {
   const { data, isLoading } = trpc.tag.getById.useQuery(
     { id: tagId! },
     { enabled: !!tagId && open }
@@ -114,27 +115,41 @@ export default function TagDetailDialog({ tagId, open, onClose, onEdit }: TagDet
                     </div>
                   </div>
 
-                  {/* Right: other tags */}
-                  {word.tags.length > 1 && (
-                    <div className="flex flex-wrap gap-1 shrink-0 max-w-[120px] justify-end">
-                      {word.tags
-                        .filter((t) => t.id !== tagId)
-                        .slice(0, 3)
-                        .map((t) => (
-                          <span
-                            key={t.id}
-                            className="text-[10px] px-1.5 py-0.5 bg-indigo-50 text-indigo-500 rounded-md"
-                          >
-                            {t.name}
+                  {/* Right: edit + other tags */}
+                  <div className="flex flex-col items-end gap-1.5 shrink-0">
+                    {onEditWord && (
+                      <button
+                        onClick={() => {
+                          onEditWord(word);
+                          onClose();
+                        }}
+                        className="p-1 rounded-md hover:bg-gray-200 text-gray-400 hover:text-indigo-500 transition-colors"
+                        title="编辑单词"
+                      >
+                        <Edit3 className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                    {word.tags.length > 1 && (
+                      <div className="flex flex-wrap gap-1 max-w-[120px] justify-end">
+                        {word.tags
+                          .filter((t) => t.id !== tagId)
+                          .slice(0, 3)
+                          .map((t) => (
+                            <span
+                              key={t.id}
+                              className="text-[10px] px-1.5 py-0.5 bg-indigo-50 text-indigo-500 rounded-md"
+                            >
+                              {t.name}
+                            </span>
+                          ))}
+                        {word.tags.filter((t) => t.id !== tagId).length > 3 && (
+                          <span className="text-[10px] text-gray-400">
+                            +{word.tags.filter((t) => t.id !== tagId).length - 3}
                           </span>
-                        ))}
-                      {word.tags.filter((t) => t.id !== tagId).length > 3 && (
-                        <span className="text-[10px] text-gray-400">
-                          +{word.tags.filter((t) => t.id !== tagId).length - 3}
-                        </span>
-                      )}
-                    </div>
-                  )}
+                        )}
+                      </div>
+                    )}
+                  </div>
                 </div>
               ))}
             </div>
