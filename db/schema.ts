@@ -7,6 +7,7 @@ import {
   timestamp,
   bigint,
   int,
+  boolean,
   uniqueIndex,
 } from "drizzle-orm/mysql-core";
 
@@ -42,6 +43,8 @@ export const textbooks = mysqlTable("textbooks", {
     .references(() => users.id, { onDelete: "cascade" }),
   name: varchar("name", { length: 100 }).notNull(),
   description: text("description"),
+  // isDefault=1 表示"扩展词汇"默认课本，不显示在管理列表中
+  isDefault: boolean("isDefault").default(false).notNull(),
   sortOrder: int("sortOrder").default(0).notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt")

@@ -54,7 +54,7 @@ export interface WordFormData {
 
 export default function WordForm({ open, onClose, onSubmit, editWord }: WordFormProps) {
   const utils = trpc.useUtils();
-  const { data: textbooks } = trpc.textbook.list.useQuery();
+  const { data: textbooks } = trpc.textbook.listWithDefault.useQuery();
   const { data: allTags } = trpc.tag.list.useQuery();
   const { data: userSettings } = trpc.wordGroup.getSettings.useQuery();
 
@@ -153,18 +153,34 @@ export default function WordForm({ open, onClose, onSubmit, editWord }: WordForm
         const savedTextbookId = lastTextbookId ? Number(lastTextbookId) : null;
         const savedUnitId = lastUnitId ? Number(lastUnitId) : null;
 
-        // If previously selected a textbook, restore it; otherwise default to "none"
-        setSelectedTextbookId(savedTextbookId);
-        setForm({
-          word: "",
-          phonetic: "",
-          definition: "",
-          example: "",
-          notes: "",
-          groupId: savedUnitId ?? undefined,
-          tagIds: [],
-          proficiency: "new",
-        });
+        if (savedTextbookId) {
+          // Restore last selection
+          setSelectedTextbookId(savedTextbookId);
+          setForm({
+            word: "",
+            phonetic: "",
+            definition: "",
+            example: "",
+            notes: "",
+            groupId: savedUnitId ?? undefined,
+            tagIds: [],
+            proficiency: "new",
+          });
+        } else {
+          // No previous selection: default to "扩展词汇" textbook
+          const defaultTb = textbooks?.find((tb: any) => tb.isDefault);
+          setSelectedTextbookId(defaultTb?.id ?? null);
+          setForm({
+            word: "",
+            phonetic: "",
+            definition: "",
+            example: "",
+            notes: "",
+            groupId: undefined,
+            tagIds: [],
+            proficiency: "new",
+          });
+        }
       }
     }
     // Track previous open state
@@ -208,12 +224,20 @@ export default function WordForm({ open, onClose, onSubmit, editWord }: WordForm
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.word.trim() || !form.definition.trim()) return;
-    // Save last selection to localStorage
-    if (selectedTextbookId) {
+    // Save last selection to localStorage (skip default "扩展词汇" textbook)
+    const defaultTbId = textbooks?.find((tb: any) => tb.isDefault)?.id;
+    const isDefaultTextbook = selectedTextbookId === defaultTbId;
+    if (selectedTextbookId && !isDefaultTextbook) {
       localStorage.setItem(LAST_TEXTBOOK_KEY, String(selectedTextbookId));
-    }
-    if (form.groupId) {
-      localStorage.setItem(LAST_UNIT_KEY, String(form.groupId));
+      if (form.groupId) {
+        localStorage.setItem(LAST_UNIT_KEY, String(form.groupId));
+      } else {
+        localStorage.removeItem(LAST_UNIT_KEY);
+      }
+    } else {
+      // Default textbook or none: clear saved selection
+      localStorage.removeItem(LAST_TEXTBOOK_KEY);
+      localStorage.removeItem(LAST_UNIT_KEY);
     }
     onSubmit(form);
     onClose();
@@ -502,8 +526,8 @@ export default function WordForm({ open, onClose, onSubmit, editWord }: WordForm
               </SelectContent>
             </Select>
 
-            {/* Unit selector - only show when textbook selected */}
-            {selectedTextbookId && (
+            {/* Unit selector - only show when a non-default textbook is selected */}
+            {selectedTextbookId && !textbooks?.find((tb: any) => tb.id === selectedTextbookId)?.isDefault && (
               <Select
                 value={form.groupId == null ? "none" : String(form.groupId)}
                 onValueChange={(v) =>
