@@ -482,6 +482,7 @@ export default function WordForm({ open, onClose, onSubmit, editWord }: WordForm
             </Label>
             {/* Textbook selector */}
             <Select
+              key={`tb-${textbooks?.length ?? -1}-${selectedTextbookId ?? "none"}`}
               value={selectedTextbookId?.toString() || "none"}
               onValueChange={(v) => {
                 const tbId = v === "none" ? null : parseInt(v);
@@ -505,6 +506,7 @@ export default function WordForm({ open, onClose, onSubmit, editWord }: WordForm
             {/* Unit selector - only show when textbook selected */}
             {selectedTextbookId && (
               <Select
+                key={`unit-${units?.length ?? -1}-${form.groupId ?? "none"}`}
                 value={form.groupId?.toString() || "none"}
                 onValueChange={(v) =>
                   updateForm({ groupId: v === "none" ? undefined : parseInt(v) })
