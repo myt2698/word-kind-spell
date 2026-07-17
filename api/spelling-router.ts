@@ -1,6 +1,7 @@
 /**
  * Spelling Practice Router
- * - Ebbinghaus review queue
+ * - Learning queue (manual user-controlled)
+ * - Ebbinghaus review queue (auto-scheduled)
  * - Practice result recording
  * - Error book
  * - Statistics
@@ -26,12 +27,21 @@ function calculateNextReview(level: number, streak: number): Date {
 }
 
 export const spellingRouter = createRouter({
-  // Initialize spelling record for a word
-  init: authedQuery
+  // ========== Learning Queue (Manual) ==========
+
+  // Add a word to the learning queue
+  addToLearning: authedQuery
     .input(z.object({ wordId: z.number() }))
     .mutation(async ({ ctx, input }) => {
       const db = getDb();
-      // Check if already exists
+
+      // 1. Mark word as active
+      await db
+        .update(words)
+        .set({ learningStatus: "active" })
+        .where(and(eq(words.id, input.wordId), eq(words.userId, ctx.user.id)));
+
+      // 2. Create or update wordSpellings record with source=manual
       const existing = await db
         .select()
         .from(wordSpellings)
@@ -43,63 +53,171 @@ export const spellingRouter = createRouter({
         )
         .limit(1);
 
-      if (existing.length > 0) return { id: existing[0].id, created: false };
+      if (existing.length > 0) {
+        // Update to manual source and reset to level 1 for immediate review
+        await db
+          .update(wordSpellings)
+          .set({
+            source: "manual",
+            level: 1,
+            nextReviewAt: new Date(), // Start immediately
+            streak: 0,
+          })
+          .where(eq(wordSpellings.id, existing[0].id));
+      } else {
+        await db.insert(wordSpellings).values({
+          wordId: input.wordId,
+          userId: ctx.user.id,
+          level: 1,
+          nextReviewAt: new Date(), // Start immediately
+          streak: 0,
+          errorCount: 0,
+          totalAttempts: 0,
+          totalCorrect: 0,
+          source: "manual",
+        });
+      }
 
-      const result = await db.insert(wordSpellings).values({
-        wordId: input.wordId,
-        userId: ctx.user.id,
-        level: 1,
-        nextReviewAt: new Date(),
-        streak: 0,
-        errorCount: 0,
-        totalAttempts: 0,
-        totalCorrect: 0,
-      });
-      return { id: Number(result[0].insertId), created: true };
+      return { success: true };
     }),
 
-  // Get review queue (words due for review)
+  // Remove a word from the learning queue
+  removeFromLearning: authedQuery
+    .input(z.object({ wordId: z.number() }))
+    .mutation(async ({ ctx, input }) => {
+      const db = getDb();
+
+      // Mark word as idle
+      await db
+        .update(words)
+        .set({ learningStatus: "idle" })
+        .where(and(eq(words.id, input.wordId), eq(words.userId, ctx.user.id)));
+
+      // Change source back to auto
+      await db
+        .update(wordSpellings)
+        .set({ source: "auto" })
+        .where(
+          and(
+            eq(wordSpellings.wordId, input.wordId),
+            eq(wordSpellings.userId, ctx.user.id)
+          )
+        );
+
+      return { success: true };
+    }),
+
+  // Pause a word (keep in queue but temporarily skip)
+  pauseLearning: authedQuery
+    .input(z.object({ wordId: z.number() }))
+    .mutation(async ({ ctx, input }) => {
+      const db = getDb();
+
+      await db
+        .update(words)
+        .set({ learningStatus: "paused" })
+        .where(and(eq(words.id, input.wordId), eq(words.userId, ctx.user.id)));
+
+      // Push next review to tomorrow
+      const tomorrow = new Date(Date.now() + 24 * 60 * 60 * 1000);
+      await db
+        .update(wordSpellings)
+        .set({ nextReviewAt: tomorrow })
+        .where(
+          and(
+            eq(wordSpellings.wordId, input.wordId),
+            eq(wordSpellings.userId, ctx.user.id)
+          )
+        );
+
+      return { success: true };
+    }),
+
+  // Get learning status for a word
+  getStatus: authedQuery
+    .input(z.object({ wordId: z.number() }))
+    .query(async ({ ctx, input }) => {
+      const db = getDb();
+
+      const wordRows = await db
+        .select({ learningStatus: words.learningStatus })
+        .from(words)
+        .where(and(eq(words.id, input.wordId), eq(words.userId, ctx.user.id)))
+        .limit(1);
+
+      const spellingRows = await db
+        .select({ source: wordSpellings.source })
+        .from(wordSpellings)
+        .where(
+          and(
+            eq(wordSpellings.wordId, input.wordId),
+            eq(wordSpellings.userId, ctx.user.id)
+          )
+        )
+        .limit(1);
+
+      return {
+        learningStatus: wordRows[0]?.learningStatus || "idle",
+        isInQueue: spellingRows.length > 0,
+        source: spellingRows[0]?.source || null,
+      };
+    }),
+
+  // Get words currently in learning (active status)
+  getLearningQueue: authedQuery.query(async ({ ctx }) => {
+    const db = getDb();
+
+    const activeWords = await db
+      .select()
+      .from(words)
+      .where(
+        and(
+          eq(words.userId, ctx.user.id),
+          eq(words.learningStatus, "active")
+        )
+      )
+      .orderBy(desc(words.createdAt));
+
+    const wordIds = activeWords.map((w) => w.id);
+    if (wordIds.length === 0) return [];
+
+    const spellingRecords = await db
+      .select()
+      .from(wordSpellings)
+      .where(
+        and(
+          eq(wordSpellings.userId, ctx.user.id),
+          inArray(wordSpellings.wordId, wordIds)
+        )
+      );
+
+    const spMap = new Map(spellingRecords.map((r) => [r.wordId, r]));
+
+    return activeWords.map((w) => {
+      const sp = spMap.get(w.id);
+      return {
+        id: w.id,
+        word: w.word,
+        phonetic: w.phonetic,
+        definition: w.definition,
+        example: w.example,
+        groupId: w.groupId,
+        level: (sp?.level ?? 1) as 1 | 2 | 3,
+        nextReviewAt: sp?.nextReviewAt || new Date(),
+        streak: sp?.streak ?? 0,
+        source: sp?.source || "auto",
+      };
+    });
+  }),
+
+  // ========== Review Queue ==========
+
+  // Get review queue - prioritize manual source words first
   getReviewQueue: authedQuery.query(async ({ ctx }) => {
     const db = getDb();
     const now = new Date();
 
-    // Auto-init: create spelling records for existing words that don't have one
-    const existingWords = await db
-      .select({ id: words.id })
-      .from(words)
-      .where(eq(words.userId, ctx.user.id));
-
-    if (existingWords.length > 0) {
-      const existingSpellings = await db
-        .select({ wordId: wordSpellings.wordId })
-        .from(wordSpellings)
-        .where(eq(wordSpellings.userId, ctx.user.id));
-
-      const spelledWordIds = new Set(existingSpellings.map((s) => s.wordId));
-      const wordsToInit = existingWords.filter((w) => !spelledWordIds.has(w.id));
-
-      if (wordsToInit.length > 0) {
-        // Batch insert in chunks of 50 to avoid too large query
-        const chunkSize = 50;
-        for (let i = 0; i < wordsToInit.length; i += chunkSize) {
-          const chunk = wordsToInit.slice(i, i + chunkSize);
-          await db.insert(wordSpellings).values(
-            chunk.map((w) => ({
-              wordId: w.id,
-              userId: ctx.user.id,
-              level: 1 as const,
-              nextReviewAt: new Date(), // Due immediately
-              streak: 0,
-              errorCount: 0,
-              totalAttempts: 0,
-              totalCorrect: 0,
-            }))
-          );
-        }
-      }
-    }
-
-    // Now get all due wordSpellings with word details
+    // Get due wordSpellings: manual source first, then auto
     const dueRecords = await db
       .select()
       .from(wordSpellings)
@@ -109,13 +227,13 @@ export const spellingRouter = createRouter({
           lte(wordSpellings.nextReviewAt, now)
         )
       )
-      .orderBy(wordSpellings.level);
+      .orderBy(wordSpellings.source, wordSpellings.level);
 
     if (dueRecords.length === 0) {
       return [];
     }
 
-    // Fetch word details for due records
+    // Fetch word details
     const wordIds = dueRecords.map((r) => r.wordId);
     const wordList = await db
       .select({
@@ -125,6 +243,7 @@ export const spellingRouter = createRouter({
         definition: words.definition,
         example: words.example,
         groupId: words.groupId,
+        learningStatus: words.learningStatus,
       })
       .from(words)
       .where(sql`${words.id} IN (${sql.join(wordIds)})`);
@@ -144,13 +263,15 @@ export const spellingRouter = createRouter({
         streak: record.streak,
         errorCount: record.errorCount,
         totalAttempts: record.totalAttempts,
-        isNew: false as const,
+        source: record.source,
+        learningStatus: word?.learningStatus || "idle",
         spellingId: record.id,
       };
     });
   }),
 
-  // Submit practice result
+  // ========== Practice Result ==========
+
   submitResult: authedQuery
     .input(
       z.object({
@@ -158,13 +279,12 @@ export const spellingRouter = createRouter({
         isCorrect: z.boolean(),
         userInput: z.string().optional(),
         practiceMode: z.enum(["blocks", "fillblank", "flash"]),
-        duration: z.number().optional(), // seconds
+        duration: z.number().optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {
       const db = getDb();
 
-      // Get current spelling record
       const records = await db
         .select()
         .from(wordSpellings)
@@ -178,7 +298,6 @@ export const spellingRouter = createRouter({
 
       let record = records[0];
 
-      // Auto-init if not exists
       if (!record) {
         const result = await db.insert(wordSpellings).values({
           wordId: input.wordId,
@@ -189,6 +308,7 @@ export const spellingRouter = createRouter({
           errorCount: 0,
           totalAttempts: 0,
           totalCorrect: 0,
+          source: "auto",
         });
         record = {
           id: Number(result[0].insertId),
@@ -201,18 +321,17 @@ export const spellingRouter = createRouter({
           errorCount: 0,
           totalAttempts: 0,
           totalCorrect: 0,
+          source: "auto",
           createdAt: new Date(),
           updatedAt: new Date(),
         };
       }
 
-      // Update based on correctness
       let newLevel = record.level;
       let newStreak = record.streak;
 
       if (input.isCorrect) {
         newStreak = record.streak + 1;
-        // Level up after 2 consecutive correct at same level
         if (newStreak >= 2 && newLevel < 3) {
           newLevel = newLevel + 1;
           newStreak = 0;
@@ -237,7 +356,6 @@ export const spellingRouter = createRouter({
         })
         .where(eq(wordSpellings.id, record.id));
 
-      // Record error if wrong
       if (!input.isCorrect && input.userInput) {
         await db.insert(spellingErrors).values({
           wordId: input.wordId,
@@ -256,7 +374,8 @@ export const spellingRouter = createRouter({
       };
     }),
 
-  // Get error book
+  // ========== Error Book ==========
+
   getErrorBook: authedQuery.query(async ({ ctx }) => {
     const db = getDb();
     const errors = await db
@@ -284,7 +403,8 @@ export const spellingRouter = createRouter({
     }));
   }),
 
-  // Get statistics
+  // ========== Statistics ==========
+
   getStats: authedQuery.query(async ({ ctx }) => {
     const db = getDb();
 
@@ -294,11 +414,27 @@ export const spellingRouter = createRouter({
       .from(words)
       .where(eq(words.userId, ctx.user.id));
 
-    // Words with spelling records
-    const practicedWords = await db
+    // Active learning words
+    const learningWords = await db
       .select({ count: count() })
-      .from(wordSpellings)
-      .where(eq(wordSpellings.userId, ctx.user.id));
+      .from(words)
+      .where(
+        and(
+          eq(words.userId, ctx.user.id),
+          eq(words.learningStatus, "active")
+        )
+      );
+
+    // Paused words
+    const pausedWords = await db
+      .select({ count: count() })
+      .from(words)
+      .where(
+        and(
+          eq(words.userId, ctx.user.id),
+          eq(words.learningStatus, "paused")
+        )
+      );
 
     // By level
     const byLevel = await db
@@ -318,6 +454,18 @@ export const spellingRouter = createRouter({
       .where(
         and(
           eq(wordSpellings.userId, ctx.user.id),
+          lte(wordSpellings.nextReviewAt, now)
+        )
+      );
+
+    // Manual source due (newly learned)
+    const manualDue = await db
+      .select({ count: count() })
+      .from(wordSpellings)
+      .where(
+        and(
+          eq(wordSpellings.userId, ctx.user.id),
+          eq(wordSpellings.source, "manual"),
           lte(wordSpellings.nextReviewAt, now)
         )
       );
@@ -343,29 +491,39 @@ export const spellingRouter = createRouter({
 
     return {
       totalWords: totalWords[0]?.count ?? 0,
-      practicedWords: practicedWords[0]?.count ?? 0,
+      learningWords: learningWords[0]?.count ?? 0,
+      pausedWords: pausedWords[0]?.count ?? 0,
       byLevel: byLevel.map((b) => ({ level: b.level, count: b.count })),
       dueForReview: dueCount[0]?.count ?? 0,
+      manualDue: manualDue[0]?.count ?? 0,
       totalErrors: totalErrors[0]?.count ?? 0,
       todaySessions: todaySessions[0]?.count ?? 0,
     };
   }),
 
-  // Get all words eligible for practice
+  // ========== Practice Words ==========
+
   getPracticeWords: authedQuery
     .input(
       z.object({
         limit: z.number().min(1).max(50).default(10),
         groupId: z.number().optional(),
+        source: z.enum(["manual", "auto", "all"]).default("all"),
       }).optional()
     )
     .query(async ({ ctx, input }) => {
       const db = getDb();
 
-      // Get user's words
-      const conditions = [eq(words.userId, ctx.user.id)];
+      // Build conditions
+      const conditions: any[] = [eq(words.userId, ctx.user.id)];
+
       if (input?.groupId) {
         conditions.push(eq(words.groupId, input.groupId));
+      }
+
+      // If source is manual, only get active learning words
+      if (input?.source === "manual") {
+        conditions.push(eq(words.learningStatus, "active"));
       }
 
       const wordList = await db
@@ -376,13 +534,14 @@ export const spellingRouter = createRouter({
           definition: words.definition,
           example: words.example,
           groupId: words.groupId,
+          learningStatus: words.learningStatus,
         })
         .from(words)
         .where(and(...conditions))
         .orderBy(desc(words.createdAt))
         .limit(input?.limit ?? 10);
 
-      // Get spelling status for these words
+      // Get spelling status
       const wordIds = wordList.map((w) => w.id);
       let spellingMap = new Map<number, typeof wordSpellings.$inferSelect>();
 
@@ -407,6 +566,7 @@ export const spellingRouter = createRouter({
           streak: sp?.streak ?? 0,
           errorCount: sp?.errorCount ?? 0,
           totalAttempts: sp?.totalAttempts ?? 0,
+          source: sp?.source || "auto",
         };
       });
     }),

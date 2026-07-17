@@ -21,6 +21,8 @@ import {
   XCircle,
   Target,
   Lightbulb,
+  GraduationCap,
+  Sparkles,
 } from "lucide-react";
 import {
   splitSyllables,
@@ -62,6 +64,7 @@ export default function SpellPage() {
 function SpellHome({ onStart }: { onStart: (mode: SpellView) => void }) {
   const { user, isLoading: authLoading } = useAuth({ redirectOnUnauthenticated: true });
   const { data: reviewQueue, isLoading } = trpc.spelling.getReviewQueue.useQuery();
+  const { data: learningQueue } = trpc.spelling.getLearningQueue.useQuery();
   const { data: stats } = trpc.spelling.getStats.useQuery();
 
   if (authLoading) {
@@ -70,6 +73,8 @@ function SpellHome({ onStart }: { onStart: (mode: SpellView) => void }) {
   if (!user) return null;
 
   const dueCount = reviewQueue?.length ?? 0;
+  const manualDue = reviewQueue?.filter((w) => w.source === "manual") ?? [];
+  const autoDue = reviewQueue?.filter((w) => w.source === "auto") ?? [];
 
   return (
     <main className="max-w-3xl mx-auto px-4 py-6 pb-24">
@@ -77,41 +82,58 @@ function SpellHome({ onStart }: { onStart: (mode: SpellView) => void }) {
         <PenLine className="w-5 h-5 text-indigo-500" />
         单词拼写
       </h1>
-      <p className="text-sm text-gray-500 mb-6">基于艾宾浩斯遗忘曲线的科学复习</p>
+      <p className="text-sm text-gray-500 mb-6">先加入学习，再按艾宾浩斯曲线复习</p>
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-3 gap-3 mb-6">
+      <div className="grid grid-cols-4 gap-3 mb-6">
         <div className="bg-white rounded-xl border border-gray-100 p-3 text-center">
-          <p className="text-2xl font-bold text-indigo-600">{stats?.dueForReview ?? 0}</p>
-          <p className="text-xs text-gray-500">待复习</p>
+          <p className="text-2xl font-bold text-emerald-600">{stats?.learningWords ?? 0}</p>
+          <p className="text-xs text-gray-500">学习中</p>
         </div>
         <div className="bg-white rounded-xl border border-gray-100 p-3 text-center">
-          <p className="text-2xl font-bold text-emerald-600">{stats?.practicedWords ?? 0}</p>
-          <p className="text-xs text-gray-500">已练习</p>
+          <p className="text-2xl font-bold text-indigo-600">{stats?.manualDue ?? 0}</p>
+          <p className="text-xs text-gray-500">新学待复习</p>
         </div>
         <div className="bg-white rounded-xl border border-gray-100 p-3 text-center">
-          <p className="text-2xl font-bold text-amber-600">{stats?.totalErrors ?? 0}</p>
+          <p className="text-2xl font-bold text-amber-600">{stats?.dueForReview ?? 0}</p>
+          <p className="text-xs text-gray-500">总待复习</p>
+        </div>
+        <div className="bg-white rounded-xl border border-gray-100 p-3 text-center">
+          <p className="text-2xl font-bold text-rose-600">{stats?.totalErrors ?? 0}</p>
           <p className="text-xs text-gray-500">错题</p>
         </div>
       </div>
 
-      {/* Review Queue */}
-      <div className="bg-white rounded-xl border border-gray-100 p-4 mb-6">
-        <h2 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
-          <Target className="w-4 h-4 text-indigo-500" />
-          今日复习队列 {dueCount > 0 && <span className="text-xs bg-indigo-100 text-indigo-600 px-2 py-0.5 rounded-full">{dueCount} 个</span>}
-        </h2>
-        {isLoading ? (
-          <Loader2 className="w-5 h-5 animate-spin text-gray-400 mx-auto" />
-        ) : !reviewQueue?.length ? (
-          <div className="text-center py-6">
-            <Trophy className="w-10 h-10 text-gray-200 mx-auto mb-2" />
-            <p className="text-sm text-gray-400">暂无待复习单词</p>
-            <p className="text-xs text-gray-400 mt-1">点击下方模式开始练习</p>
+      {/* Newly learned words (manual source) */}
+      {manualDue.length > 0 && (
+        <div className="bg-gradient-to-r from-emerald-50 to-green-50 rounded-xl border border-emerald-200 p-4 mb-4">
+          <h2 className="text-sm font-semibold text-emerald-700 mb-3 flex items-center gap-2">
+            <Sparkles className="w-4 h-4 text-emerald-500" />
+            新学单词 <span className="text-xs bg-emerald-200 text-emerald-700 px-2 py-0.5 rounded-full">{manualDue.length} 个待复习</span>
+          </h2>
+          <div className="space-y-1.5 max-h-32 overflow-y-auto">
+            {manualDue.slice(0, 8).map((w) => (
+              <div key={w.id} className="flex items-center gap-3 p-2 rounded-lg bg-white/80">
+                <span className="text-sm font-medium flex-1 text-emerald-800">{w.word}</span>
+                {w.phonetic && <span className="text-xs text-emerald-400 font-mono">{w.phonetic}</span>}
+                <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-600">
+                  新学
+                </span>
+              </div>
+            ))}
           </div>
-        ) : (
-          <div className="space-y-2 max-h-48 overflow-y-auto">
-            {reviewQueue.slice(0, 10).map((w) => (
+        </div>
+      )}
+
+      {/* Regular review queue (auto source) */}
+      {autoDue.length > 0 && (
+        <div className="bg-white rounded-xl border border-gray-100 p-4 mb-6">
+          <h2 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
+            <Clock className="w-4 h-4 text-indigo-500" />
+            复习队列 <span className="text-xs bg-indigo-100 text-indigo-600 px-2 py-0.5 rounded-full">{autoDue.length} 个</span>
+          </h2>
+          <div className="space-y-1.5 max-h-32 overflow-y-auto">
+            {autoDue.slice(0, 8).map((w) => (
               <div key={w.id} className="flex items-center gap-3 p-2 rounded-lg bg-gray-50">
                 <span className="text-sm font-medium flex-1">{w.word}</span>
                 {w.phonetic && <span className="text-xs text-gray-400 font-mono">{w.phonetic}</span>}
@@ -125,8 +147,16 @@ function SpellHome({ onStart }: { onStart: (mode: SpellView) => void }) {
               </div>
             ))}
           </div>
-        )}
-      </div>
+        </div>
+      )}
+
+      {dueCount === 0 && (
+        <div className="text-center py-6 mb-6">
+          <Trophy className="w-10 h-10 text-gray-200 mx-auto mb-2" />
+          <p className="text-sm text-gray-400">暂无待复习单词</p>
+          <p className="text-xs text-gray-400 mt-1">去单词列表加入新单词来学习吧</p>
+        </div>
+      )}
 
       {/* Mode Selection */}
       <h2 className="text-sm font-semibold text-gray-700 mb-3">选择练习模式</h2>
@@ -182,7 +212,8 @@ function SpellHome({ onStart }: { onStart: (mode: SpellView) => void }) {
 // ============================================================
 function BlocksMode({ onBack }: { onBack: () => void }) {
   const utils = trpc.useUtils();
-  const { data: words, isLoading } = trpc.spelling.getPracticeWords.useQuery({ limit: 10 });
+  // Prefer manual (newly learned) words, fallback to all
+  const { data: words, isLoading } = trpc.spelling.getPracticeWords.useQuery({ limit: 10, source: "manual" });
   const submitResult = trpc.spelling.submitResult.useMutation({
     onSuccess: () => utils.spelling.getReviewQueue.invalidate(),
   });
@@ -390,7 +421,8 @@ function BlocksMode({ onBack }: { onBack: () => void }) {
 // ============================================================
 function FillBlankMode({ onBack }: { onBack: () => void }) {
   const utils = trpc.useUtils();
-  const { data: words, isLoading } = trpc.spelling.getPracticeWords.useQuery({ limit: 10 });
+  // Prefer manual (newly learned) words, fallback to all
+  const { data: words, isLoading } = trpc.spelling.getPracticeWords.useQuery({ limit: 10, source: "manual" });
   const submitResult = trpc.spelling.submitResult.useMutation({
     onSuccess: () => utils.spelling.getReviewQueue.invalidate(),
   });
@@ -528,7 +560,8 @@ function FillBlankMode({ onBack }: { onBack: () => void }) {
 // ============================================================
 function FlashMode({ onBack }: { onBack: () => void }) {
   const utils = trpc.useUtils();
-  const { data: words, isLoading } = trpc.spelling.getPracticeWords.useQuery({ limit: 10 });
+  // Prefer manual (newly learned) words, fallback to all
+  const { data: words, isLoading } = trpc.spelling.getPracticeWords.useQuery({ limit: 10, source: "manual" });
   const submitResult = trpc.spelling.submitResult.useMutation({
     onSuccess: () => utils.spelling.getReviewQueue.invalidate(),
   });

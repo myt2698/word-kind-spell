@@ -84,6 +84,7 @@ export const wordRouter = createRouter({
           example: words.example,
           notes: words.notes,
           proficiency: words.proficiency,
+          learningStatus: words.learningStatus,
           createdAt: words.createdAt,
           updatedAt: words.updatedAt,
         })

@@ -92,6 +92,10 @@ export const words = mysqlTable("words", {
   proficiency: mysqlEnum("proficiency", ["new", "learning", "familiar", "mastered"])
     .default("new")
     .notNull(),
+  // 学习状态：idle=未学(默认) active=学习中 paused=暂停
+  learningStatus: mysqlEnum("learningStatus", ["idle", "active", "paused"])
+    .default("idle")
+    .notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt")
     .defaultNow()
@@ -174,6 +178,10 @@ export const wordSpellings = mysqlTable("word_spellings", {
   totalAttempts: int("totalAttempts").default(0).notNull(),
   // 总正确次数
   totalCorrect: int("totalCorrect").default(0).notNull(),
+  // 来源：auto=系统自动(默认) manual=用户手动加入学习
+  source: mysqlEnum("source", ["auto", "manual"])
+    .default("auto")
+    .notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt")
     .defaultNow()

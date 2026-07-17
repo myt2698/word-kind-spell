@@ -17,6 +17,8 @@ import {
   BarChart3,
   Clock,
   Award,
+  GraduationCap,
+  Pause,
 } from "lucide-react";
 
 type ProfileTab = "stats" | "errors" | "settings";
@@ -74,22 +76,22 @@ export default function ProfilePage() {
 
         {activeTab === "stats" && (
           <div className="space-y-4">
-            {/* Overall Stats */}
+            {/* Learning Stats */}
             <div className="grid grid-cols-2 gap-3">
               <div className="bg-white rounded-xl border border-gray-100 p-4 text-center">
-                <BookOpen className="w-6 h-6 text-indigo-500 mx-auto mb-1" />
-                <p className="text-2xl font-bold text-gray-900">{stats?.totalWords ?? 0}</p>
-                <p className="text-xs text-gray-500">单词总数</p>
+                <GraduationCap className="w-6 h-6 text-emerald-500 mx-auto mb-1" />
+                <p className="text-2xl font-bold text-gray-900">{stats?.learningWords ?? 0}</p>
+                <p className="text-xs text-gray-500">学习中</p>
               </div>
               <div className="bg-white rounded-xl border border-gray-100 p-4 text-center">
-                <Target className="w-6 h-6 text-emerald-500 mx-auto mb-1" />
-                <p className="text-2xl font-bold text-gray-900">{stats?.practicedWords ?? 0}</p>
-                <p className="text-xs text-gray-500">已练习</p>
+                <Pause className="w-6 h-6 text-amber-500 mx-auto mb-1" />
+                <p className="text-2xl font-bold text-gray-900">{stats?.pausedWords ?? 0}</p>
+                <p className="text-xs text-gray-500">已暂停</p>
               </div>
               <div className="bg-white rounded-xl border border-gray-100 p-4 text-center">
-                <Clock className="w-6 h-6 text-amber-500 mx-auto mb-1" />
-                <p className="text-2xl font-bold text-gray-900">{stats?.todaySessions ?? 0}</p>
-                <p className="text-xs text-gray-500">今日练习</p>
+                <Clock className="w-6 h-6 text-indigo-500 mx-auto mb-1" />
+                <p className="text-2xl font-bold text-gray-900">{stats?.manualDue ?? 0}</p>
+                <p className="text-xs text-gray-500">新学待复习</p>
               </div>
               <div className="bg-white rounded-xl border border-gray-100 p-4 text-center">
                 <Award className="w-6 h-6 text-rose-500 mx-auto mb-1" />
