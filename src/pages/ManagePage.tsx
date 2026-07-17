@@ -8,8 +8,15 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import {
   FolderOpen, Tag, BookOpen, Edit3, Trash2, ChevronUp, ChevronDown,
-  Star, GripVertical, X, Loader2,
+  Star, GripVertical, X, Loader2, Plus,
 } from "lucide-react";
 
 type ManageTab = "textbooks" | "groups" | "tags";
@@ -32,6 +39,7 @@ export default function ManagePage() {
   const { data: userSettings } = trpc.wordGroup.getSettings.useQuery();
   const [groupForm, setGroupForm] = useState({ name: "", description: "", textbookId: null as number | null });
   const [editingGroupId, setEditingGroupId] = useState<number | null>(null);
+  const [groupDialogOpen, setGroupDialogOpen] = useState(false);
 
   // Tag state
   const { data: allTags, isLoading: tagsLoading } = trpc.tag.listWithCount.useQuery();
@@ -54,10 +62,19 @@ export default function ManagePage() {
   });
 
   const createGroup = trpc.wordGroup.create.useMutation({
-    onSuccess: () => { utils.wordGroup.list.invalidate(); setGroupForm({ name: "", description: "", textbookId: null }); },
+    onSuccess: () => {
+      utils.wordGroup.list.invalidate();
+      setGroupForm({ name: "", description: "", textbookId: null });
+      setEditingGroupId(null);
+      setGroupDialogOpen(false);
+    },
   });
   const updateGroup = trpc.wordGroup.update.useMutation({
-    onSuccess: () => { utils.wordGroup.list.invalidate(); setEditingGroupId(null); },
+    onSuccess: () => {
+      utils.wordGroup.list.invalidate();
+      setEditingGroupId(null);
+      setGroupDialogOpen(false);
+    },
   });
   const deleteGroup = trpc.wordGroup.delete.useMutation({
     onSuccess: () => utils.wordGroup.list.invalidate(),
@@ -78,6 +95,26 @@ export default function ManagePage() {
   const deleteTag = trpc.tag.delete.useMutation({
     onSuccess: () => utils.tag.list.invalidate(),
   });
+
+  const openCreateGroupDialog = () => {
+    setEditingGroupId(null);
+    setGroupForm({ name: "", description: "", textbookId: selectedTextbookId });
+    setGroupDialogOpen(true);
+  };
+
+  const openEditGroupDialog = (group: any) => {
+    setEditingGroupId(group.id);
+    setGroupForm({ name: group.name, description: group.description || "", textbookId: group.textbookId || null });
+    setGroupDialogOpen(true);
+  };
+
+  const handleGroupSubmit = () => {
+    if (editingGroupId) {
+      updateGroup.mutate({ id: editingGroupId, ...groupForm, textbookId: groupForm.textbookId });
+    } else {
+      createGroup.mutate({ name: groupForm.name, description: groupForm.description, textbookId: groupForm.textbookId ?? undefined });
+    }
+  };
 
   if (authLoading) {
     return <div className="min-h-screen flex items-center justify-center"><Loader2 className="w-8 h-8 animate-spin text-indigo-500" /></div>;
@@ -162,47 +199,21 @@ export default function ManagePage() {
         {/* ========== GROUPS ========== */}
         {activeTab === "groups" && (
           <div className="space-y-4">
-            {/* Textbook filter */}
-            <div className="flex gap-2 overflow-x-auto pb-1">
-              <button onClick={() => setSelectedTextbookId(null)} className={`shrink-0 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${!selectedTextbookId ? "bg-indigo-100 text-indigo-600" : "bg-gray-100 text-gray-500"}`}>
-                全部课本
-              </button>
-              {textbooks?.map((tb) => (
-                <button key={tb.id} onClick={() => setSelectedTextbookId(tb.id)} className={`shrink-0 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${selectedTextbookId === tb.id ? "bg-indigo-100 text-indigo-600" : "bg-gray-100 text-gray-500"}`}>
-                  {tb.name}
+            {/* Textbook filter + Add button */}
+            <div className="flex items-center gap-2">
+              <div className="flex gap-2 overflow-x-auto flex-1 pb-1">
+                <button onClick={() => setSelectedTextbookId(null)} className={`shrink-0 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${!selectedTextbookId ? "bg-indigo-100 text-indigo-600" : "bg-gray-100 text-gray-500"}`}>
+                  全部课本
                 </button>
-              ))}
-            </div>
-
-            {/* Group Form */}
-            <div className="bg-white rounded-xl border border-gray-100 p-4 space-y-3">
-              <Label className="text-sm">{editingGroupId ? "编辑分组" : "新建分组"}</Label>
-              <Input value={groupForm.name} onChange={(e) => setGroupForm((p) => ({ ...p, name: e.target.value }))} placeholder="分组名称，如：Unit 1" className="h-10" />
-              <Input value={groupForm.description} onChange={(e) => setGroupForm((p) => ({ ...p, description: e.target.value }))} placeholder="描述（可选）" className="h-10" />
-              {/* Textbook selector */}
-              <select
-                value={groupForm.textbookId ?? ""}
-                onChange={(e) => setGroupForm((p) => ({ ...p, textbookId: e.target.value ? Number(e.target.value) : null }))}
-                className="w-full h-10 px-3 rounded-md border border-gray-200 text-sm bg-white"
-              >
-                <option value="">选择课本（可选）</option>
                 {textbooks?.map((tb) => (
-                  <option key={tb.id} value={tb.id}>{tb.name}</option>
+                  <button key={tb.id} onClick={() => setSelectedTextbookId(tb.id)} className={`shrink-0 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${selectedTextbookId === tb.id ? "bg-indigo-100 text-indigo-600" : "bg-gray-100 text-gray-500"}`}>
+                    {tb.name}
+                  </button>
                 ))}
-              </select>
-              <div className="flex gap-2">
-                {editingGroupId && (
-                  <Button variant="outline" className="h-9" onClick={() => { setEditingGroupId(null); setGroupForm({ name: "", description: "", textbookId: null }); }}>
-                    <X className="w-3.5 h-3.5 mr-1" />取消
-                  </Button>
-                )}
-                <Button className="h-9 bg-gradient-to-r from-indigo-500 to-blue-600" disabled={!groupForm.name.trim()} onClick={() => {
-                  if (editingGroupId) { updateGroup.mutate({ id: editingGroupId, ...groupForm, textbookId: groupForm.textbookId }); }
-                  else { createGroup.mutate({ name: groupForm.name, description: groupForm.description, textbookId: groupForm.textbookId ?? undefined }); }
-                }}>
-                  {editingGroupId ? "保存" : "创建分组"}
-                </Button>
               </div>
+              <Button size="sm" className="h-8 bg-gradient-to-r from-indigo-500 to-blue-600 shrink-0" onClick={openCreateGroupDialog}>
+                <Plus className="w-4 h-4 mr-1" />新建
+              </Button>
             </div>
 
             {/* Group List */}
@@ -231,7 +242,7 @@ export default function ManagePage() {
                       <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => { if (index < groups.length - 1) { const newOrder = [...groups]; [newOrder[index], newOrder[index+1]] = [newOrder[index+1], newOrder[index]]; reorderGroup.mutate({ orders: newOrder.map((g,i) => ({ id: g.id, sortOrder: i })) }); } }} disabled={index === groups.length - 1}>
                         <ChevronDown className="w-4 h-4 text-gray-400" />
                       </Button>
-                      <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => { setEditingGroupId(group.id); setGroupForm({ name: group.name, description: group.description || "", textbookId: (group as any).textbookId }); }}>
+                      <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openEditGroupDialog(group)}>
                         <Edit3 className="w-3.5 h-3.5 text-gray-400" />
                       </Button>
                       <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => { if (confirm(`删除"${group.name}"？`)) deleteGroup.mutate({ id: group.id }); }}>
@@ -242,6 +253,61 @@ export default function ManagePage() {
                 );
               })}
             </div>}
+
+            {/* Group Dialog */}
+            <Dialog open={groupDialogOpen} onOpenChange={setGroupDialogOpen}>
+              <DialogContent className="sm:max-w-md">
+                <DialogHeader>
+                  <DialogTitle>{editingGroupId ? "编辑分组" : "新建分组"}</DialogTitle>
+                </DialogHeader>
+                <div className="space-y-4 pt-2">
+                  <div>
+                    <Label className="text-sm">分组名称</Label>
+                    <Input
+                      value={groupForm.name}
+                      onChange={(e) => setGroupForm((p) => ({ ...p, name: e.target.value }))}
+                      placeholder="如：Unit 1"
+                      className="h-10 mt-1"
+                      autoFocus
+                    />
+                  </div>
+                  <div>
+                    <Label className="text-sm">描述（可选）</Label>
+                    <Input
+                      value={groupForm.description}
+                      onChange={(e) => setGroupForm((p) => ({ ...p, description: e.target.value }))}
+                      placeholder="分组描述"
+                      className="h-10 mt-1"
+                    />
+                  </div>
+                  <div>
+                    <Label className="text-sm">所属课本（可选）</Label>
+                    <select
+                      value={groupForm.textbookId ?? ""}
+                      onChange={(e) => setGroupForm((p) => ({ ...p, textbookId: e.target.value ? Number(e.target.value) : null }))}
+                      className="w-full h-10 px-3 rounded-md border border-gray-200 text-sm bg-white mt-1"
+                    >
+                      <option value="">不关联课本</option>
+                      {textbooks?.map((tb) => (
+                        <option key={tb.id} value={tb.id}>{tb.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="flex gap-2 pt-2">
+                    <Button variant="outline" className="flex-1 h-10" onClick={() => setGroupDialogOpen(false)}>
+                      取消
+                    </Button>
+                    <Button
+                      className="flex-1 h-10 bg-gradient-to-r from-indigo-500 to-blue-600"
+                      disabled={!groupForm.name.trim() || createGroup.isPending || updateGroup.isPending}
+                      onClick={handleGroupSubmit}
+                    >
+                      {createGroup.isPending || updateGroup.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : editingGroupId ? "保存" : "创建"}
+                    </Button>
+                  </div>
+                </div>
+              </DialogContent>
+            </Dialog>
           </div>
         )}
 
