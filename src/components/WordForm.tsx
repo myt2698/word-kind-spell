@@ -572,58 +572,58 @@ export default function WordForm({ open, onClose, onSubmit, editWord }: WordForm
             </Button>
           </div>
         </form>
-
-        {/* New Tag Dialog (nested) */}
-        <Dialog open={newTagDialogOpen} onOpenChange={setNewTagDialogOpen}>
-          <DialogContent className="sm:max-w-sm">
-            <DialogHeader>
-              <DialogTitle className="flex items-center gap-2">
-                <Tag className="w-4 h-4 text-emerald-500" />
-                新建标签
-              </DialogTitle>
-            </DialogHeader>
-            <div className="space-y-4 pt-2">
-              <div>
-                <Label className="text-sm">标签名称</Label>
-                <Input
-                  value={newTagName}
-                  onChange={(e) => setNewTagName(e.target.value.slice(0, 50))}
-                  placeholder="输入标签名称"
-                  className="h-10 mt-1"
-                  autoFocus
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      e.preventDefault();
-                      handleCreateTag();
-                    }
-                  }}
-                />
-              </div>
-              <div>
-                <Label className="text-sm">备注（可选）</Label>
-                <Textarea
-                  value={newTagDesc}
-                  onChange={(e) => setNewTagDesc(e.target.value)}
-                  placeholder="备注"
-                  className="min-h-[60px] resize-y mt-1"
-                />
-              </div>
-              <div className="flex gap-2 pt-1">
-                <Button variant="outline" className="flex-1 h-10" onClick={() => setNewTagDialogOpen(false)}>
-                  取消
-                </Button>
-                <Button
-                  className="flex-1 h-10 bg-gradient-to-r from-emerald-500 to-teal-600"
-                  disabled={!newTagName.trim() || createTagMutation.isPending}
-                  onClick={handleCreateTag}
-                >
-                  {createTagMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : "创建"}
-                </Button>
-              </div>
-            </div>
-          </DialogContent>
-        </Dialog>
       </DialogContent>
+
+      {/* New Tag Dialog */}
+      <Dialog open={newTagDialogOpen} onOpenChange={setNewTagDialogOpen}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Tag className="w-4 h-4 text-emerald-500" />
+              新建标签
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 pt-2">
+            <div>
+              <Label className="text-sm">标签名称</Label>
+              <Input
+                value={newTagName}
+                onChange={(e) => setNewTagName(e.target.value.slice(0, 50))}
+                placeholder="输入标签名称"
+                className="h-10 mt-1"
+                autoFocus
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    handleCreateTag();
+                  }
+                }}
+              />
+            </div>
+            <div>
+              <Label className="text-sm">备注（可选）</Label>
+              <Textarea
+                value={newTagDesc}
+                onChange={(e) => setNewTagDesc(e.target.value)}
+                placeholder="备注"
+                className="min-h-[60px] resize-y mt-1"
+              />
+            </div>
+            <div className="flex gap-2 pt-1">
+              <Button variant="outline" className="flex-1 h-10" onClick={() => setNewTagDialogOpen(false)}>
+                取消
+              </Button>
+              <Button
+                className="flex-1 h-10 bg-gradient-to-r from-emerald-500 to-teal-600"
+                disabled={!newTagName.trim() || createTagMutation.isPending}
+                onClick={handleCreateTag}
+              >
+                {createTagMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : "创建"}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </Dialog>
   );
 }
