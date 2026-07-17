@@ -1,0 +1,141 @@
+import { trpc } from "@/providers/trpc";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
+import { Badge } from "@/components/ui/badge";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Hash, BookOpen, Folder, GraduationCap, Volume2, Loader2 } from "lucide-react";
+
+interface TagDetailDialogProps {
+  tagId: number | null;
+  open: boolean;
+  onClose: () => void;
+}
+
+export default function TagDetailDialog({ tagId, open, onClose }: TagDetailDialogProps) {
+  const { data, isLoading } = trpc.tag.getById.useQuery(
+    { id: tagId! },
+    { enabled: !!tagId && open }
+  );
+
+  return (
+    <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
+      <DialogContent className="sm:max-w-md max-h-[80vh] p-0 overflow-hidden">
+        <DialogHeader className="p-5 pb-3 border-b border-gray-100">
+          {isLoading ? (
+            <div className="flex items-center gap-2 py-2">
+              <Loader2 className="w-4 h-4 animate-spin text-indigo-500" />
+              <span className="text-sm text-gray-500">加载中...</span>
+            </div>
+          ) : data ? (
+            <>
+              <div className="flex items-center gap-2">
+                <div className="w-9 h-9 rounded-lg bg-indigo-50 flex items-center justify-center">
+                  <Hash className="w-4.5 h-4.5 text-indigo-500" />
+                </div>
+                <div>
+                  <DialogTitle className="text-base font-semibold text-gray-900">
+                    {data.tag.name}
+                  </DialogTitle>
+                  <DialogDescription className="text-xs text-gray-400 mt-0.5">
+                    {data.words.length} 个单词
+                    {data.tag.description ? ` · ${data.tag.description}` : ""}
+                  </DialogDescription>
+                </div>
+              </div>
+            </>
+          ) : (
+            <DialogTitle className="text-base text-gray-500">标签不存在</DialogTitle>
+          )}
+        </DialogHeader>
+
+        {data && data.words.length > 0 && (
+          <ScrollArea className="max-h-[50vh]">
+            <div className="p-3 space-y-1.5">
+              {data.words.map((word) => (
+                <div
+                  key={word.id}
+                  className="flex items-start gap-3 p-3 rounded-xl bg-gray-50/70 hover:bg-gray-50 transition-colors"
+                >
+                  {/* Left: word + phonetic */}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-sm font-semibold text-gray-900">
+                        {word.word}
+                      </span>
+                      {word.phonetic && (
+                        <span className="text-xs text-gray-400 font-mono">
+                          {word.phonetic}
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-xs text-gray-600 mt-1 leading-relaxed line-clamp-2">
+                      {word.definition}
+                    </p>
+
+                    {/* Meta info */}
+                    <div className="flex flex-wrap items-center gap-1.5 mt-2">
+                      {word.groupName && (
+                        <Badge
+                          variant="outline"
+                          className="text-[10px] px-1.5 py-0 bg-white text-gray-400 border-gray-200"
+                        >
+                          <Folder className="w-2.5 h-2.5 mr-0.5" />
+                          {word.groupName}
+                        </Badge>
+                      )}
+                      {word.learningStatus === "active" && (
+                        <Badge className="text-[10px] px-1.5 py-0 bg-emerald-50 text-emerald-600 border-emerald-200 hover:bg-emerald-50">
+                          <GraduationCap className="w-2.5 h-2.5 mr-0.5" />
+                          学习中
+                        </Badge>
+                      )}
+                      {word.learningStatus === "paused" && (
+                        <Badge className="text-[10px] px-1.5 py-0 bg-amber-50 text-amber-600 border-amber-200 hover:bg-amber-50">
+                          暂停
+                        </Badge>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Right: other tags */}
+                  {word.tags.length > 1 && (
+                    <div className="flex flex-wrap gap-1 shrink-0 max-w-[120px] justify-end">
+                      {word.tags
+                        .filter((t) => t.id !== tagId)
+                        .slice(0, 3)
+                        .map((t) => (
+                          <span
+                            key={t.id}
+                            className="text-[10px] px-1.5 py-0.5 bg-indigo-50 text-indigo-500 rounded-md"
+                          >
+                            {t.name}
+                          </span>
+                        ))}
+                      {word.tags.filter((t) => t.id !== tagId).length > 3 && (
+                        <span className="text-[10px] text-gray-400">
+                          +{word.tags.filter((t) => t.id !== tagId).length - 3}
+                        </span>
+                      )}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </ScrollArea>
+        )}
+
+        {data && data.words.length === 0 && (
+          <div className="flex flex-col items-center justify-center py-10 text-gray-400">
+            <BookOpen className="w-10 h-10 mb-2 text-gray-300" />
+            <p className="text-sm">该标签下暂无单词</p>
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}

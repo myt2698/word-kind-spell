@@ -1,8 +1,8 @@
 import { z } from "zod";
 import { createRouter, authedQuery } from "./middleware";
 import { getDb } from "./queries/connection";
-import { tags, wordTags } from "@db/schema";
-import { eq, and, sql } from "drizzle-orm";
+import { tags, wordTags, words, wordGroups } from "@db/schema";
+import { eq, and, sql, desc } from "drizzle-orm";
 
 export const tagRouter = createRouter({
   list: authedQuery.query(async ({ ctx }) => {
@@ -81,6 +81,101 @@ export const tagRouter = createRouter({
         .set(data)
         .where(and(eq(tags.id, id), eq(tags.userId, ctx.user.id)));
       return { success: true };
+    }),
+
+  // 获取标签详情及该标签下的所有单词
+  getById: authedQuery
+    .input(z.object({ id: z.number() }))
+    .query(async ({ ctx, input }) => {
+      const db = getDb();
+
+      // 1. 获取标签详情
+      const tagResult = await db
+        .select()
+        .from(tags)
+        .where(and(eq(tags.id, input.id), eq(tags.userId, ctx.user.id)))
+        .limit(1);
+
+      if (tagResult.length === 0) return null;
+
+      const tag = tagResult[0];
+
+      // 2. 获取该标签下的所有单词ID
+      const wordTagRows = await db
+        .select({ wordId: wordTags.wordId })
+        .from(wordTags)
+        .where(eq(wordTags.tagId, input.id));
+
+      const wordIds = wordTagRows.map((r) => r.wordId);
+
+      if (wordIds.length === 0) {
+        return {
+          tag,
+          words: [],
+        };
+      }
+
+      // 3. 批量获取单词详情
+      const wordList = await db
+        .select({
+          id: words.id,
+          word: words.word,
+          phonetic: words.phonetic,
+          definition: words.definition,
+          example: words.example,
+          notes: words.notes,
+          proficiency: words.proficiency,
+          learningStatus: words.learningStatus,
+          groupId: words.groupId,
+          createdAt: words.createdAt,
+          updatedAt: words.updatedAt,
+        })
+        .from(words)
+        .where(and(eq(words.userId, ctx.user.id), sql`${words.id} IN (${sql.join(wordIds)})`))
+        .orderBy(desc(words.createdAt));
+
+      // 4. 获取单元名称
+      const groupIds = [...new Set(wordList.map((w) => w.groupId).filter(Boolean))] as number[];
+      const groupMap = new Map<number, string>();
+      if (groupIds.length > 0) {
+        const groupRows = await db
+          .select({ id: wordGroups.id, name: wordGroups.name })
+          .from(wordGroups)
+          .where(sql`${wordGroups.id} IN (${sql.join(groupIds)})`);
+        for (const g of groupRows) {
+          groupMap.set(g.id, g.name);
+        }
+      }
+
+      // 5. 获取这些单词的所有标签（用于展示）
+      const allWordIds = wordList.map((w) => w.id);
+      const allTagRows = await db
+        .select({
+          wordId: wordTags.wordId,
+          tagId: tags.id,
+          tagName: tags.name,
+        })
+        .from(wordTags)
+        .innerJoin(tags, eq(wordTags.tagId, tags.id))
+        .where(sql`${wordTags.wordId} IN (${sql.join(allWordIds)})`);
+
+      const tagMap = new Map<number, { id: number; name: string }[]>();
+      for (const row of allTagRows) {
+        const existing = tagMap.get(row.wordId) ?? [];
+        existing.push({ id: row.tagId, name: row.tagName });
+        tagMap.set(row.wordId, existing);
+      }
+
+      const enrichedWords = wordList.map((w) => ({
+        ...w,
+        groupName: w.groupId ? (groupMap.get(w.groupId) ?? null) : null,
+        tags: tagMap.get(w.id) ?? [],
+      }));
+
+      return {
+        tag,
+        words: enrichedWords,
+      };
     }),
 
   delete: authedQuery
