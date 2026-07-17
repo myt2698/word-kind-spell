@@ -59,7 +59,6 @@ export default function WordForm({ open, onClose, onSubmit, editWord }: WordForm
   const { data: userSettings } = trpc.wordGroup.getSettings.useQuery();
 
   const [selectedTextbookId, setSelectedTextbookId] = useState<number | null>(null);
-  const [formInitialized, setFormInitialized] = useState(false);
   const { data: units } = trpc.wordGroup.list.useQuery(
     selectedTextbookId ? { textbookId: selectedTextbookId } : undefined,
     { enabled: !!selectedTextbookId }
@@ -167,7 +166,6 @@ export default function WordForm({ open, onClose, onSubmit, editWord }: WordForm
           proficiency: "new",
         });
       }
-      setFormInitialized(true);
     }
     // Track previous open state
     prevOpenRef.current = open;
@@ -272,7 +270,7 @@ export default function WordForm({ open, onClose, onSubmit, editWord }: WordForm
   const isPending = isLookingUp || lookupMutation.isPending;
 
   return (
-    <Dialog open={open} onOpenChange={(v) => { if (!v) { setFormInitialized(false); onClose(); } }}>
+    <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
       <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
@@ -483,33 +481,29 @@ export default function WordForm({ open, onClose, onSubmit, editWord }: WordForm
               <BookOpen className="w-3.5 h-3.5" /> 课本 & 单元
             </Label>
             {/* Textbook selector */}
-            {!formInitialized ? (
-              <div className="h-10 bg-gray-100 rounded-md animate-pulse" />
-            ) : (
-              <Select
-                value={selectedTextbookId == null ? "none" : String(selectedTextbookId)}
-                onValueChange={(v) => {
-                  const tbId = v === "none" ? null : parseInt(v);
-                  setSelectedTextbookId(tbId);
-                  updateForm({ groupId: undefined });
-                }}
-              >
-                <SelectTrigger className="h-10">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">不选课本</SelectItem>
-                  {textbooks?.map((tb) => (
-                    <SelectItem key={tb.id} value={tb.id.toString()}>
-                      {tb.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            )}
+            <Select
+              value={selectedTextbookId == null ? "none" : String(selectedTextbookId)}
+              onValueChange={(v) => {
+                const tbId = v === "none" ? null : parseInt(v);
+                setSelectedTextbookId(tbId);
+                updateForm({ groupId: undefined });
+              }}
+            >
+              <SelectTrigger className="h-10">
+                <SelectValue placeholder="不选课本" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">不选课本</SelectItem>
+                {textbooks?.map((tb) => (
+                  <SelectItem key={tb.id} value={tb.id.toString()}>
+                    {tb.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
 
             {/* Unit selector - only show when textbook selected */}
-            {formInitialized && selectedTextbookId && (
+            {selectedTextbookId && (
               <Select
                 value={form.groupId == null ? "none" : String(form.groupId)}
                 onValueChange={(v) =>
@@ -517,7 +511,7 @@ export default function WordForm({ open, onClose, onSubmit, editWord }: WordForm
                 }
               >
                 <SelectTrigger className="h-10">
-                  <SelectValue />
+                  <SelectValue placeholder="不选单元" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="none">不选单元</SelectItem>
