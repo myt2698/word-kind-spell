@@ -7,9 +7,10 @@ import path from "path";
 type App = Hono<{ Bindings: HttpBindings }>;
 
 export function serveStaticFiles(app: App) {
-  const distPath = path.resolve(import.meta.dirname, "../dist/public");
+  // Resolve dist/public path relative to this file's location in dist/
+  const distPath = path.resolve(import.meta.dirname, "../../public");
 
-  app.use("*", serveStatic({ root: "./dist/public" }));
+  app.use("*", serveStatic({ root: distPath }));
 
   app.notFound((c) => {
     const accept = c.req.header("accept") ?? "";
@@ -17,6 +18,9 @@ export function serveStaticFiles(app: App) {
       return c.json({ error: "Not Found" }, 404);
     }
     const indexPath = path.resolve(distPath, "index.html");
+    if (!fs.existsSync(indexPath)) {
+      return c.json({ error: "index.html not found" }, 500);
+    }
     const content = fs.readFileSync(indexPath, "utf-8");
     return c.html(content);
   });
