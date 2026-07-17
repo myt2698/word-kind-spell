@@ -1,5 +1,4 @@
-import { useState, useCallback, useMemo } from "react";
-import { useSearchParams } from "react-router";
+import { useState, useCallback } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { trpc } from "@/providers/trpc";
 import AppHeader from "@/components/AppHeader";
@@ -13,48 +12,35 @@ import EmptyState from "@/components/EmptyState";
 import { Button } from "@/components/ui/button";
 import { Plus } from "lucide-react";
 
-function parseIdList(param: string | null): number[] {
-  if (!param) return [];
-  return param
-    .split(",")
-    .map((s) => Number(s.trim()))
-    .filter((n) => !isNaN(n) && n > 0);
-}
-
 export default function Home() {
-  const [searchParams, setSearchParams] = useSearchParams();
   const { user, isLoading: authLoading } = useAuth({ redirectOnUnauthenticated: true });
   const utils = trpc.useUtils();
 
-  // Read filter params from URL
-  const urlGroupIds = useMemo(() => parseIdList(searchParams.get("groupIds")), [searchParams]);
-  const urlTagIds = useMemo(() => parseIdList(searchParams.get("tagIds")), [searchParams]);
-  const urlTextbookId = useMemo(() => {
-    const val = searchParams.get("textbookId");
-    return val ? Number(val) : null;
-  }, [searchParams]);
-
-  // Search & Filter state
+  // Filter state (managed internally, not via URL)
   const [searchQuery, setSearchQuery] = useState("");
   const [sortBy, setSortBy] = useState<SortBy>("newest");
+  const [selectedTextbookId, setSelectedTextbookId] = useState<number | null>(null);
+  const [selectedUnitId, setSelectedUnitId] = useState<number | null>(null);
+  const [selectedTagIds, setSelectedTagIds] = useState<number[]>([]);
 
   // Dialog state
   const [showWordForm, setShowWordForm] = useState(false);
   const [editWord, setEditWord] = useState<WordCardData | null>(null);
 
-  // Fetch words
+  // Fetch words with filters
   const { data: words, isLoading: wordsLoading } = trpc.word.list.useQuery({
-    groupIds: urlGroupIds.length > 0 ? urlGroupIds : undefined,
-    tagIds: urlTagIds.length > 0 ? urlTagIds : undefined,
-    textbookId: urlTextbookId ?? undefined,
+    groupIds: selectedUnitId ? [selectedUnitId] : undefined,
+    tagIds: selectedTagIds.length > 0 ? selectedTagIds : undefined,
+    textbookId: selectedTextbookId ?? undefined,
     search: searchQuery || undefined,
     sortBy,
   });
 
-  // Fetch group/tag/textbook names for display
-  const { data: groupsList } = trpc.wordGroup.list.useQuery();
-  const { data: tagsList } = trpc.tag.list.useQuery();
+  // Fetch names for display
   const { data: textbooksList } = trpc.textbook.list.useQuery();
+  const { data: groupsList } = trpc.wordGroup.list.useQuery(
+    selectedTextbookId ? { textbookId: selectedTextbookId } : undefined
+  );
 
   // Mutations
   const createWord = trpc.word.create.useMutation({
@@ -107,43 +93,6 @@ export default function Home() {
     setShowWordForm(true);
   };
 
-  // Clear filters
-  const clearFilters = () => {
-    setSearchParams({});
-    setSearchQuery("");
-  };
-
-  // Remove single group filter
-  const removeGroupFilter = (groupId: number) => {
-    const newIds = urlGroupIds.filter((id) => id !== groupId);
-    const newParams = new URLSearchParams(searchParams);
-    if (newIds.length > 0) {
-      newParams.set("groupIds", newIds.join(","));
-    } else {
-      newParams.delete("groupIds");
-    }
-    setSearchParams(newParams);
-  };
-
-  // Remove single tag filter
-  const removeTagFilter = (tagId: number) => {
-    const newIds = urlTagIds.filter((id) => id !== tagId);
-    const newParams = new URLSearchParams(searchParams);
-    if (newIds.length > 0) {
-      newParams.set("tagIds", newIds.join(","));
-    } else {
-      newParams.delete("tagIds");
-    }
-    setSearchParams(newParams);
-  };
-
-  // Remove textbook filter
-  const removeTextbookFilter = () => {
-    const newParams = new URLSearchParams(searchParams);
-    newParams.delete("textbookId");
-    setSearchParams(newParams);
-  };
-
   if (authLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
@@ -158,36 +107,21 @@ export default function Home() {
   if (!user) return null;
 
   const filteredWords = words || [];
-  const hasActiveFilters = urlGroupIds.length > 0 || urlTagIds.length > 0 || urlTextbookId !== null || searchQuery.length > 0;
-  const isEmpty = filteredWords.length === 0 && !wordsLoading && !hasActiveFilters;
 
-  // Build page title based on active filters
+  // Build page title
   let pageTitle = "我的单词本";
-  const textbookName = urlTextbookId ? textbooksList?.find((t) => t.id === urlTextbookId)?.name : null;
-  if (urlTextbookId && textbookName) {
-    pageTitle = textbookName;
-  } else if (urlGroupIds.length > 0 && urlTagIds.length > 0) {
-    const groupNames = urlGroupIds
-      .map((id) => groupsList?.find((g) => g.id === id)?.name)
-      .filter(Boolean)
-      .join("、");
-    const tagNames = urlTagIds
-      .map((id) => tagsList?.find((t) => t.id === id)?.name)
-      .filter(Boolean)
-      .join("、");
-    pageTitle = `${groupNames} + ${tagNames}`;
-  } else if (urlGroupIds.length > 0) {
-    const names = urlGroupIds
-      .map((id) => groupsList?.find((g) => g.id === id)?.name)
-      .filter(Boolean)
-      .join("、");
-    pageTitle = names || "分组单词";
-  } else if (urlTagIds.length > 0) {
-    const names = urlTagIds
-      .map((id) => tagsList?.find((t) => t.id === id)?.name)
-      .filter(Boolean)
-      .join("、");
-    pageTitle = names || "标签单词";
+  if (selectedTextbookId && selectedUnitId) {
+    const tbName = textbooksList?.find((t) => t.id === selectedTextbookId)?.name;
+    const unitName = groupsList?.find((g) => g.id === selectedUnitId)?.name;
+    pageTitle = `${tbName} · ${unitName}`;
+  } else if (selectedTextbookId) {
+    pageTitle = textbooksList?.find((t) => t.id === selectedTextbookId)?.name || "课本单词";
+  } else if (selectedUnitId) {
+    pageTitle = groupsList?.find((g) => g.id === selectedUnitId)?.name || "单元单词";
+  } else if (selectedTagIds.length > 0) {
+    pageTitle = "标签筛选";
+  } else if (searchQuery) {
+    pageTitle = `搜索: ${searchQuery}`;
   }
 
   return (
@@ -197,21 +131,11 @@ export default function Home() {
 
       {/* Main Content */}
       <main className="max-w-3xl mx-auto px-4 py-4 lg:px-6 lg:py-6 pb-24">
-        {/* Title & Filter Info */}
+        {/* Title */}
         <div className="flex items-center justify-between mb-4">
           <div className="flex-1 min-w-0">
             <h1 className="text-xl font-bold text-gray-900 truncate">{pageTitle}</h1>
-            <p className="text-sm text-gray-500 mt-0.5">
-              共 {filteredWords.length} 个单词
-              {hasActiveFilters && (
-                <button
-                  onClick={clearFilters}
-                  className="ml-2 text-indigo-500 hover:text-indigo-600 text-xs underline"
-                >
-                  清除筛选
-                </button>
-              )}
-            </p>
+            <p className="text-sm text-gray-500 mt-0.5">共 {filteredWords.length} 个单词</p>
           </div>
           <Button
             onClick={() => {
@@ -221,83 +145,28 @@ export default function Home() {
             className="bg-gradient-to-r from-indigo-500 to-blue-600 hover:from-indigo-600 hover:to-blue-700 shadow-lg shadow-indigo-200 shrink-0 ml-3"
           >
             <Plus className="w-4 h-4 mr-1.5" />
-            添加单词
+            添加
           </Button>
         </div>
 
-        {/* Active filter chips */}
-        {hasActiveFilters && (
-          <div className="flex flex-wrap gap-2 mb-4">
-            {urlTextbookId && textbookName && (
-              <span className="inline-flex items-center gap-1 px-2.5 py-1 text-xs rounded-full bg-purple-50 text-purple-600 border border-purple-200">
-                课本: {textbookName}
-                <button onClick={removeTextbookFilter} className="ml-0.5 hover:text-purple-800">x</button>
-              </span>
-            )}
-            {urlGroupIds.map((groupId) => {
-              const group = groupsList?.find((g) => g.id === groupId);
-              if (!group) return null;
-              return (
-                <span
-                  key={`g-${groupId}`}
-                  className="inline-flex items-center gap-1 px-2.5 py-1 text-xs rounded-full bg-indigo-50 text-indigo-600 border border-indigo-200"
-                >
-                  分组: {group.name}
-                  <button
-                    onClick={() => removeGroupFilter(groupId)}
-                    className="ml-0.5 hover:text-indigo-800"
-                  >
-                    x
-                  </button>
-                </span>
-              );
-            })}
-            {urlTagIds.map((tagId) => {
-              const tag = tagsList?.find((t) => t.id === tagId);
-              if (!tag) return null;
-              return (
-                <span
-                  key={`t-${tagId}`}
-                  className="inline-flex items-center gap-1 px-2.5 py-1 text-xs rounded-full bg-emerald-50 text-emerald-600 border border-emerald-200"
-                >
-                  标签: {tag.name}
-                  <button
-                    onClick={() => removeTagFilter(tagId)}
-                    className="ml-0.5 hover:text-emerald-800"
-                  >
-                    x
-                  </button>
-                </span>
-              );
-            })}
-            {searchQuery && (
-              <span className="inline-flex items-center gap-1 px-2.5 py-1 text-xs rounded-full bg-gray-100 text-gray-600 border border-gray-200">
-                搜索: {searchQuery}
-                <button
-                  onClick={() => setSearchQuery("")}
-                  className="ml-0.5 hover:text-gray-800"
-                >
-                  x
-                </button>
-              </span>
-            )}
-          </div>
-        )}
-
-        {/* Filter Bar */}
+        {/* Filter Bar with textbook/unit/tag */}
         <div className="mb-4">
           <FilterBar
             sortBy={sortBy}
             onSortChange={setSortBy}
             resultCount={filteredWords.length}
+            selectedTextbookId={selectedTextbookId}
+            selectedUnitId={selectedUnitId}
+            selectedTagIds={selectedTagIds}
+            onTextbookChange={setSelectedTextbookId}
+            onUnitChange={setSelectedUnitId}
+            onTagChange={setSelectedTagIds}
           />
         </div>
 
         {/* Words List */}
-        {isEmpty ? (
-          <EmptyState type="no-words" onAdd={() => setShowWordForm(true)} />
-        ) : filteredWords.length === 0 ? (
-          <EmptyState type="no-results" />
+        {filteredWords.length === 0 && !wordsLoading ? (
+          <EmptyState type={searchQuery || selectedTextbookId || selectedUnitId || selectedTagIds.length > 0 ? "no-results" : "no-words"} onAdd={() => setShowWordForm(true)} />
         ) : (
           <div className="space-y-3 pb-4">
             {filteredWords.map((word) => (
