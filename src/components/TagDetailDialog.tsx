@@ -8,15 +8,16 @@ import {
 } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Hash, BookOpen, Folder, GraduationCap, Volume2, Loader2 } from "lucide-react";
+import { Hash, BookOpen, Folder, GraduationCap, Edit3, Loader2 } from "lucide-react";
 
 interface TagDetailDialogProps {
   tagId: number | null;
   open: boolean;
   onClose: () => void;
+  onEdit?: (tag: { id: number; name: string; description: string | null }) => void;
 }
 
-export default function TagDetailDialog({ tagId, open, onClose }: TagDetailDialogProps) {
+export default function TagDetailDialog({ tagId, open, onClose, onEdit }: TagDetailDialogProps) {
   const { data, isLoading } = trpc.tag.getById.useQuery(
     { id: tagId! },
     { enabled: !!tagId && open }
@@ -25,7 +26,7 @@ export default function TagDetailDialog({ tagId, open, onClose }: TagDetailDialo
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
       <DialogContent className="sm:max-w-md max-h-[80vh] p-0 overflow-hidden">
-        <DialogHeader className="p-5 pb-3 border-b border-gray-100">
+        <DialogHeader className="p-5 pb-3 border-b border-gray-100 relative">
           {isLoading ? (
             <div className="flex items-center gap-2 py-2">
               <Loader2 className="w-4 h-4 animate-spin text-indigo-500" />
@@ -33,14 +34,25 @@ export default function TagDetailDialog({ tagId, open, onClose }: TagDetailDialo
             </div>
           ) : data ? (
             <>
-              <div className="flex items-center gap-2">
-                <div className="w-9 h-9 rounded-lg bg-indigo-50 flex items-center justify-center">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-lg bg-indigo-50 flex items-center justify-center shrink-0">
                   <Hash className="w-4.5 h-4.5 text-indigo-500" />
                 </div>
-                <div>
-                  <DialogTitle className="text-base font-semibold text-gray-900">
-                    {data.tag.name}
-                  </DialogTitle>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <DialogTitle className="text-base font-semibold text-gray-900">
+                      {data.tag.name}
+                    </DialogTitle>
+                    {onEdit && (
+                      <button
+                        onClick={() => onEdit(data.tag)}
+                        className="p-1 rounded-md hover:bg-gray-100 text-gray-400 hover:text-indigo-500 transition-colors"
+                        title="编辑标签"
+                      >
+                        <Edit3 className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
                   <DialogDescription className="text-xs text-gray-400 mt-0.5">
                     {data.words.length} 个单词
                     {data.tag.description ? ` · ${data.tag.description}` : ""}

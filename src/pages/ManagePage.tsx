@@ -3,6 +3,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { trpc } from "@/providers/trpc";
 import AppHeader from "@/components/AppHeader";
 import MobileNav from "@/components/MobileNav";
+import TagDetailDialog from "@/components/TagDetailDialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -44,6 +45,8 @@ export default function ManagePage() {
   const [tagForm, setTagForm] = useState({ name: "", description: "" });
   const [editingTagId, setEditingTagId] = useState<number | null>(null);
   const [tagDialogOpen, setTagDialogOpen] = useState(false);
+  const [tagDetailId, setTagDetailId] = useState<number | null>(null);
+  const [tagDetailOpen, setTagDetailOpen] = useState(false);
   const [error, setError] = useState("");
   const [longPressTag, setLongPressTag] = useState<{ id: number; name: string } | null>(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -324,9 +327,8 @@ export default function ManagePage() {
                   type="button"
                   className="relative flex items-center justify-center h-12 bg-white rounded-xl border border-gray-100 hover:border-emerald-300 hover:shadow-md transition-all active:scale-95 select-none overflow-hidden"
                   onClick={() => {
-                    setEditingTagId(tag.id);
-                    setTagForm({ name: tag.name, description: tag.description || "" });
-                    setTagDialogOpen(true);
+                    setTagDetailId(tag.id);
+                    setTagDetailOpen(true);
                   }}
                   onTouchStart={() => {
                     longPressTimer.current = setTimeout(() => {
@@ -408,6 +410,19 @@ export default function ManagePage() {
                 </div>
               </DialogContent>
             </Dialog>
+
+            {/* Tag Detail Dialog */}
+            <TagDetailDialog
+              tagId={tagDetailId}
+              open={tagDetailOpen}
+              onClose={() => { setTagDetailOpen(false); setTagDetailId(null); }}
+              onEdit={(tag) => {
+                setTagDetailOpen(false);
+                setEditingTagId(tag.id);
+                setTagForm({ name: tag.name, description: tag.description || "" });
+                setTagDialogOpen(true);
+              }}
+            />
 
             {/* Long-press Delete Confirm Dialog */}
             <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
