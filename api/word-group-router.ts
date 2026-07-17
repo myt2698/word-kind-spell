@@ -118,14 +118,14 @@ export const wordGroupRouter = createRouter({
     .input(z.object({ id: z.number() }))
     .mutation(async ({ ctx, input }) => {
       const db = getDb();
+
+      // 1. Set groupId to NULL for all words in this group
       await db
-        .delete(wordGroups)
-        .where(
-          and(
-            eq(wordGroups.id, input.id),
-            eq(wordGroups.userId, ctx.user.id)
-          )
-        );
+        .update(words)
+        .set({ groupId: null })
+        .where(and(eq(words.groupId, input.id), eq(words.userId, ctx.user.id)));
+
+      // 2. Clear defaultGroupId if it's this group
       await db
         .update(users)
         .set({ defaultGroupId: null })
@@ -133,6 +133,16 @@ export const wordGroupRouter = createRouter({
           and(
             eq(users.id, ctx.user.id),
             eq(users.defaultGroupId, input.id)
+          )
+        );
+
+      // 3. Delete the group
+      await db
+        .delete(wordGroups)
+        .where(
+          and(
+            eq(wordGroups.id, input.id),
+            eq(wordGroups.userId, ctx.user.id)
           )
         );
       return { success: true };

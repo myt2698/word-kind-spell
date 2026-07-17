@@ -296,6 +296,9 @@ export default function ManagePage() {
                 <p className="text-center text-sm text-gray-500 py-2">
                   确定要删除标签 <span className="font-medium text-gray-700">"{longPressTag?.name}"</span> 吗？
                 </p>
+                <p className="text-center text-xs text-gray-400 py-1">
+                  标签会被删除，但该标签下的单词不会被删除。
+                </p>
                 <div className="flex gap-3 pt-2">
                   <Button variant="outline" className="flex-1 h-10" onClick={() => setDeleteDialogOpen(false)}>
                     取消
@@ -346,7 +349,7 @@ export default function ManagePage() {
                         <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => { setEditingTextbookId(tb.id); setTextbookForm({ name: tb.name, description: tb.description || "" }); setTextbookDialogOpen(true); }}>
                           <Edit3 className="w-3.5 h-3.5 text-gray-400" />
                         </Button>
-                        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => { if (confirm(`删除"${tb.name}"？`)) deleteTextbook.mutate({ id: tb.id }); }}>
+                        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => { if (confirm(`删除课本"${tb.name}"？\n\n课本下的单元会被删除，但单元内的单词会保留，只是不再关联到任何单元。`)) deleteTextbook.mutate({ id: tb.id }); }}>
                           <Trash2 className="w-3.5 h-3.5 text-gray-400" />
                         </Button>
                       </div>
@@ -384,7 +387,7 @@ export default function ManagePage() {
                                 <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => openEditUnitDialog(unit)}>
                                   <Edit3 className="w-3 h-3 text-gray-400" />
                                 </Button>
-                                <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => { if (confirm(`删除"${unit.name}"？`)) deleteUnit.mutate({ id: unit.id }); }}>
+                                <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => { if (confirm(`删除单元"${unit.name}"？\n\n该单元内的单词不会被删除，只是不再关联到这个单元。`)) deleteUnit.mutate({ id: unit.id }); }}>
                                   <Trash2 className="w-3 h-3 text-gray-400" />
                                 </Button>
                               </div>

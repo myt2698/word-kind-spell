@@ -2,7 +2,7 @@ import { z } from "zod";
 import { createRouter, authedQuery } from "./middleware";
 import { getDb } from "./queries/connection";
 import { textbooks, wordGroups, words } from "@db/schema";
-import { eq, and, count } from "drizzle-orm";
+import { eq, and, count, inArray, isNull } from "drizzle-orm";
 
 export const textbookRouter = createRouter({
   // Create textbook
@@ -54,14 +54,37 @@ export const textbookRouter = createRouter({
       return { success: true };
     }),
 
-  // Delete textbook (groups will have textbookId set to NULL)
+  // Delete textbook: disassociate words, delete groups, then delete textbook
   delete: authedQuery
     .input(z.object({ id: z.number() }))
     .mutation(async ({ ctx, input }) => {
       const db = getDb();
+
+      // 1. Get all group IDs under this textbook
+      const groups = await db
+        .select({ id: wordGroups.id })
+        .from(wordGroups)
+        .where(and(eq(wordGroups.textbookId, input.id), eq(wordGroups.userId, ctx.user.id)));
+      const groupIds = groups.map((g) => g.id);
+
+      // 2. Set groupId to NULL for all words in these groups
+      if (groupIds.length > 0) {
+        await db
+          .update(words)
+          .set({ groupId: null })
+          .where(and(eq(words.userId, ctx.user.id), inArray(words.groupId, groupIds)));
+      }
+
+      // 3. Delete the groups
+      await db
+        .delete(wordGroups)
+        .where(and(eq(wordGroups.textbookId, input.id), eq(wordGroups.userId, ctx.user.id)));
+
+      // 4. Delete the textbook
       await db
         .delete(textbooks)
         .where(and(eq(textbooks.id, input.id), eq(textbooks.userId, ctx.user.id)));
+
       return { success: true };
     }),
 
