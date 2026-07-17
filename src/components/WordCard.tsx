@@ -276,23 +276,6 @@ export default function WordCard({ word, onEdit, onDelete }: WordCardProps) {
           setEditTagForm({ id: tag.id, name: tag.name, description: tag.description || "" });
           setEditTagOpen(true);
         }}
-        onEditWord={(w) => {
-          onEdit({
-            id: w.id,
-            word: w.word,
-            phonetic: w.phonetic,
-            definition: w.definition,
-            example: w.example,
-            notes: w.notes,
-            proficiency: w.proficiency as WordCardData["proficiency"],
-            groupId: w.groupId,
-            groupName: w.groupName,
-            tags: w.tags,
-            createdAt: new Date(),
-            updatedAt: new Date(),
-            learningStatus: "idle",
-          });
-        }}
       />
 
       {/* Tag Edit Dialog */}

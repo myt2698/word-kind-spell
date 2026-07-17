@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { trpc } from "@/providers/trpc";
 import {
   Dialog,
@@ -8,6 +9,7 @@ import {
 } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import WordForm, { type WordFormData } from "./WordForm";
 import { Hash, BookOpen, Folder, GraduationCap, Edit3, Loader2 } from "lucide-react";
 
 interface TagDetailDialogProps {
@@ -15,14 +17,50 @@ interface TagDetailDialogProps {
   open: boolean;
   onClose: () => void;
   onEdit?: (tag: { id: number; name: string; description: string | null }) => void;
-  onEditWord?: (word: { id: number; word: string; phonetic: string | null; definition: string; example: string | null; notes: string | null; proficiency: string; groupId: number | null; groupName: string | null; tags: { id: number; name: string }[] }) => void;
 }
 
-export default function TagDetailDialog({ tagId, open, onClose, onEdit, onEditWord }: TagDetailDialogProps) {
+export default function TagDetailDialog({ tagId, open, onClose, onEdit }: TagDetailDialogProps) {
+  const utils = trpc.useUtils();
   const { data, isLoading } = trpc.tag.getById.useQuery(
     { id: tagId! },
     { enabled: !!tagId && open }
   );
+
+  const [editingWord, setEditingWord] = useState<any>(null);
+  const [wordFormOpen, setWordFormOpen] = useState(false);
+
+  const updateWord = trpc.word.update.useMutation({
+    onSuccess: () => {
+      utils.tag.getById.invalidate({ id: tagId! });
+      utils.word.list.invalidate();
+      setWordFormOpen(false);
+      setEditingWord(null);
+    },
+  });
+
+  const handleEditWord = (formData: WordFormData) => {
+    if (editingWord) {
+      updateWord.mutate({ id: editingWord.id, ...formData });
+    }
+  };
+
+  const editWordCard = editingWord
+    ? {
+        id: editingWord.id,
+        word: editingWord.word,
+        phonetic: editingWord.phonetic,
+        definition: editingWord.definition,
+        example: editingWord.example,
+        notes: editingWord.notes,
+        proficiency: editingWord.proficiency,
+        groupId: editingWord.groupId,
+        groupName: editingWord.groupName,
+        tags: editingWord.tags,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        learningStatus: "idle" as const,
+      }
+    : null;
 
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
@@ -117,18 +155,16 @@ export default function TagDetailDialog({ tagId, open, onClose, onEdit, onEditWo
 
                   {/* Right: edit + other tags */}
                   <div className="flex flex-col items-end gap-1.5 shrink-0">
-                    {onEditWord && (
-                      <button
-                        onClick={() => {
-                          onEditWord(word);
-                          onClose();
-                        }}
-                        className="p-1 rounded-md hover:bg-gray-200 text-gray-400 hover:text-indigo-500 transition-colors"
-                        title="编辑单词"
-                      >
-                        <Edit3 className="w-3.5 h-3.5" />
-                      </button>
-                    )}
+                    <button
+                      onClick={() => {
+                        setEditingWord(word);
+                        setWordFormOpen(true);
+                      }}
+                      className="p-1 rounded-md hover:bg-gray-200 text-gray-400 hover:text-indigo-500 transition-colors"
+                      title="编辑单词"
+                    >
+                      <Edit3 className="w-3.5 h-3.5" />
+                    </button>
                     {word.tags.length > 1 && (
                       <div className="flex flex-wrap gap-1 max-w-[120px] justify-end">
                         {word.tags
@@ -163,6 +199,16 @@ export default function TagDetailDialog({ tagId, open, onClose, onEdit, onEditWo
           </div>
         )}
       </DialogContent>
+
+      {/* WordForm placed outside DialogContent to avoid nesting issues */}
+      {wordFormOpen && editWordCard && (
+        <WordForm
+          open={wordFormOpen}
+          onClose={() => { setWordFormOpen(false); setEditingWord(null); }}
+          onSubmit={handleEditWord}
+          editWord={editWordCard}
+        />
+      )}
     </Dialog>
   );
 }
