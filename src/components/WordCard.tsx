@@ -204,7 +204,7 @@ export default function WordCard({ word, onEdit, onDelete }: WordCardProps) {
                   <Edit3 className="w-3.5 h-3.5" />
                 </Button>
                 <Button variant="ghost" size="icon" className="h-7 w-7 text-gray-400 hover:text-red-500" onClick={() => onDelete(word.id)}>
-                  <Trash3 className="w-3.5 h-3.5" />
+                  <Trash2 className="w-3.5 h-3.5" />
                 </Button>
               </div>
             </div>
