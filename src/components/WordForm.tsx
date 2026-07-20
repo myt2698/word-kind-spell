@@ -505,18 +505,18 @@ export default function WordForm({ open, onClose, onSubmit, editWord }: WordForm
             </Label>
             {/* Textbook selector */}
             <Select
-              value={selectedTextbookId == null ? "none" : String(selectedTextbookId)}
+              value={selectedTextbookId == null ? "default" : String(selectedTextbookId)}
               onValueChange={(v) => {
-                const tbId = v === "none" ? null : parseInt(v);
+                const tbId = v === "default" ? null : parseInt(v);
                 setSelectedTextbookId(tbId);
                 updateForm({ groupId: undefined });
               }}
             >
               <SelectTrigger className="h-10">
-                {selectedTextbookId == null ? "扩展词汇" : <SelectValue />}
+                <SelectValue placeholder="扩展词汇" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="none">扩展词汇</SelectItem>
+                <SelectItem value="default">扩展词汇</SelectItem>
                 {textbooks?.map((tb) => (
                   <SelectItem key={tb.id} value={tb.id.toString()}>
                     {tb.name}
@@ -526,18 +526,18 @@ export default function WordForm({ open, onClose, onSubmit, editWord }: WordForm
             </Select>
 
             {/* Unit selector - only show when a non-default textbook is selected */}
-            {selectedTextbookId && !textbooks?.find((tb: any) => tb.id === selectedTextbookId)?.isDefault && (
+            {selectedTextbookId != null && !textbooks?.find((tb: any) => tb.id === selectedTextbookId)?.isDefault && (
               <Select
-                value={form.groupId == null ? "none" : String(form.groupId)}
+                value={form.groupId == null ? "default" : String(form.groupId)}
                 onValueChange={(v) =>
-                  updateForm({ groupId: v === "none" ? undefined : parseInt(v) })
+                  updateForm({ groupId: v === "default" ? undefined : parseInt(v) })
                 }
               >
                 <SelectTrigger className="h-10">
-                  {form.groupId == null ? "不选单元" : <SelectValue />}
+                  <SelectValue placeholder="不选单元" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="none">不选单元</SelectItem>
+                  <SelectItem value="default">不选单元</SelectItem>
                   {units?.map((u) => (
                     <SelectItem key={u.id} value={u.id.toString()}>
                       {u.name}
