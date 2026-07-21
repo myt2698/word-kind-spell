@@ -869,20 +869,42 @@ function FlashMode({ onBack }: { onBack: () => void }) {
 
       {phase === "result" && (
         <div className="space-y-4">
-          <div className={`rounded-xl p-6 text-center ${
+          <div className={`rounded-xl p-4 text-center ${
             input.trim().toLowerCase() === currentWord.word.toLowerCase()
               ? "bg-green-50 border border-green-200"
               : "bg-red-50 border border-red-200"
           }`}>
             {input.trim().toLowerCase() === currentWord.word.toLowerCase() ? (
-              <CheckCircle2 className="w-10 h-10 text-green-500 mx-auto mb-2" />
+              <div className="flex items-center justify-center gap-2 mb-2">
+                <CheckCircle2 className="w-5 h-5 text-green-500" />
+                <span className="text-sm font-medium text-green-700">正确！</span>
+              </div>
             ) : (
-              <XCircle className="w-10 h-10 text-red-500 mx-auto mb-2" />
+              <div className="flex items-center justify-center gap-2 mb-2">
+                <XCircle className="w-5 h-5 text-red-500" />
+                <span className="text-sm font-medium text-red-700">错误</span>
+              </div>
             )}
-            <p className="text-lg font-bold mb-1">
-              {input.trim().toLowerCase() === currentWord.word.toLowerCase() ? "正确！" : `错误：${currentWord.word}`}
-            </p>
-            <p className="text-sm text-gray-600">你的输入：{input}</p>
+            {/* Full word details */}
+            <div className="mt-3 pt-3 border-t border-gray-200/50 text-left">
+              <div className="flex items-center justify-between">
+                <p className="text-lg font-bold text-gray-900">{currentWord.word}</p>
+                <button onClick={() => speakWord(currentWord.word)} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-amber-500">
+                  <Volume2 className="w-4 h-4" />
+                </button>
+              </div>
+              {currentWord.phonetic && <p className="text-sm text-gray-400 font-mono mt-0.5">{currentWord.phonetic}</p>}
+              <p className="text-sm text-gray-600 mt-2">{currentWord.definition}</p>
+              {currentWord.example && <p className="text-xs text-gray-500 mt-1 italic">&quot;{currentWord.example}&quot;</p>}
+              {currentWord.tags && currentWord.tags.length > 0 && (
+                <div className="flex flex-wrap gap-1 mt-2">
+                  {currentWord.tags.map((tag: any) => (
+                    <span key={tag.id} className="text-[10px] px-1.5 py-0.5 bg-indigo-50 text-indigo-600 rounded">{tag.name}</span>
+                  ))}
+                </div>
+              )}
+              <p className="text-xs text-gray-400 mt-2">你的输入：{input}</p>
+            </div>
           </div>
           <Button className="w-full h-12 bg-gradient-to-r from-amber-500 to-orange-600" onClick={nextWord}>
             {words && index < words.length - 1 ? "下一个" : "查看结果"}
