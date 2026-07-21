@@ -34,6 +34,27 @@ import {
 import { useSearchParams } from "react-router";
 
 // ============================================================
+// Speech helper - reliable cross-browser TTS
+// ============================================================
+function speakWord(word: string) {
+  if (!("speechSynthesis" in window)) return;
+  // Cancel any ongoing speech first
+  window.speechSynthesis.cancel();
+  // Some browsers (Chrome) need resume() after cancel()
+  window.speechSynthesis.resume();
+  const utterance = new SpeechSynthesisUtterance(word);
+  utterance.lang = "en-US";
+  utterance.rate = 0.9;
+  // Try to pick a good English voice
+  const voices = window.speechSynthesis.getVoices();
+  const enVoice = voices.find((v) => v.lang.startsWith("en") && v.name.includes("Google"))
+    || voices.find((v) => v.lang.startsWith("en"))
+    || voices[0];
+  if (enVoice) utterance.voice = enVoice;
+  window.speechSynthesis.speak(utterance);
+}
+
+// ============================================================
 // Types
 // ============================================================
 type SpellView = "home" | "blocks" | "fillblank" | "flash";
@@ -308,11 +329,7 @@ function BlocksMode({ onBack }: { onBack: () => void }) {
       {/* Word Info */}
       <div className="bg-white rounded-xl border border-gray-100 p-4 mb-4 text-center">
         <button
-          onClick={() => {
-            const utterance = new SpeechSynthesisUtterance(currentWord.word);
-            utterance.lang = "en-US";
-            window.speechSynthesis.speak(utterance);
-          }}
+          onClick={() => speakWord(currentWord.word)}
           className="inline-flex items-center gap-2 mb-2"
         >
           <Volume2 className="w-5 h-5 text-indigo-500" />
@@ -487,11 +504,7 @@ function FillBlankMode({ onBack }: { onBack: () => void }) {
       {/* Word Info */}
       <div className="bg-white rounded-xl border border-gray-100 p-4 mb-4">
         <button
-          onClick={() => {
-            const utterance = new SpeechSynthesisUtterance(currentWord.word);
-            utterance.lang = "en-US";
-            window.speechSynthesis.speak(utterance);
-          }}
+          onClick={() => speakWord(currentWord.word)}
           className="inline-flex items-center gap-2 mb-2"
         >
           <Volume2 className="w-5 h-5 text-emerald-500" />
@@ -583,9 +596,7 @@ function FlashMode({ onBack }: { onBack: () => void }) {
   useEffect(() => {
     if (phase === "show" && currentWord) {
       // Speak the word
-      const utterance = new SpeechSynthesisUtterance(currentWord.word);
-      utterance.lang = "en-US";
-      window.speechSynthesis.speak(utterance);
+      speakWord(currentWord.word);
 
       setTimeLeft(3);
       const timer = setInterval(() => {
