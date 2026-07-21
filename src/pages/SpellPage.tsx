@@ -25,11 +25,8 @@ import {
   Sparkles,
 } from "lucide-react";
 import {
-  splitSyllables,
-  detectPhonicsTags,
   generateLetterBlocks,
   generateFillBlank,
-  getPhonicsColor,
 } from "@/utils/phonics";
 import { useSearchParams } from "react-router";
 
@@ -191,7 +188,7 @@ function SpellHome({ onStart }: { onStart: (mode: SpellView) => void }) {
           </div>
           <div className="flex-1">
             <h3 className="text-base font-semibold text-gray-900">积木拼拼乐</h3>
-            <p className="text-xs text-gray-500">拖拽字母积木拼出正确单词</p>
+            <p className="text-xs text-gray-500">点击字母积木拼出正确单词</p>
           </div>
           <Play className="w-5 h-5 text-indigo-400" />
         </button>
@@ -309,8 +306,6 @@ function BlocksMode({ onBack }: { onBack: () => void }) {
   if (showSummary) return <SessionSummary results={sessionResults} score={score} total={words?.length ?? 0} onBack={onBack} onRetry={() => { setIndex(0); setScore(0); setSessionResults([]); setShowSummary(false); }} />;
   if (!currentWord) return <div className="min-h-screen flex items-center justify-center"><p className="text-gray-500">暂无单词可练习</p></div>;
 
-  const syllables = splitSyllables(currentWord.word);
-  const phonicsTags = detectPhonicsTags(currentWord.word);
   const allFilled = slots.every((s) => s.length > 0);
 
   return (
@@ -337,25 +332,6 @@ function BlocksMode({ onBack }: { onBack: () => void }) {
         </button>
         <p className="text-sm text-gray-600 whitespace-pre-line">{currentWord.definition}</p>
         {currentWord.example && <p className="text-xs text-gray-400 mt-1 italic">{currentWord.example}</p>}
-
-        {/* Syllable hint */}
-        <div className="flex items-center justify-center gap-1 mt-3 flex-wrap">
-          {syllables.map((s, i) => (
-            <span key={i}>
-              <span className="text-xs bg-indigo-50 text-indigo-600 px-2 py-0.5 rounded">{s}</span>
-              {i < syllables.length - 1 && <span className="text-gray-300 mx-0.5">-</span>}
-            </span>
-          ))}
-        </div>
-
-        {/* Phonics tags */}
-        <div className="flex flex-wrap justify-center gap-1 mt-2">
-          {phonicsTags.filter((t) => t.type !== "syllable").slice(0, 5).map((tag, i) => (
-            <span key={i} className="text-[10px] px-1.5 py-0.5 rounded-full text-white" style={{ backgroundColor: getPhonicsColor(tag.type) }}>
-              {tag.text}
-            </span>
-          ))}
-        </div>
       </div>
 
       {/* Result */}
