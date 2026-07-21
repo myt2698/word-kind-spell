@@ -11,7 +11,7 @@ import { z } from "zod";
 import { createRouter, authedQuery } from "./middleware";
 import { getDb } from "./queries/connection";
 import { words, wordSpellings, spellingErrors, spellingSessions } from "@db/schema";
-import { eq, and, gte, lte, desc, sql, count, inArray } from "drizzle-orm";
+import { eq, and, gte, lte, desc, count, inArray } from "drizzle-orm";
 
 // Review intervals in minutes for each level
 const REVIEW_INTERVALS: Record<number, number[]> = {
@@ -259,7 +259,7 @@ export const spellingRouter = createRouter({
         learningStatus: words.learningStatus,
       })
       .from(words)
-      .where(sql`${words.id} IN (${sql.join(wordIds)})`);
+      .where(inArray(words.id, wordIds));
 
     const wordMap = new Map(wordList.map((w) => [w.id, w]));
 
@@ -404,7 +404,7 @@ export const spellingRouter = createRouter({
     const wordList = await db
       .select({ id: words.id, word: words.word, phonetic: words.phonetic, definition: words.definition })
       .from(words)
-      .where(sql`${words.id} IN (${sql.join(wordIds)})`);
+      .where(inArray(words.id, wordIds));
 
     const wordMap = new Map(wordList.map((w) => [w.id, w]));
 
