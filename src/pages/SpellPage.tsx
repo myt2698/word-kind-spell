@@ -5,6 +5,13 @@ import AppHeader from "@/components/AppHeader";
 import MobileNav from "@/components/MobileNav";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   PenLine,
   Loader2,
@@ -86,7 +93,8 @@ function SpellHome({ onStart }: { onStart: (mode: SpellView) => void }) {
   const { data: learningQueue } = trpc.spelling.getLearningQueue.useQuery();
   const { data: errorWords } = trpc.spelling.getErrorWords.useQuery();
   const { data: stats } = trpc.spelling.getStats.useQuery();
-  const [expandedCard, setExpandedCard] = useState<string | null>(null);
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [dialogType, setDialogType] = useState<string>("");
 
   if (authLoading) {
     return <div className="min-h-screen flex items-center justify-center"><Loader2 className="w-8 h-8 animate-spin text-indigo-500" /></div>;
@@ -95,11 +103,63 @@ function SpellHome({ onStart }: { onStart: (mode: SpellView) => void }) {
 
   const dueCount = reviewQueue?.length ?? 0;
   const manualDue = reviewQueue?.filter((w) => w.source === "manual") ?? [];
-  const autoDue = reviewQueue?.filter((w) => w.source === "auto") ?? [];
+  // Show ALL due words in review dialog, not just auto
+  const allDue = reviewQueue ?? [];
 
-  const toggleCard = (card: string) => {
-    setExpandedCard(expandedCard === card ? null : card);
+  const openDialog = (type: string) => {
+    setDialogType(type);
+    setDialogOpen(true);
   };
+
+  // Data for dialog
+  const getDialogData = () => {
+    switch (dialogType) {
+      case "learning":
+        return {
+          title: "学习中的单词",
+          color: "emerald",
+          words: learningQueue ?? [],
+          emptyText: "暂无学习中的单词",
+          emptySub: "去单词列表点击「加入学习」",
+        };
+      case "new":
+        return {
+          title: "新学单词",
+          color: "indigo",
+          words: manualDue,
+          emptyText: "暂无新学单词",
+          emptySub: "去单词列表点击「加入学习」",
+        };
+      case "review":
+        return {
+          title: "待复习队列",
+          color: "amber",
+          words: allDue,
+          emptyText: "暂无待复习单词",
+          emptySub: "学习中的单词会按艾宾浩斯曲线自动进入复习队列",
+        };
+      case "errors":
+        return {
+          title: "错题本",
+          color: "rose",
+          words: errorWords ?? [],
+          emptyText: "暂无错题",
+          emptySub: "继续练习，错题会自动记录",
+        };
+      default:
+        return { title: "", color: "gray", words: [], emptyText: "", emptySub: "" };
+    }
+  };
+
+  const dialogData = getDialogData();
+  const colorMap: Record<string, { bg: string; text: string; border: string; badge: string }> = {
+    emerald: { bg: "bg-emerald-50", text: "text-emerald-800", border: "border-emerald-200", badge: "bg-emerald-100 text-emerald-600" },
+    indigo: { bg: "bg-indigo-50", text: "text-indigo-800", border: "border-indigo-200", badge: "bg-indigo-100 text-indigo-600" },
+    amber: { bg: "bg-amber-50", text: "text-amber-800", border: "border-amber-200", badge: "bg-amber-100 text-amber-600" },
+    rose: { bg: "bg-rose-50", text: "text-rose-800", border: "border-rose-200", badge: "bg-rose-100 text-rose-600" },
+    gray: { bg: "bg-gray-50", text: "text-gray-800", border: "border-gray-200", badge: "bg-gray-100 text-gray-600" },
+  };
+  const c = colorMap[dialogData.color] || colorMap.gray;
 
   return (
     <main className="max-w-3xl mx-auto px-4 py-6 pb-24">
@@ -109,138 +169,84 @@ function SpellHome({ onStart }: { onStart: (mode: SpellView) => void }) {
       </h1>
       <p className="text-sm text-gray-500 mb-6">先加入学习，再按艾宾浩斯曲线复习</p>
 
-      {/* Stats Cards - Clickable to expand lists */}
-      <div className="grid grid-cols-4 gap-3 mb-4">
-        {/* 学习中 */}
+      {/* Stats Cards - Clickable to open dialog */}
+      <div className="grid grid-cols-4 gap-3 mb-6">
         <button
-          onClick={() => toggleCard("learning")}
-          className={`bg-white rounded-xl border p-3 text-center transition-all ${expandedCard === "learning" ? "border-emerald-400 ring-2 ring-emerald-100" : "border-gray-100 hover:border-emerald-200"}`}
+          onClick={() => openDialog("learning")}
+          className="bg-white rounded-xl border border-gray-100 p-3 text-center hover:border-emerald-200 hover:shadow-md transition-all"
         >
           <p className="text-2xl font-bold text-emerald-600">{stats?.learningWords ?? 0}</p>
           <p className="text-xs text-gray-500">学习中</p>
         </button>
-        {/* 新学单词 */}
         <button
-          onClick={() => toggleCard("new")}
-          className={`bg-white rounded-xl border p-3 text-center transition-all ${expandedCard === "new" ? "border-indigo-400 ring-2 ring-indigo-100" : "border-gray-100 hover:border-indigo-200"}`}
+          onClick={() => openDialog("new")}
+          className="bg-white rounded-xl border border-gray-100 p-3 text-center hover:border-indigo-200 hover:shadow-md transition-all"
         >
           <p className="text-2xl font-bold text-indigo-600">{stats?.manualDue ?? 0}</p>
           <p className="text-xs text-gray-500">新学单词</p>
         </button>
-        {/* 总待复习 */}
         <button
-          onClick={() => toggleCard("review")}
-          className={`bg-white rounded-xl border p-3 text-center transition-all ${expandedCard === "review" ? "border-amber-400 ring-2 ring-amber-100" : "border-gray-100 hover:border-amber-200"}`}
+          onClick={() => openDialog("review")}
+          className="bg-white rounded-xl border border-gray-100 p-3 text-center hover:border-amber-200 hover:shadow-md transition-all"
         >
           <p className="text-2xl font-bold text-amber-600">{stats?.dueForReview ?? 0}</p>
           <p className="text-xs text-gray-500">总待复习</p>
         </button>
-        {/* 错题 */}
         <button
-          onClick={() => toggleCard("errors")}
-          className={`bg-white rounded-xl border p-3 text-center transition-all ${expandedCard === "errors" ? "border-rose-400 ring-2 ring-rose-100" : "border-gray-100 hover:border-rose-200"}`}
+          onClick={() => openDialog("errors")}
+          className="bg-white rounded-xl border border-gray-100 p-3 text-center hover:border-rose-200 hover:shadow-md transition-all"
         >
           <p className="text-2xl font-bold text-rose-600">{stats?.totalErrors ?? 0}</p>
           <p className="text-xs text-gray-500">错题</p>
         </button>
       </div>
 
-      {/* Expanded Lists */}
-      {expandedCard === "learning" && learningQueue && learningQueue.length > 0 && (
-        <div className="bg-emerald-50 rounded-xl border border-emerald-200 p-4 mb-4">
-          <h2 className="text-sm font-semibold text-emerald-700 mb-2 flex items-center gap-2">
-            <GraduationCap className="w-4 h-4 text-emerald-500" />
-            学习中的单词 ({learningQueue.length})
-          </h2>
-          <div className="space-y-1.5 max-h-40 overflow-y-auto">
-            {learningQueue.map((w) => (
-              <div key={w.id} className="flex items-center gap-3 p-2 rounded-lg bg-white/80">
-                <span className="text-sm font-medium flex-1 text-emerald-800">{w.word}</span>
-                {w.phonetic && <span className="text-xs text-emerald-400 font-mono">{w.phonetic}</span>}
-                <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-600">Lv.{w.level}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-      {expandedCard === "learning" && (!learningQueue || learningQueue.length === 0) && (
-        <div className="bg-gray-50 rounded-xl border border-gray-200 p-4 mb-4 text-center">
-          <p className="text-sm text-gray-400">暂无学习中的单词</p>
-          <p className="text-xs text-gray-400 mt-1">去单词列表点击"加入学习"</p>
-        </div>
-      )}
+      {/* Dialog for word lists */}
+      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+        <DialogContent className="sm:max-w-md max-h-[70vh] p-0 overflow-hidden">
+          <DialogHeader className="p-5 pb-3 border-b border-gray-100">
+            <DialogTitle className="text-base font-semibold">
+              {dialogData.title}
+              {dialogData.words.length > 0 && (
+                <span className="ml-2 text-xs font-normal text-gray-400">({dialogData.words.length} 个)</span>
+              )}
+            </DialogTitle>
+          </DialogHeader>
 
-      {expandedCard === "new" && manualDue.length > 0 && (
-        <div className="bg-indigo-50 rounded-xl border border-indigo-200 p-4 mb-4">
-          <h2 className="text-sm font-semibold text-indigo-700 mb-2 flex items-center gap-2">
-            <Sparkles className="w-4 h-4 text-indigo-500" />
-            新学单词 ({manualDue.length})
-          </h2>
-          <div className="space-y-1.5 max-h-40 overflow-y-auto">
-            {manualDue.map((w) => (
-              <div key={w.id} className="flex items-center gap-3 p-2 rounded-lg bg-white/80">
-                <span className="text-sm font-medium flex-1 text-indigo-800">{w.word}</span>
-                {w.phonetic && <span className="text-xs text-indigo-400 font-mono">{w.phonetic}</span>}
-                <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-indigo-100 text-indigo-600">新学</span>
+          {dialogData.words.length > 0 ? (
+            <ScrollArea className="max-h-[50vh]">
+              <div className="p-3 space-y-1">
+                {dialogData.words.map((w: any) => (
+                  <div key={w.id} className={`flex items-center gap-3 p-3 rounded-xl ${c.bg} border ${c.border}`}>
+                    <span className={`text-sm font-medium flex-1 ${c.text}`}>{w.word}</span>
+                    {w.phonetic && <span className="text-xs text-gray-400 font-mono">{w.phonetic}</span>}
+                    {dialogType === "errors" && w.errorCount && (
+                      <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${c.badge}`}>错{w.errorCount}次</span>
+                    )}
+                    {dialogType === "review" && w.level && (
+                      <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${
+                        w.level === 1 ? "bg-red-100 text-red-600" : w.level === 2 ? "bg-amber-100 text-amber-600" : "bg-green-100 text-green-600"
+                      }`}>Lv.{w.level}</span>
+                    )}
+                    {dialogType === "new" && (
+                      <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${c.badge}`}>新学</span>
+                    )}
+                    {dialogType === "learning" && w.level && (
+                      <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${c.badge}`}>Lv.{w.level}</span>
+                    )}
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
-        </div>
-      )}
-      {expandedCard === "new" && manualDue.length === 0 && (
-        <div className="bg-gray-50 rounded-xl border border-gray-200 p-4 mb-4 text-center">
-          <p className="text-sm text-gray-400">暂无新学单词</p>
-          <p className="text-xs text-gray-400 mt-1">去单词列表点击"加入学习"</p>
-        </div>
-      )}
-
-      {expandedCard === "review" && (
-        <div className="bg-amber-50 rounded-xl border border-amber-200 p-4 mb-4">
-          <h2 className="text-sm font-semibold text-amber-700 mb-2 flex items-center gap-2">
-            <Clock className="w-4 h-4 text-amber-500" />
-            待复习队列
-          </h2>
-          {autoDue.length > 0 ? (
-            <div className="space-y-1.5 max-h-40 overflow-y-auto">
-              {autoDue.map((w) => (
-                <div key={w.id} className="flex items-center gap-3 p-2 rounded-lg bg-white/80">
-                  <span className="text-sm font-medium flex-1 text-amber-800">{w.word}</span>
-                  {w.phonetic && <span className="text-xs text-amber-400 font-mono">{w.phonetic}</span>}
-                  <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${w.level === 1 ? "bg-red-100 text-red-600" : w.level === 2 ? "bg-amber-100 text-amber-600" : "bg-green-100 text-green-600"}`}>Lv.{w.level}</span>
-                </div>
-              ))}
-            </div>
+            </ScrollArea>
           ) : (
-            <p className="text-sm text-gray-400 text-center py-2">暂无待复习单词</p>
+            <div className="flex flex-col items-center justify-center py-10 text-gray-400">
+              <p className="text-sm">{dialogData.emptyText}</p>
+              <p className="text-xs text-gray-400 mt-1">{dialogData.emptySub}</p>
+            </div>
           )}
-        </div>
-      )}
+        </DialogContent>
+      </Dialog>
 
-      {expandedCard === "errors" && errorWords && errorWords.length > 0 && (
-        <div className="bg-rose-50 rounded-xl border border-rose-200 p-4 mb-4">
-          <h2 className="text-sm font-semibold text-rose-700 mb-2 flex items-center gap-2">
-            <XCircle className="w-4 h-4 text-rose-500" />
-            错题本 ({errorWords.length})
-          </h2>
-          <div className="space-y-1.5 max-h-40 overflow-y-auto">
-            {errorWords.map((w) => (
-              <div key={w.id} className="flex items-center gap-3 p-2 rounded-lg bg-white/80">
-                <span className="text-sm font-medium flex-1 text-rose-800">{w.word}</span>
-                {w.phonetic && <span className="text-xs text-rose-400 font-mono">{w.phonetic}</span>}
-                <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-rose-100 text-rose-600">错{w.errorCount}次</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-      {expandedCard === "errors" && (!errorWords || errorWords.length === 0) && (
-        <div className="bg-gray-50 rounded-xl border border-gray-200 p-4 mb-4 text-center">
-          <p className="text-sm text-gray-400">暂无错题</p>
-          <p className="text-xs text-gray-400 mt-1">继续练习，错题会自动记录</p>
-        </div>
-      )}
-
-      {/*
       {/* Mode Selection */}
       <h2 className="text-sm font-semibold text-gray-700 mb-3">选择练习模式</h2>
       <div className="space-y-3">
