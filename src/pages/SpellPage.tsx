@@ -313,13 +313,13 @@ function BlocksMode({ onBack }: { onBack: () => void }) {
     <main className="max-w-lg mx-auto px-4 py-6 pb-24">
       {/* Header */}
       <div className="flex items-center justify-between mb-4">
-        <button onClick={onBack} className="h-9 w-9 flex items-center justify-center rounded-lg hover:bg-gray-100">
-          <ArrowLeft className="w-5 h-5 text-gray-600" />
-        </button>
         <div className="flex items-center gap-2">
+          <button onClick={onBack} className="h-9 w-9 flex items-center justify-center rounded-lg hover:bg-gray-100">
+            <ArrowLeft className="w-5 h-5 text-gray-600" />
+          </button>
           <span className="text-xs px-2 py-1 bg-gray-100 rounded-md text-gray-500">{index + 1} / {words?.length}</span>
-          <span className="text-sm font-bold text-indigo-600">{score} 分</span>
         </div>
+        <span className="text-sm font-bold text-indigo-600">{score} 分</span>
       </div>
 
       {/* Word Info */}
@@ -535,13 +535,13 @@ function FillBlankMode({ onBack }: { onBack: () => void }) {
   return (
     <main className="max-w-lg mx-auto px-4 py-6 pb-24 min-h-screen flex flex-col">
       <div className="flex items-center justify-between mb-4">
-        <button onClick={onBack} className="h-9 w-9 flex items-center justify-center rounded-lg hover:bg-gray-100">
-          <ArrowLeft className="w-5 h-5 text-gray-600" />
-        </button>
         <div className="flex items-center gap-2">
+          <button onClick={onBack} className="h-9 w-9 flex items-center justify-center rounded-lg hover:bg-gray-100">
+            <ArrowLeft className="w-5 h-5 text-gray-600" />
+          </button>
           <span className="text-xs px-2 py-1 bg-gray-100 rounded-md text-gray-500">{index + 1} / {words?.length}</span>
-          <span className="text-sm font-bold text-emerald-600">{score} 分</span>
         </div>
+        <span className="text-sm font-bold text-emerald-600">{score} 分</span>
       </div>
 
       {/* Word Info - 只显示释义 */}
@@ -777,13 +777,13 @@ function FlashMode({ onBack }: { onBack: () => void }) {
   return (
     <main className="max-w-lg mx-auto px-4 py-6 pb-24">
       <div className="flex items-center justify-between mb-4">
-        <button onClick={onBack} className="h-9 w-9 flex items-center justify-center rounded-lg hover:bg-gray-100">
-          <ArrowLeft className="w-5 h-5 text-gray-600" />
-        </button>
         <div className="flex items-center gap-2">
+          <button onClick={onBack} className="h-9 w-9 flex items-center justify-center rounded-lg hover:bg-gray-100">
+            <ArrowLeft className="w-5 h-5 text-gray-600" />
+          </button>
           <span className="text-xs px-2 py-1 bg-gray-100 rounded-md text-gray-500">{index + 1} / {words?.length}</span>
-          <span className="text-sm font-bold text-amber-600">{score} 分</span>
         </div>
+        <span className="text-sm font-bold text-amber-600">{score} 分</span>
       </div>
 
       {phase === "show" && (
