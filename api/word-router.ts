@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { createRouter, authedQuery } from "./middleware";
 import { getDb } from "./queries/connection";
-import { words, wordTags, tags, wordLogs, wordGroups } from "@db/schema";
+import { words, wordTags, tags, wordLogs, wordGroups, textbooks } from "@db/schema";
 import { eq, and, like, or, desc, asc, sql, inArray } from "drizzle-orm";
 
 export const wordRouter = createRouter({
@@ -120,25 +120,34 @@ export const wordRouter = createRouter({
         tagMap.set(row.wordId, existing);
       }
 
-      // Query 3: Batch fetch all group names
-      const groupMap = new Map<number, string>();
+      // Query 3: Batch fetch all group names + textbook names
+      const groupMap = new Map<number, { groupName: string; textbookName: string }>();
       if (groupIdsForNames.length > 0) {
         const groupRows = await db
-          .select({ id: wordGroups.id, name: wordGroups.name })
+          .select({
+            id: wordGroups.id,
+            groupName: wordGroups.name,
+            textbookName: textbooks.name,
+          })
           .from(wordGroups)
+          .innerJoin(textbooks, eq(wordGroups.textbookId, textbooks.id))
           .where(inArray(wordGroups.id, groupIdsForNames));
         for (const g of groupRows) {
-          groupMap.set(g.id, g.name);
+          groupMap.set(g.id, { groupName: g.groupName, textbookName: g.textbookName });
         }
       }
 
       // Assemble results
-      let results = wordList.map((word) => ({
-        ...word,
-        tags: tagMap.get(word.id) ?? [],
-        groupId: word.groupId,
-        groupName: word.groupId ? (groupMap.get(word.groupId) ?? null) : null,
-      }));
+      let results = wordList.map((word) => {
+        const groupInfo = word.groupId ? groupMap.get(word.groupId) : null;
+        return {
+          ...word,
+          tags: tagMap.get(word.id) ?? [],
+          groupId: word.groupId,
+          groupName: groupInfo?.groupName ?? null,
+          textbookName: groupInfo?.textbookName ?? "扩展词汇",
+        };
+      });
 
       // Filter by tag (single or multiple) in memory
       const effectiveTagIds = input?.tagIds

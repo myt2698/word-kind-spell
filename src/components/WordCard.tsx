@@ -43,6 +43,7 @@ export interface WordCardData {
   tags: TagInfo[];
   groupId?: number | null;
   groupName?: string | null;
+  textbookName?: string | null;
   createdAt: Date;
   updatedAt: Date;
   learningStatus?: "idle" | "active" | "paused";
@@ -149,10 +150,11 @@ export default function WordCard({ word, onEdit, onDelete }: WordCardProps) {
                 {/* Group and Tags - visually distinct */}
                 <div className="flex flex-wrap items-center gap-1.5 mt-2">
                   {/* Unit (Group) - gray style, non-clickable */}
-                  {word.groupName && (
+                  {word.textbookName && (
                     <Badge variant="outline" className="text-xs px-2 py-0.5 bg-gray-50 text-gray-500 border-gray-200 cursor-default">
                       <Folder className="w-3 h-3 mr-1" />
-                      {word.groupName}
+                      {word.textbookName}
+                      {word.groupName ? ` > ${word.groupName}` : ""}
                     </Badge>
                   )}
                   {/* Tags - indigo style, clickable */}
