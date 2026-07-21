@@ -317,8 +317,8 @@ function BlocksMode({ onBack }: { onBack: () => void }) {
           <ArrowLeft className="w-5 h-5 text-gray-600" />
         </button>
         <div className="flex items-center gap-2">
-          <span className="text-sm text-gray-500">{index + 1} / {words?.length}</span>
-          <span className="text-sm font-medium text-indigo-600">{score} 分</span>
+          <span className="text-xs px-2 py-1 bg-gray-100 rounded-md text-gray-500">{index + 1} / {words?.length}</span>
+          <span className="text-sm font-bold text-indigo-600">{score} 分</span>
         </div>
       </div>
 
@@ -539,8 +539,8 @@ function FillBlankMode({ onBack }: { onBack: () => void }) {
           <ArrowLeft className="w-5 h-5 text-gray-600" />
         </button>
         <div className="flex items-center gap-2">
-          <span className="text-sm text-gray-500">{index + 1} / {words?.length}</span>
-          <span className="text-sm font-medium text-emerald-600">{score} 分</span>
+          <span className="text-xs px-2 py-1 bg-gray-100 rounded-md text-gray-500">{index + 1} / {words?.length}</span>
+          <span className="text-sm font-bold text-emerald-600">{score} 分</span>
         </div>
       </div>
 
@@ -781,8 +781,8 @@ function FlashMode({ onBack }: { onBack: () => void }) {
           <ArrowLeft className="w-5 h-5 text-gray-600" />
         </button>
         <div className="flex items-center gap-2">
-          <span className="text-sm text-gray-500">{index + 1} / {words?.length}</span>
-          <span className="text-sm font-medium text-amber-600">{score} 分</span>
+          <span className="text-xs px-2 py-1 bg-gray-100 rounded-md text-gray-500">{index + 1} / {words?.length}</span>
+          <span className="text-sm font-bold text-amber-600">{score} 分</span>
         </div>
       </div>
 
