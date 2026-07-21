@@ -65,12 +65,15 @@ export default function Home() {
     onSuccess: () => { utils.word.list.invalidate(); utils.tag.listWithCount.invalidate(); },
   });
 
-  const handleAddWord = (data: WordFormData) => createWord.mutate(data);
-  const handleEditWord = (data: WordFormData & { id?: number }) => {
+  const handleWordSubmit = (data: WordFormData & { id?: number }) => {
     const wordId = data.id || editWord?.id;
     if (wordId) {
+      // 编辑模式
       const { id, ...rest } = data;
       updateWord.mutate({ id: wordId, ...rest });
+    } else {
+      // 新建模式
+      createWord.mutate(data);
     }
     setEditWord(null);
   };
@@ -243,12 +246,8 @@ export default function Home() {
         <WordForm
           open={showWordForm}
           onClose={() => { setShowWordForm(false); setEditWord(null); }}
-          onSubmit={editWord ? handleEditWord : handleAddWord}
+          onSubmit={handleWordSubmit}
           editWord={editWord}
-          onSwitchToEdit={(existingWord) => {
-            setEditWord(existingWord);
-            setShowWordForm(true);
-          }}
         />
       </main>
 
