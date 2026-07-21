@@ -130,13 +130,14 @@ export default function TagDetailDialog({ tagId, open, onClose, onEdit }: TagDet
 
                     {/* Meta info */}
                     <div className="flex flex-wrap items-center gap-1.5 mt-2">
-                      {word.groupName && (
+                      {word.textbookName && (
                         <Badge
                           variant="outline"
                           className="text-[10px] px-1.5 py-0 bg-white text-gray-400 border-gray-200"
                         >
                           <Folder className="w-2.5 h-2.5 mr-0.5" />
-                          {word.groupName}
+                          {word.textbookName}
+                          {word.groupName ? ` > ${word.groupName}` : ""}
                         </Badge>
                       )}
                       {word.learningStatus === "active" && (

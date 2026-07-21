@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { createRouter, authedQuery } from "./middleware";
 import { getDb } from "./queries/connection";
-import { tags, wordTags, words, wordGroups } from "@db/schema";
+import { tags, wordTags, words, wordGroups, textbooks } from "@db/schema";
 import { eq, and, sql, desc, inArray } from "drizzle-orm";
 
 export const tagRouter = createRouter({
@@ -134,16 +134,21 @@ export const tagRouter = createRouter({
         .where(and(eq(words.userId, ctx.user.id), inArray(words.id, wordIds)))
         .orderBy(desc(words.createdAt));
 
-      // 4. 获取单元名称
+      // 4. 获取单元名称 + 课本名称
       const groupIds = [...new Set(wordList.map((w) => w.groupId).filter(Boolean))] as number[];
-      const groupMap = new Map<number, string>();
+      const groupMap = new Map<number, { groupName: string; textbookName: string }>();
       if (groupIds.length > 0) {
         const groupRows = await db
-          .select({ id: wordGroups.id, name: wordGroups.name })
+          .select({
+            id: wordGroups.id,
+            groupName: wordGroups.name,
+            textbookName: textbooks.name,
+          })
           .from(wordGroups)
+          .innerJoin(textbooks, eq(wordGroups.textbookId, textbooks.id))
           .where(inArray(wordGroups.id, groupIds));
         for (const g of groupRows) {
-          groupMap.set(g.id, g.name);
+          groupMap.set(g.id, { groupName: g.groupName, textbookName: g.textbookName });
         }
       }
 
@@ -166,11 +171,15 @@ export const tagRouter = createRouter({
         tagMap.set(row.wordId, existing);
       }
 
-      const enrichedWords = wordList.map((w) => ({
-        ...w,
-        groupName: w.groupId ? (groupMap.get(w.groupId) ?? null) : null,
-        tags: tagMap.get(w.id) ?? [],
-      }));
+      const enrichedWords = wordList.map((w) => {
+        const info = w.groupId ? groupMap.get(w.groupId) : null;
+        return {
+          ...w,
+          groupName: info?.groupName ?? null,
+          textbookName: info?.textbookName ?? "扩展词汇",
+          tags: tagMap.get(w.id) ?? [],
+        };
+      });
 
       return {
         tag,
