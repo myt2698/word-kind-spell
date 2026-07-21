@@ -470,9 +470,9 @@ export const spellingRouter = createRouter({
         )
       );
 
-    // Total errors
+    // Total distinct words with errors
     const totalErrors = await db
-      .select({ count: count() })
+      .selectDistinct({ wordId: spellingErrors.wordId })
       .from(spellingErrors)
       .where(eq(spellingErrors.userId, ctx.user.id));
 
@@ -496,7 +496,7 @@ export const spellingRouter = createRouter({
       byLevel: byLevel.map((b) => ({ level: b.level, count: b.count })),
       dueForReview: dueCount[0]?.count ?? 0,
       manualDue: manualDue[0]?.count ?? 0,
-      totalErrors: totalErrors[0]?.count ?? 0,
+      totalErrors: totalErrors.length,
       todaySessions: todaySessions[0]?.count ?? 0,
     };
   }),
