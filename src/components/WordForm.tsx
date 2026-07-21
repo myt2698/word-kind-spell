@@ -52,13 +52,15 @@ export interface WordFormData {
   proficiency: "new" | "learning" | "familiar" | "mastered";
 }
 
-export default function WordForm({ open, onClose, onSubmit, editWord, onSwitchToEdit }: WordFormProps & { onSwitchToEdit?: (word: any) => void }) {
+export default function WordForm({ open, onClose, onSubmit, editWord }: WordFormProps) {
   const utils = trpc.useUtils();
   const { data: textbooks } = trpc.textbook.listWithDefault.useQuery();
   const { data: allTags } = trpc.tag.list.useQuery();
   const { data: userSettings } = trpc.wordGroup.getSettings.useQuery();
 
   const [selectedTextbookId, setSelectedTextbookId] = useState<number | null>(null);
+  const [isEditingMode, setIsEditingMode] = useState(false);
+  const [editingWordId, setEditingWordId] = useState<number | null>(null);
   const { data: units } = trpc.wordGroup.list.useQuery(
     selectedTextbookId ? { textbookId: selectedTextbookId } : undefined,
     { enabled: !!selectedTextbookId }
@@ -125,9 +127,18 @@ export default function WordForm({ open, onClose, onSubmit, editWord, onSwitchTo
     },
   });
 
+  // Track dialog open/close to reset edit mode
+  useEffect(() => {
+    if (!open) {
+      setIsEditingMode(false);
+      setEditingWordId(null);
+    }
+  }, [open]);
+
   // Reset form only when dialog opens (open transitions from false to true)
   useEffect(() => {
     if (open && !prevOpenRef.current) {
+      setIsEditingMode(!!editWord);
       setDictError("");
       setHasAutoFilled(false);
       lookupMutation.reset();
@@ -238,7 +249,12 @@ export default function WordForm({ open, onClose, onSubmit, editWord, onSwitchTo
       localStorage.removeItem(LAST_TEXTBOOK_KEY);
       localStorage.removeItem(LAST_UNIT_KEY);
     }
-    onSubmit(form);
+    if (editingWordId) {
+      // Edit mode: include id
+      onSubmit({ ...form, id: editingWordId } as any);
+    } else {
+      onSubmit(form);
+    }
     onClose();
   };
 
@@ -294,11 +310,11 @@ export default function WordForm({ open, onClose, onSubmit, editWord, onSwitchTo
 
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
-      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+      <DialogContent key={isEditingMode ? "edit" : "new"} className="max-w-lg max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <BookOpen className="w-5 h-5 text-indigo-500" />
-            {editWord ? "编辑单词" : "添加新单词"}
+            {editWord || isEditingMode ? "编辑单词" : "添加新单词"}
           </DialogTitle>
         </DialogHeader>
 
@@ -408,11 +424,29 @@ export default function WordForm({ open, onClose, onSubmit, editWord, onSwitchTo
                     size="sm"
                     className="h-7 text-xs"
                     onClick={() => {
-                      // Close new dialog, open edit dialog via parent
-                      if (onSwitchToEdit) {
-                        onSwitchToEdit(existingWord);
+                      // Switch to edit mode in-place
+                      const ew = existingWord;
+                      setExistingWord(null);
+                      setIsEditingMode(true);
+                      setEditingWordId(ew.id);
+                      setForm({
+                        word: ew.word,
+                        phonetic: ew.phonetic || "",
+                        definition: ew.definition,
+                        example: ew.example || "",
+                        notes: ew.notes || "",
+                        groupId: ew.groupId ?? undefined,
+                        tagIds: ew.tags.map((t: any) => t.id),
+                        proficiency: ew.proficiency,
+                      });
+                      // Set textbook for this unit
+                      if (ew.textbookId) {
+                        setSelectedTextbookId(ew.textbookId);
+                      } else {
+                        const allUnits = textbooks?.flatMap((tb: any) => tb.groups || []);
+                        const unit = allUnits?.find((u: any) => u.id === ew.groupId);
+                        if (unit?.textbookId) setSelectedTextbookId(unit.textbookId);
                       }
-                      onClose();
                     }}
                   >
                     <Edit3 className="w-3 h-3 mr-1" />

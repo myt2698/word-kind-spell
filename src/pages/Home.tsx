@@ -66,8 +66,13 @@ export default function Home() {
   });
 
   const handleAddWord = (data: WordFormData) => createWord.mutate(data);
-  const handleEditWord = (data: WordFormData) => {
-    if (editWord) { updateWord.mutate({ id: editWord.id, ...data }); setEditWord(null); }
+  const handleEditWord = (data: WordFormData & { id?: number }) => {
+    const wordId = data.id || editWord?.id;
+    if (wordId) {
+      const { id, ...rest } = data;
+      updateWord.mutate({ id: wordId, ...rest });
+    }
+    setEditWord(null);
   };
   const handleDeleteWord = (id: number) => { if (confirm("确定删除这个单词吗？")) deleteWord.mutate({ id }); };
   const openEditForm = (word: WordCardData) => { setEditWord(word); setShowWordForm(true); };
