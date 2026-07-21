@@ -16,6 +16,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { trpc } from "@/providers/trpc";
+import { speakWord } from "@/utils/speech";
 import {
   X,
   Plus,
@@ -288,11 +289,7 @@ export default function WordForm({ open, onClose, onSubmit, editWord }: WordForm
   };
 
   const handleSpeak = () => {
-    if (form.word && "speechSynthesis" in window) {
-      const utterance = new SpeechSynthesisUtterance(form.word);
-      utterance.lang = "en-US";
-      window.speechSynthesis.speak(utterance);
-    }
+    if (form.word) speakWord(form.word);
   };
 
   const updateForm = (updates: Partial<WordFormData>) => {

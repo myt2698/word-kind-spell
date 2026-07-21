@@ -41,23 +41,7 @@ import {
 } from "@/utils/phonics";
 import { useSearchParams } from "react-router";
 
-// ============================================================
-// Speech helper - reliable cross-browser TTS
-// ============================================================
-function speakWord(word: string) {
-  if (!("speechSynthesis" in window)) return;
-  window.speechSynthesis.cancel();
-  window.speechSynthesis.resume();
-  const utterance = new SpeechSynthesisUtterance(word);
-  utterance.lang = "en-US";
-  utterance.rate = 0.9;
-  const voices = window.speechSynthesis.getVoices();
-  const enVoice = voices.find((v) => v.lang.startsWith("en") && v.name.includes("Google"))
-    || voices.find((v) => v.lang.startsWith("en"))
-    || voices[0];
-  if (enVoice) utterance.voice = enVoice;
-  window.speechSynthesis.speak(utterance);
-}
+import { speakWord } from "@/utils/speech";
 
 // ============================================================
 // Today Words Context - Manage selected words for today's practice

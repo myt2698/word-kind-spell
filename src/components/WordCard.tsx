@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { trpc } from "@/providers/trpc";
+import { speakWord } from "@/utils/speech";
 import TagDetailDialog from "./TagDetailDialog";
 import {
   Dialog,
@@ -99,13 +100,7 @@ export default function WordCard({ word, onEdit, onDelete }: WordCardProps) {
     },
   });
 
-  const handleSpeak = () => {
-    if ("speechSynthesis" in window) {
-      const utterance = new SpeechSynthesisUtterance(word.word);
-      utterance.lang = "en-US";
-      window.speechSynthesis.speak(utterance);
-    }
-  };
+  const handleSpeak = () => speakWord(word.word);
 
   const isActive = localStatus === "active";
   const isPaused = localStatus === "paused";
