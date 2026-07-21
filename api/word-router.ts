@@ -52,8 +52,10 @@ export const wordRouter = createRouter({
         conditions.push(inArray(words.groupId, effectiveGroupIds));
       }
 
+      let exactMatchFirst = false;
       if (input?.search) {
         const searchTerm = `%${input.search}%`;
+        const lowerSearch = input.search.toLowerCase();
         conditions.push(
           or(
             like(words.word, searchTerm),
@@ -61,6 +63,7 @@ export const wordRouter = createRouter({
             like(words.notes, searchTerm)
           )!
         );
+        exactMatchFirst = true;
       }
 
       // Determine sort order
@@ -73,6 +76,15 @@ export const wordRouter = createRouter({
       const orderFn = input?.sortBy === "oldest" ? asc : desc;
 
       // Query 1: Get word list
+      // When searching, sort by match quality: exact match > prefix match > definition match
+      const searchLower = input?.search?.toLowerCase();
+      const orderByClause = exactMatchFirst && searchLower
+        ? [
+            desc(sql`CASE WHEN LOWER(${words.word}) = ${searchLower} THEN 3 WHEN LOWER(${words.word}) LIKE ${searchLower + '%'} THEN 2 ELSE 1 END`),
+            desc(words.createdAt)
+          ]
+        : [orderFn(orderColumn)];
+
       const wordList = await db
         .select({
           id: words.id,
@@ -90,7 +102,7 @@ export const wordRouter = createRouter({
         })
         .from(words)
         .where(and(...conditions))
-        .orderBy(orderFn(orderColumn));
+        .orderBy(...orderByClause);
 
       if (wordList.length === 0) {
         return [];
