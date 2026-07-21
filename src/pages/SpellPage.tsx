@@ -23,6 +23,7 @@ import {
   Lightbulb,
   GraduationCap,
   Sparkles,
+  Delete,
 } from "lucide-react";
 import {
   generateLetterBlocks,
@@ -427,7 +428,7 @@ function BlocksMode({ onBack }: { onBack: () => void }) {
 }
 
 // ============================================================
-// Mode B: Fill in the Blank - 只填写缺失字母
+// Mode B: Fill in the Blank - 点击问号框 + 虚拟键盘
 // ============================================================
 function FillBlankMode({ onBack }: { onBack: () => void }) {
   const utils = trpc.useUtils();
@@ -437,7 +438,8 @@ function FillBlankMode({ onBack }: { onBack: () => void }) {
   });
 
   const [index, setIndex] = useState(0);
-  const [input, setInput] = useState("");
+  const [answers, setAnswers] = useState<string[]>([]);
+  const [activeBlankIdx, setActiveBlankIdx] = useState(0);
   const [result, setResult] = useState<"correct" | "wrong" | null>(null);
   const [score, setScore] = useState(0);
   const [showSummary, setShowSummary] = useState(false);
@@ -445,23 +447,58 @@ function FillBlankMode({ onBack }: { onBack: () => void }) {
 
   const currentWord = words?.[index];
   const blankPattern = currentWord ? generateFillBlank(currentWord.word) : null;
-  const blankCount = blankPattern?.display.split("").filter((c) => c === "_").length ?? 0;
+  // Positions that are blanks (indices in the display string)
+  const blankPositions = blankPattern
+    ? blankPattern.display.split("").map((c, i) => c === "_" ? i : -1).filter(i => i >= 0)
+    : [];
+  const blankCount = blankPositions.length;
 
   useEffect(() => {
-    setInput("");
+    setAnswers(new Array(blankCount).fill(""));
+    setActiveBlankIdx(0);
     setResult(null);
-  }, [index]);
+  }, [index, blankCount]);
+
+  const handleLetterPress = (letter: string) => {
+    if (result) return;
+    const newAnswers = [...answers];
+    newAnswers[activeBlankIdx] = letter;
+    setAnswers(newAnswers);
+    // Auto advance to next blank
+    if (activeBlankIdx < blankCount - 1) {
+      setActiveBlankIdx(activeBlankIdx + 1);
+    }
+  };
+
+  const handleBackspace = () => {
+    if (result) return;
+    if (answers[activeBlankIdx]) {
+      // Clear current
+      const newAnswers = [...answers];
+      newAnswers[activeBlankIdx] = "";
+      setAnswers(newAnswers);
+    } else if (activeBlankIdx > 0) {
+      // Go back to previous
+      setActiveBlankIdx(activeBlankIdx - 1);
+    }
+  };
+
+  const handleBlankClick = (blankListIdx: number) => {
+    if (result) return;
+    setActiveBlankIdx(blankListIdx);
+  };
 
   const checkAnswer = () => {
     if (!currentWord || !blankPattern) return;
-    // Build full word by filling blanks with user input
+    if (answers.some(a => !a)) return; // Not all filled
+
     const lower = currentWord.word.toLowerCase();
     let filled = "";
-    let inputIdx = 0;
+    let ansIdx = 0;
     for (let i = 0; i < blankPattern.display.length; i++) {
       if (blankPattern.display[i] === "_") {
-        filled += input[inputIdx] || "_";
-        inputIdx++;
+        filled += answers[ansIdx].toLowerCase();
+        ansIdx++;
       } else {
         filled += lower[i];
       }
@@ -491,8 +528,12 @@ function FillBlankMode({ onBack }: { onBack: () => void }) {
   if (showSummary) return <SessionSummary results={sessionResults} score={score} total={words?.length ?? 0} onBack={onBack} onRetry={() => { setIndex(0); setScore(0); setSessionResults([]); setShowSummary(false); }} />;
   if (!currentWord) return <div className="min-h-screen flex items-center justify-center"><p className="text-gray-500">暂无单词可练习</p></div>;
 
+  const allFilled = answers.every(a => a.length > 0);
+  // Map blank position in display to blank list index
+  let blankCounter = -1;
+
   return (
-    <main className="max-w-lg mx-auto px-4 py-6 pb-24">
+    <main className="max-w-lg mx-auto px-4 py-6 pb-24 min-h-screen flex flex-col">
       <div className="flex items-center justify-between mb-4">
         <button onClick={onBack} className="h-9 w-9 flex items-center justify-center rounded-lg hover:bg-gray-100">
           <ArrowLeft className="w-5 h-5 text-gray-600" />
@@ -515,27 +556,51 @@ function FillBlankMode({ onBack }: { onBack: () => void }) {
         <p className="text-sm text-gray-600">{currentWord.definition}</p>
       </div>
 
-      {/* Blank pattern display */}
+      {/* Blank pattern - clickable boxes */}
       <div className="bg-white rounded-xl border border-gray-100 p-4 mb-4">
-        <p className="text-xs text-gray-400 text-center mb-3">根据释义和发音，填写缺失的字母</p>
-        <div className="flex items-center justify-center gap-1 flex-wrap">
-          {blankPattern?.display.split("").map((char, i) => (
-            <span
-              key={i}
-              className={`min-w-[2.5rem] h-12 rounded-lg flex items-center justify-center text-lg font-bold ${
-                char === "_"
-                  ? "border-2 border-dashed border-emerald-300 bg-emerald-50 text-emerald-300 w-12"
-                  : "bg-gray-100 text-gray-700 w-10"
-              }`}
-            >
-              {char === "_" ? "?" : char}
-            </span>
-          ))}
+        <p className="text-xs text-gray-400 text-center mb-3">点击虚线框，选择字母填入</p>
+        <div className="flex items-center justify-center gap-1.5 flex-wrap">
+          {blankPattern?.display.split("").map((char, displayIdx) => {
+            if (char === "_") {
+              blankCounter++;
+              const listIdx = blankCounter;
+              const isActive = listIdx === activeBlankIdx && !result;
+              return (
+                <button
+                  key={displayIdx}
+                  onClick={() => handleBlankClick(listIdx)}
+                  disabled={!!result}
+                  className={`w-12 h-14 rounded-xl flex items-center justify-center text-xl font-bold transition-all ${
+                    result
+                      ? answers[listIdx]?.toLowerCase() === currentWord.word.toLowerCase()[displayIdx]
+                        ? "border-2 border-green-400 bg-green-50 text-green-700"
+                        : "border-2 border-red-400 bg-red-50 text-red-700"
+                      : isActive
+                        ? "border-3 border-emerald-500 bg-emerald-100 text-emerald-800 shadow-md ring-2 ring-emerald-200"
+                        : answers[listIdx]
+                          ? "border-2 border-emerald-300 bg-emerald-50 text-emerald-700"
+                          : "border-2 border-dashed border-emerald-300 bg-emerald-50/50 text-emerald-300"
+                  }`}
+                >
+                  {answers[listIdx] || "?"}
+                </button>
+              );
+            } else {
+              return (
+                <span
+                  key={displayIdx}
+                  className="w-10 h-14 rounded-lg flex items-center justify-center text-xl font-bold bg-gray-100 text-gray-700"
+                >
+                  {char}
+                </span>
+              );
+            }
+          })}
         </div>
         <p className="text-xs text-gray-400 text-center mt-2">{blankPattern?.hint}</p>
       </div>
 
-      {/* Result - show full word details after submit */}
+      {/* Result after submit */}
       {result && (
         <div className={`rounded-xl p-4 mb-4 text-center ${result === "correct" ? "bg-green-50 border border-green-200" : "bg-red-50 border border-red-200"}`}>
           {result === "correct" ? (
@@ -564,33 +629,73 @@ function FillBlankMode({ onBack }: { onBack: () => void }) {
         </div>
       )}
 
-      {/* Input - only missing letters */}
-      {!result ? (
-        <div className="space-y-3">
-          <Input
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && input.trim().length >= blankCount && checkAnswer()}
-            placeholder={`填写 ${blankCount} 个缺失字母`}
-            className="h-12 text-center text-lg tracking-widest font-mono"
-            maxLength={blankCount}
-            autoFocus
-          />
-          <Button className="w-full h-12 bg-gradient-to-r from-emerald-500 to-teal-600" disabled={input.trim().length < blankCount} onClick={checkAnswer}>
-            提交答案
-          </Button>
+      {/* Virtual Keyboard */}
+      {!result && (
+        <div className="mt-auto">
+          {/* Submit button */}
+          <div className="mb-3">
+            <Button
+              className="w-full h-11 bg-gradient-to-r from-emerald-500 to-teal-600"
+              disabled={!allFilled}
+              onClick={checkAnswer}
+            >
+              {allFilled ? "提交答案" : `还需填写 ${blankCount - answers.filter(a => a).length} 个字母`}
+            </Button>
+          </div>
+
+          {/* A-Z keyboard */}
+          <div className="bg-gray-50 rounded-xl p-3">
+            {/* Row 1: QWERTYUIOP */}
+            <div className="flex justify-center gap-1 mb-1">
+              {["Q","W","E","R","T","Y","U","I","O","P"].map(letter => (
+                <button
+                  key={letter}
+                  onClick={() => handleLetterPress(letter.toLowerCase())}
+                  className="w-8 h-10 rounded-lg bg-white border border-gray-200 text-sm font-semibold text-gray-700 hover:bg-emerald-50 hover:border-emerald-300 active:scale-95 transition-all"
+                >
+                  {letter}
+                </button>
+              ))}
+            </div>
+            {/* Row 2: ASDFGHJKL */}
+            <div className="flex justify-center gap-1 mb-1">
+              {["A","S","D","F","G","H","J","K","L"].map(letter => (
+                <button
+                  key={letter}
+                  onClick={() => handleLetterPress(letter.toLowerCase())}
+                  className="w-8 h-10 rounded-lg bg-white border border-gray-200 text-sm font-semibold text-gray-700 hover:bg-emerald-50 hover:border-emerald-300 active:scale-95 transition-all"
+                >
+                  {letter}
+                </button>
+              ))}
+            </div>
+            {/* Row 3: ZXCVBNM + Delete */}
+            <div className="flex justify-center gap-1">
+              {["Z","X","C","V","B","N","M"].map(letter => (
+                <button
+                  key={letter}
+                  onClick={() => handleLetterPress(letter.toLowerCase())}
+                  className="w-8 h-10 rounded-lg bg-white border border-gray-200 text-sm font-semibold text-gray-700 hover:bg-emerald-50 hover:border-emerald-300 active:scale-95 transition-all"
+                >
+                  {letter}
+                </button>
+              ))}
+              <button
+                onClick={handleBackspace}
+                className="w-14 h-10 rounded-lg bg-gray-200 border border-gray-300 text-sm font-semibold text-gray-600 hover:bg-red-50 hover:border-red-300 hover:text-red-500 active:scale-95 transition-all flex items-center justify-center"
+              >
+                <Delete className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
         </div>
-      ) : (
-        <Button className="w-full h-12 bg-gradient-to-r from-emerald-500 to-teal-600" onClick={nextWord}>
-          {words && index < words.length - 1 ? "下一个" : "查看结果"}
-        </Button>
       )}
 
-      {result === "wrong" && (
-        <div className="mt-4 bg-white rounded-xl border border-gray-100 p-4">
-          <p className="text-sm text-gray-500 mb-2">正确答案是：{currentWord.word}</p>
-          <p className="text-sm text-gray-600">{currentWord.definition}</p>
-          {currentWord.example && <p className="text-xs text-gray-400 mt-1 italic">{currentWord.example}</p>}
+      {result && (
+        <div className="mt-4">
+          <Button className="w-full h-12 bg-gradient-to-r from-emerald-500 to-teal-600" onClick={nextWord}>
+            {words && index < words.length - 1 ? "下一个" : "查看结果"}
+          </Button>
         </div>
       )}
     </main>
