@@ -427,11 +427,10 @@ function BlocksMode({ onBack }: { onBack: () => void }) {
 }
 
 // ============================================================
-// Mode B: Fill in the Blank
+// Mode B: Fill in the Blank - 只填写缺失字母
 // ============================================================
 function FillBlankMode({ onBack }: { onBack: () => void }) {
   const utils = trpc.useUtils();
-  // Prefer manual (newly learned) words, fallback to all
   const { data: words, isLoading } = trpc.spelling.getPracticeWords.useQuery({ limit: 10, source: "manual" });
   const submitResult = trpc.spelling.submitResult.useMutation({
     onSuccess: () => utils.spelling.getReviewQueue.invalidate(),
@@ -446,6 +445,7 @@ function FillBlankMode({ onBack }: { onBack: () => void }) {
 
   const currentWord = words?.[index];
   const blankPattern = currentWord ? generateFillBlank(currentWord.word) : null;
+  const blankCount = blankPattern?.display.split("").filter((c) => c === "_").length ?? 0;
 
   useEffect(() => {
     setInput("");
@@ -453,8 +453,20 @@ function FillBlankMode({ onBack }: { onBack: () => void }) {
   }, [index]);
 
   const checkAnswer = () => {
-    if (!currentWord) return;
-    const correct = input.trim().toLowerCase() === currentWord.word.toLowerCase();
+    if (!currentWord || !blankPattern) return;
+    // Build full word by filling blanks with user input
+    const lower = currentWord.word.toLowerCase();
+    let filled = "";
+    let inputIdx = 0;
+    for (let i = 0; i < blankPattern.display.length; i++) {
+      if (blankPattern.display[i] === "_") {
+        filled += input[inputIdx] || "_";
+        inputIdx++;
+      } else {
+        filled += lower[i];
+      }
+    }
+    const correct = filled === lower;
     setResult(correct ? "correct" : "wrong");
     setSessionResults((r) => [...r, { word: currentWord.word, correct }]);
     if (correct) setScore((s) => s + 1);
@@ -462,7 +474,7 @@ function FillBlankMode({ onBack }: { onBack: () => void }) {
     submitResult.mutate({
       wordId: currentWord.id,
       isCorrect: correct,
-      userInput: input,
+      userInput: filled,
       practiceMode: "fillblank",
     });
   };
@@ -491,8 +503,8 @@ function FillBlankMode({ onBack }: { onBack: () => void }) {
         </div>
       </div>
 
-      {/* Word Info */}
-      <div className="bg-white rounded-xl border border-gray-100 p-4 mb-4">
+      {/* Word Info - 只显示释义 */}
+      <div className="bg-white rounded-xl border border-gray-100 p-4 mb-4 text-center">
         <button
           onClick={() => speakWord(currentWord.word)}
           className="inline-flex items-center gap-2 mb-2"
@@ -501,16 +513,19 @@ function FillBlankMode({ onBack }: { onBack: () => void }) {
           <span className="text-xs text-gray-500">听发音</span>
         </button>
         <p className="text-sm text-gray-600">{currentWord.definition}</p>
+      </div>
 
-        {/* Blank pattern */}
-        <div className="flex items-center justify-center gap-1 mt-4">
+      {/* Blank pattern display */}
+      <div className="bg-white rounded-xl border border-gray-100 p-4 mb-4">
+        <p className="text-xs text-gray-400 text-center mb-3">根据释义和发音，填写缺失的字母</p>
+        <div className="flex items-center justify-center gap-1 flex-wrap">
           {blankPattern?.display.split("").map((char, i) => (
             <span
               key={i}
-              className={`w-10 h-12 rounded-lg flex items-center justify-center text-lg font-bold ${
+              className={`min-w-[2.5rem] h-12 rounded-lg flex items-center justify-center text-lg font-bold ${
                 char === "_"
-                  ? "border-2 border-dashed border-emerald-300 bg-emerald-50 text-emerald-300"
-                  : "bg-gray-100 text-gray-700"
+                  ? "border-2 border-dashed border-emerald-300 bg-emerald-50 text-emerald-300 w-12"
+                  : "bg-gray-100 text-gray-700 w-10"
               }`}
             >
               {char === "_" ? "?" : char}
@@ -520,35 +535,48 @@ function FillBlankMode({ onBack }: { onBack: () => void }) {
         <p className="text-xs text-gray-400 text-center mt-2">{blankPattern?.hint}</p>
       </div>
 
-      {/* Result */}
+      {/* Result - show full word details after submit */}
       {result && (
-        <div className={`rounded-xl p-3 mb-4 text-center ${result === "correct" ? "bg-green-50 border border-green-200" : "bg-red-50 border border-red-200"}`}>
+        <div className={`rounded-xl p-4 mb-4 text-center ${result === "correct" ? "bg-green-50 border border-green-200" : "bg-red-50 border border-red-200"}`}>
           {result === "correct" ? (
-            <div className="flex items-center justify-center gap-2">
+            <div className="flex items-center justify-center gap-2 mb-2">
               <CheckCircle2 className="w-5 h-5 text-green-500" />
               <span className="text-sm font-medium text-green-700">正确！</span>
             </div>
           ) : (
-            <div className="flex items-center justify-center gap-2">
+            <div className="flex items-center justify-center gap-2 mb-2">
               <XCircle className="w-5 h-5 text-red-500" />
-              <span className="text-sm font-medium text-red-700">错误，正确答案是：{currentWord.word}</span>
+              <span className="text-sm font-medium text-red-700">错误</span>
             </div>
           )}
+          <div className="mt-3 pt-3 border-t border-gray-200/50">
+            <p className="text-lg font-bold text-gray-900">{currentWord.word}</p>
+            {currentWord.phonetic && <p className="text-sm text-gray-400 font-mono mt-1">{currentWord.phonetic}</p>}
+            {currentWord.example && <p className="text-xs text-gray-500 mt-2 italic">&quot;{currentWord.example}&quot;</p>}
+            {currentWord.tags && currentWord.tags.length > 0 && (
+              <div className="flex flex-wrap justify-center gap-1 mt-2">
+                {currentWord.tags.map((tag: any) => (
+                  <span key={tag.id} className="text-[10px] px-1.5 py-0.5 bg-indigo-50 text-indigo-600 rounded">{tag.name}</span>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       )}
 
-      {/* Input */}
+      {/* Input - only missing letters */}
       {!result ? (
         <div className="space-y-3">
           <Input
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && input.trim() && checkAnswer()}
-            placeholder="输入完整单词"
+            onKeyDown={(e) => e.key === "Enter" && input.trim().length >= blankCount && checkAnswer()}
+            placeholder={`填写 ${blankCount} 个缺失字母`}
             className="h-12 text-center text-lg tracking-widest font-mono"
+            maxLength={blankCount}
             autoFocus
           />
-          <Button className="w-full h-12 bg-gradient-to-r from-emerald-500 to-teal-600" disabled={!input.trim()} onClick={checkAnswer}>
+          <Button className="w-full h-12 bg-gradient-to-r from-emerald-500 to-teal-600" disabled={input.trim().length < blankCount} onClick={checkAnswer}>
             提交答案
           </Button>
         </div>
@@ -556,6 +584,14 @@ function FillBlankMode({ onBack }: { onBack: () => void }) {
         <Button className="w-full h-12 bg-gradient-to-r from-emerald-500 to-teal-600" onClick={nextWord}>
           {words && index < words.length - 1 ? "下一个" : "查看结果"}
         </Button>
+      )}
+
+      {result === "wrong" && (
+        <div className="mt-4 bg-white rounded-xl border border-gray-100 p-4">
+          <p className="text-sm text-gray-500 mb-2">正确答案是：{currentWord.word}</p>
+          <p className="text-sm text-gray-600">{currentWord.definition}</p>
+          {currentWord.example && <p className="text-xs text-gray-400 mt-1 italic">{currentWord.example}</p>}
+        </div>
       )}
     </main>
   );
