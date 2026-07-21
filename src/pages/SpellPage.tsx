@@ -647,34 +647,34 @@ function FillBlankMode({ onBack }: { onBack: () => void }) {
           <div className="bg-gray-50 rounded-xl p-3">
             {/* Row 1: QWERTYUIOP */}
             <div className="flex justify-center gap-1 mb-1">
-              {["Q","W","E","R","T","Y","U","I","O","P"].map(letter => (
+              {["q","w","e","r","t","y","u","i","o","p"].map(letter => (
                 <button
                   key={letter}
-                  onClick={() => handleLetterPress(letter.toLowerCase())}
+                  onClick={() => handleLetterPress(letter)}
                   className="w-8 h-10 rounded-lg bg-white border border-gray-200 text-sm font-semibold text-gray-700 hover:bg-emerald-50 hover:border-emerald-300 active:scale-95 transition-all"
                 >
                   {letter}
                 </button>
               ))}
             </div>
-            {/* Row 2: ASDFGHJKL */}
+            {/* Row 2: asdfghjkl */}
             <div className="flex justify-center gap-1 mb-1">
-              {["A","S","D","F","G","H","J","K","L"].map(letter => (
+              {["a","s","d","f","g","h","j","k","l"].map(letter => (
                 <button
                   key={letter}
-                  onClick={() => handleLetterPress(letter.toLowerCase())}
+                  onClick={() => handleLetterPress(letter)}
                   className="w-8 h-10 rounded-lg bg-white border border-gray-200 text-sm font-semibold text-gray-700 hover:bg-emerald-50 hover:border-emerald-300 active:scale-95 transition-all"
                 >
                   {letter}
                 </button>
               ))}
             </div>
-            {/* Row 3: ZXCVBNM + Delete */}
+            {/* Row 3: zxcvbnm + Delete */}
             <div className="flex justify-center gap-1">
-              {["Z","X","C","V","B","N","M"].map(letter => (
+              {["z","x","c","v","b","n","m"].map(letter => (
                 <button
                   key={letter}
-                  onClick={() => handleLetterPress(letter.toLowerCase())}
+                  onClick={() => handleLetterPress(letter)}
                   className="w-8 h-10 rounded-lg bg-white border border-gray-200 text-sm font-semibold text-gray-700 hover:bg-emerald-50 hover:border-emerald-300 active:scale-95 transition-all"
                 >
                   {letter}
@@ -822,34 +822,34 @@ function FlashMode({ onBack }: { onBack: () => void }) {
             <div className="bg-gray-50 rounded-xl p-3">
               {/* Row 1: QWERTYUIOP */}
               <div className="flex justify-center gap-1 mb-1">
-                {["Q","W","E","R","T","Y","U","I","O","P"].map(letter => (
+                {["q","w","e","r","t","y","u","i","o","p"].map(letter => (
                   <button
                     key={letter}
-                    onClick={() => setInput((prev) => prev + letter.toLowerCase())}
+                    onClick={() => setInput((prev) => prev + letter)}
                     className="w-8 h-10 rounded-lg bg-white border border-gray-200 text-sm font-semibold text-gray-700 hover:bg-amber-50 hover:border-amber-300 active:scale-95 transition-all"
                   >
                     {letter}
                   </button>
                 ))}
               </div>
-              {/* Row 2: ASDFGHJKL */}
+              {/* Row 2: asdfghjkl */}
               <div className="flex justify-center gap-1 mb-1">
-                {["A","S","D","F","G","H","J","K","L"].map(letter => (
+                {["a","s","d","f","g","h","j","k","l"].map(letter => (
                   <button
                     key={letter}
-                    onClick={() => setInput((prev) => prev + letter.toLowerCase())}
+                    onClick={() => setInput((prev) => prev + letter)}
                     className="w-8 h-10 rounded-lg bg-white border border-gray-200 text-sm font-semibold text-gray-700 hover:bg-amber-50 hover:border-amber-300 active:scale-95 transition-all"
                   >
                     {letter}
                   </button>
                 ))}
               </div>
-              {/* Row 3: ZXCVBNM + Delete */}
+              {/* Row 3: zxcvbnm + Delete */}
               <div className="flex justify-center gap-1">
-                {["Z","X","C","V","B","N","M"].map(letter => (
+                {["z","x","c","v","b","n","m"].map(letter => (
                   <button
                     key={letter}
-                    onClick={() => setInput((prev) => prev + letter.toLowerCase())}
+                    onClick={() => setInput((prev) => prev + letter)}
                     className="w-8 h-10 rounded-lg bg-white border border-gray-200 text-sm font-semibold text-gray-700 hover:bg-amber-50 hover:border-amber-300 active:scale-95 transition-all"
                   >
                     {letter}
