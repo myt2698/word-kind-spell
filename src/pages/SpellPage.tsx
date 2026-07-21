@@ -354,7 +354,7 @@ function BlocksMode({ onBack }: { onBack: () => void }) {
             <p className="text-lg font-bold text-gray-900">{currentWord.word}</p>
             {currentWord.phonetic && <p className="text-sm text-gray-400 font-mono mt-1">{currentWord.phonetic}</p>}
             {currentWord.example && <p className="text-xs text-gray-500 mt-2 italic">"{currentWord.example}"</p>}
-            {currentWord.tags.length > 0 && (
+            {currentWord.tags && currentWord.tags.length > 0 && (
               <div className="flex flex-wrap justify-center gap-1 mt-2">
                 {currentWord.tags.map((tag: any) => (
                   <span key={tag.id} className="text-[10px] px-1.5 py-0.5 bg-indigo-50 text-indigo-600 rounded">{tag.name}</span>
