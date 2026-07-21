@@ -228,9 +228,12 @@ function BlocksMode({ onBack }: { onBack: () => void }) {
 
   const currentWord = words?.[index];
 
+  const [letterBlocks, setLetterBlocks] = useState<Array<{ id: string; letters: string }>>([]);
+
   useEffect(() => {
     if (currentWord) {
       const blocks = generateLetterBlocks(currentWord.word);
+      setLetterBlocks(blocks);
       // Scramble pool
       const poolItems = blocks.map((b) => ({ id: b.id, letter: b.letters, used: false }));
       poolItems.sort(() => Math.random() - 0.5);
@@ -364,7 +367,7 @@ function BlocksMode({ onBack }: { onBack: () => void }) {
             className={`w-12 h-14 rounded-xl border-2 flex items-center justify-center text-lg font-bold transition-all ${
               slot
                 ? result
-                  ? slot.toLowerCase() === currentWord.word.toLowerCase().split("")[i]
+                  ? letterBlocks[i] && slot.toLowerCase() === letterBlocks[i].letters.toLowerCase()
                     ? "border-green-400 bg-green-50 text-green-700"
                     : "border-red-400 bg-red-50 text-red-700"
                   : "border-indigo-300 bg-indigo-50 text-indigo-700"
