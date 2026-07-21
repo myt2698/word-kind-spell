@@ -52,7 +52,7 @@ export interface WordFormData {
   proficiency: "new" | "learning" | "familiar" | "mastered";
 }
 
-export default function WordForm({ open, onClose, onSubmit, editWord }: WordFormProps) {
+export default function WordForm({ open, onClose, onSubmit, editWord, onSwitchToEdit }: WordFormProps & { onSwitchToEdit?: (word: any) => void }) {
   const utils = trpc.useUtils();
   const { data: textbooks } = trpc.textbook.listWithDefault.useQuery();
   const { data: allTags } = trpc.tag.list.useQuery();
@@ -408,17 +408,11 @@ export default function WordForm({ open, onClose, onSubmit, editWord }: WordForm
                     size="sm"
                     className="h-7 text-xs"
                     onClick={() => {
-                      setForm({
-                        word: existingWord.word,
-                        phonetic: existingWord.phonetic || "",
-                        definition: existingWord.definition,
-                        example: existingWord.example || "",
-                        notes: existingWord.notes || "",
-                        groupId: existingWord.groupId ?? undefined,
-                        tagIds: existingWord.tags.map((t) => t.id),
-                        proficiency: existingWord.proficiency as WordFormData["proficiency"],
-                      });
-                      setExistingWord(null);
+                      // Close new dialog, open edit dialog via parent
+                      if (onSwitchToEdit) {
+                        onSwitchToEdit(existingWord);
+                      }
+                      onClose();
                     }}
                   >
                     <Edit3 className="w-3 h-3 mr-1" />

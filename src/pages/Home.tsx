@@ -240,6 +240,10 @@ export default function Home() {
           onClose={() => { setShowWordForm(false); setEditWord(null); }}
           onSubmit={editWord ? handleEditWord : handleAddWord}
           editWord={editWord}
+          onSwitchToEdit={(existingWord) => {
+            setEditWord(existingWord);
+            setShowWordForm(true);
+          }}
         />
       </main>
 
