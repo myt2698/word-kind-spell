@@ -620,7 +620,7 @@ export default function WordForm({ open, onClose, onSubmit, editWord }: WordForm
               className="flex-1 h-10 bg-gradient-to-r from-indigo-500 to-blue-600 hover:from-indigo-600 hover:to-blue-700"
               disabled={!form.word.trim() || !form.definition.trim()}
             >
-              {editWord ? "保存修改" : "添加单词"}
+              {editWord || isEditingMode ? "保存修改" : "添加单词"}
             </Button>
           </div>
         </form>
