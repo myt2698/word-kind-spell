@@ -84,7 +84,9 @@ function SpellHome({ onStart }: { onStart: (mode: SpellView) => void }) {
   const { user, isLoading: authLoading } = useAuth({ redirectOnUnauthenticated: true });
   const { data: reviewQueue, isLoading } = trpc.spelling.getReviewQueue.useQuery();
   const { data: learningQueue } = trpc.spelling.getLearningQueue.useQuery();
+  const { data: errorWords } = trpc.spelling.getErrorWords.useQuery();
   const { data: stats } = trpc.spelling.getStats.useQuery();
+  const [expandedCard, setExpandedCard] = useState<string | null>(null);
 
   if (authLoading) {
     return <div className="min-h-screen flex items-center justify-center"><Loader2 className="w-8 h-8 animate-spin text-indigo-500" /></div>;
@@ -95,6 +97,10 @@ function SpellHome({ onStart }: { onStart: (mode: SpellView) => void }) {
   const manualDue = reviewQueue?.filter((w) => w.source === "manual") ?? [];
   const autoDue = reviewQueue?.filter((w) => w.source === "auto") ?? [];
 
+  const toggleCard = (card: string) => {
+    setExpandedCard(expandedCard === card ? null : card);
+  };
+
   return (
     <main className="max-w-3xl mx-auto px-4 py-6 pb-24">
       <h1 className="text-xl font-bold text-gray-900 flex items-center gap-2 mb-1">
@@ -103,80 +109,138 @@ function SpellHome({ onStart }: { onStart: (mode: SpellView) => void }) {
       </h1>
       <p className="text-sm text-gray-500 mb-6">先加入学习，再按艾宾浩斯曲线复习</p>
 
-      {/* Stats Cards */}
-      <div className="grid grid-cols-4 gap-3 mb-6">
-        <div className="bg-white rounded-xl border border-gray-100 p-3 text-center">
+      {/* Stats Cards - Clickable to expand lists */}
+      <div className="grid grid-cols-4 gap-3 mb-4">
+        {/* 学习中 */}
+        <button
+          onClick={() => toggleCard("learning")}
+          className={`bg-white rounded-xl border p-3 text-center transition-all ${expandedCard === "learning" ? "border-emerald-400 ring-2 ring-emerald-100" : "border-gray-100 hover:border-emerald-200"}`}
+        >
           <p className="text-2xl font-bold text-emerald-600">{stats?.learningWords ?? 0}</p>
           <p className="text-xs text-gray-500">学习中</p>
-        </div>
-        <div className="bg-white rounded-xl border border-gray-100 p-3 text-center">
+        </button>
+        {/* 新学单词 */}
+        <button
+          onClick={() => toggleCard("new")}
+          className={`bg-white rounded-xl border p-3 text-center transition-all ${expandedCard === "new" ? "border-indigo-400 ring-2 ring-indigo-100" : "border-gray-100 hover:border-indigo-200"}`}
+        >
           <p className="text-2xl font-bold text-indigo-600">{stats?.manualDue ?? 0}</p>
-          <p className="text-xs text-gray-500">新学待复习</p>
-        </div>
-        <div className="bg-white rounded-xl border border-gray-100 p-3 text-center">
+          <p className="text-xs text-gray-500">新学单词</p>
+        </button>
+        {/* 总待复习 */}
+        <button
+          onClick={() => toggleCard("review")}
+          className={`bg-white rounded-xl border p-3 text-center transition-all ${expandedCard === "review" ? "border-amber-400 ring-2 ring-amber-100" : "border-gray-100 hover:border-amber-200"}`}
+        >
           <p className="text-2xl font-bold text-amber-600">{stats?.dueForReview ?? 0}</p>
           <p className="text-xs text-gray-500">总待复习</p>
-        </div>
-        <div className="bg-white rounded-xl border border-gray-100 p-3 text-center">
+        </button>
+        {/* 错题 */}
+        <button
+          onClick={() => toggleCard("errors")}
+          className={`bg-white rounded-xl border p-3 text-center transition-all ${expandedCard === "errors" ? "border-rose-400 ring-2 ring-rose-100" : "border-gray-100 hover:border-rose-200"}`}
+        >
           <p className="text-2xl font-bold text-rose-600">{stats?.totalErrors ?? 0}</p>
           <p className="text-xs text-gray-500">错题</p>
-        </div>
+        </button>
       </div>
 
-      {/* Newly learned words (manual source) */}
-      {manualDue.length > 0 && (
-        <div className="bg-gradient-to-r from-emerald-50 to-green-50 rounded-xl border border-emerald-200 p-4 mb-4">
-          <h2 className="text-sm font-semibold text-emerald-700 mb-3 flex items-center gap-2">
-            <Sparkles className="w-4 h-4 text-emerald-500" />
-            新学单词 <span className="text-xs bg-emerald-200 text-emerald-700 px-2 py-0.5 rounded-full">{manualDue.length} 个待复习</span>
+      {/* Expanded Lists */}
+      {expandedCard === "learning" && learningQueue && learningQueue.length > 0 && (
+        <div className="bg-emerald-50 rounded-xl border border-emerald-200 p-4 mb-4">
+          <h2 className="text-sm font-semibold text-emerald-700 mb-2 flex items-center gap-2">
+            <GraduationCap className="w-4 h-4 text-emerald-500" />
+            学习中的单词 ({learningQueue.length})
           </h2>
-          <div className="space-y-1.5 max-h-32 overflow-y-auto">
-            {manualDue.slice(0, 8).map((w) => (
+          <div className="space-y-1.5 max-h-40 overflow-y-auto">
+            {learningQueue.map((w) => (
               <div key={w.id} className="flex items-center gap-3 p-2 rounded-lg bg-white/80">
                 <span className="text-sm font-medium flex-1 text-emerald-800">{w.word}</span>
                 {w.phonetic && <span className="text-xs text-emerald-400 font-mono">{w.phonetic}</span>}
-                <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-600">
-                  新学
-                </span>
+                <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-600">Lv.{w.level}</span>
               </div>
             ))}
           </div>
         </div>
       )}
+      {expandedCard === "learning" && (!learningQueue || learningQueue.length === 0) && (
+        <div className="bg-gray-50 rounded-xl border border-gray-200 p-4 mb-4 text-center">
+          <p className="text-sm text-gray-400">暂无学习中的单词</p>
+          <p className="text-xs text-gray-400 mt-1">去单词列表点击"加入学习"</p>
+        </div>
+      )}
 
-      {/* Regular review queue (auto source) */}
-      {autoDue.length > 0 && (
-        <div className="bg-white rounded-xl border border-gray-100 p-4 mb-6">
-          <h2 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
-            <Clock className="w-4 h-4 text-indigo-500" />
-            复习队列 <span className="text-xs bg-indigo-100 text-indigo-600 px-2 py-0.5 rounded-full">{autoDue.length} 个</span>
+      {expandedCard === "new" && manualDue.length > 0 && (
+        <div className="bg-indigo-50 rounded-xl border border-indigo-200 p-4 mb-4">
+          <h2 className="text-sm font-semibold text-indigo-700 mb-2 flex items-center gap-2">
+            <Sparkles className="w-4 h-4 text-indigo-500" />
+            新学单词 ({manualDue.length})
           </h2>
-          <div className="space-y-1.5 max-h-32 overflow-y-auto">
-            {autoDue.slice(0, 8).map((w) => (
-              <div key={w.id} className="flex items-center gap-3 p-2 rounded-lg bg-gray-50">
-                <span className="text-sm font-medium flex-1">{w.word}</span>
-                {w.phonetic && <span className="text-xs text-gray-400 font-mono">{w.phonetic}</span>}
-                <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${
-                  w.level === 1 ? "bg-red-50 text-red-500" :
-                  w.level === 2 ? "bg-amber-50 text-amber-500" :
-                  "bg-green-50 text-green-500"
-                }`}>
-                  Lv.{w.level}
-                </span>
+          <div className="space-y-1.5 max-h-40 overflow-y-auto">
+            {manualDue.map((w) => (
+              <div key={w.id} className="flex items-center gap-3 p-2 rounded-lg bg-white/80">
+                <span className="text-sm font-medium flex-1 text-indigo-800">{w.word}</span>
+                {w.phonetic && <span className="text-xs text-indigo-400 font-mono">{w.phonetic}</span>}
+                <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-indigo-100 text-indigo-600">新学</span>
               </div>
             ))}
           </div>
         </div>
       )}
-
-      {dueCount === 0 && (
-        <div className="text-center py-6 mb-6">
-          <Trophy className="w-10 h-10 text-gray-200 mx-auto mb-2" />
-          <p className="text-sm text-gray-400">暂无待复习单词</p>
-          <p className="text-xs text-gray-400 mt-1">去单词列表加入新单词来学习吧</p>
+      {expandedCard === "new" && manualDue.length === 0 && (
+        <div className="bg-gray-50 rounded-xl border border-gray-200 p-4 mb-4 text-center">
+          <p className="text-sm text-gray-400">暂无新学单词</p>
+          <p className="text-xs text-gray-400 mt-1">去单词列表点击"加入学习"</p>
         </div>
       )}
 
+      {expandedCard === "review" && (
+        <div className="bg-amber-50 rounded-xl border border-amber-200 p-4 mb-4">
+          <h2 className="text-sm font-semibold text-amber-700 mb-2 flex items-center gap-2">
+            <Clock className="w-4 h-4 text-amber-500" />
+            待复习队列
+          </h2>
+          {autoDue.length > 0 ? (
+            <div className="space-y-1.5 max-h-40 overflow-y-auto">
+              {autoDue.map((w) => (
+                <div key={w.id} className="flex items-center gap-3 p-2 rounded-lg bg-white/80">
+                  <span className="text-sm font-medium flex-1 text-amber-800">{w.word}</span>
+                  {w.phonetic && <span className="text-xs text-amber-400 font-mono">{w.phonetic}</span>}
+                  <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${w.level === 1 ? "bg-red-100 text-red-600" : w.level === 2 ? "bg-amber-100 text-amber-600" : "bg-green-100 text-green-600"}`}>Lv.{w.level}</span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-sm text-gray-400 text-center py-2">暂无待复习单词</p>
+          )}
+        </div>
+      )}
+
+      {expandedCard === "errors" && errorWords && errorWords.length > 0 && (
+        <div className="bg-rose-50 rounded-xl border border-rose-200 p-4 mb-4">
+          <h2 className="text-sm font-semibold text-rose-700 mb-2 flex items-center gap-2">
+            <XCircle className="w-4 h-4 text-rose-500" />
+            错题本 ({errorWords.length})
+          </h2>
+          <div className="space-y-1.5 max-h-40 overflow-y-auto">
+            {errorWords.map((w) => (
+              <div key={w.id} className="flex items-center gap-3 p-2 rounded-lg bg-white/80">
+                <span className="text-sm font-medium flex-1 text-rose-800">{w.word}</span>
+                {w.phonetic && <span className="text-xs text-rose-400 font-mono">{w.phonetic}</span>}
+                <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-rose-100 text-rose-600">错{w.errorCount}次</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+      {expandedCard === "errors" && (!errorWords || errorWords.length === 0) && (
+        <div className="bg-gray-50 rounded-xl border border-gray-200 p-4 mb-4 text-center">
+          <p className="text-sm text-gray-400">暂无错题</p>
+          <p className="text-xs text-gray-400 mt-1">继续练习，错题会自动记录</p>
+        </div>
+      )}
+
+      {/*
       {/* Mode Selection */}
       <h2 className="text-sm font-semibold text-gray-700 mb-3">选择练习模式</h2>
       <div className="space-y-3">

@@ -501,6 +501,55 @@ export const spellingRouter = createRouter({
     };
   }),
 
+  // ========== Error Words ==========
+
+  getErrorWords: authedQuery.query(async ({ ctx }) => {
+    const db = getDb();
+
+    // Get distinct wordIds from spellingErrors
+    const errorRows = await db
+      .selectDistinct({ wordId: spellingErrors.wordId })
+      .from(spellingErrors)
+      .where(eq(spellingErrors.userId, ctx.user.id));
+
+    const wordIds = errorRows.map((r) => r.wordId);
+    if (wordIds.length === 0) return [];
+
+    const wordList = await db
+      .select({
+        id: words.id,
+        word: words.word,
+        phonetic: words.phonetic,
+        definition: words.definition,
+        example: words.example,
+      })
+      .from(words)
+      .where(
+        and(
+          eq(words.userId, ctx.user.id),
+          inArray(words.id, wordIds)
+        )
+      )
+      .orderBy(desc(words.createdAt));
+
+    // Get error counts per word
+    const errorCounts = await db
+      .select({
+        wordId: spellingErrors.wordId,
+        count: count(),
+      })
+      .from(spellingErrors)
+      .where(eq(spellingErrors.userId, ctx.user.id))
+      .groupBy(spellingErrors.wordId);
+
+    const countMap = new Map(errorCounts.map((c) => [c.wordId, c.count]));
+
+    return wordList.map((w) => ({
+      ...w,
+      errorCount: countMap.get(w.id) ?? 0,
+    }));
+  }),
+
   // ========== Practice Words ==========
 
   getPracticeWords: authedQuery
