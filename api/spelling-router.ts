@@ -212,26 +212,39 @@ export const spellingRouter = createRouter({
 
   // ========== Review Queue ==========
 
-  // Get review queue - prioritize manual source words first
+  // Get review queue - only words with learningStatus="active"
   getReviewQueue: authedQuery.query(async ({ ctx }) => {
     const db = getDb();
     const now = new Date();
 
-    // Get due wordSpellings: manual source first, then auto
+    // First get active words
+    const activeWords = await db
+      .select({ id: words.id })
+      .from(words)
+      .where(
+        and(
+          eq(words.userId, ctx.user.id),
+          eq(words.learningStatus, "active")
+        )
+      );
+
+    const activeWordIds = activeWords.map((w) => w.id);
+    if (activeWordIds.length === 0) return [];
+
+    // Get due wordSpellings for active words only
     const dueRecords = await db
       .select()
       .from(wordSpellings)
       .where(
         and(
           eq(wordSpellings.userId, ctx.user.id),
-          lte(wordSpellings.nextReviewAt, now)
+          lte(wordSpellings.nextReviewAt, now),
+          inArray(wordSpellings.wordId, activeWordIds)
         )
       )
       .orderBy(wordSpellings.source, wordSpellings.level);
 
-    if (dueRecords.length === 0) {
-      return [];
-    }
+    if (dueRecords.length === 0) return [];
 
     // Fetch word details
     const wordIds = dueRecords.map((r) => r.wordId);
@@ -436,39 +449,64 @@ export const spellingRouter = createRouter({
         )
       );
 
-    // By level
-    const byLevel = await db
-      .select({
-        level: wordSpellings.level,
-        count: count(),
-      })
-      .from(wordSpellings)
-      .where(eq(wordSpellings.userId, ctx.user.id))
-      .groupBy(wordSpellings.level);
+    // By level - only for active words
+    let byLevel: any[] = [];
+    if (activeIds.length > 0) {
+      byLevel = await db
+        .select({
+          level: wordSpellings.level,
+          count: count(),
+        })
+        .from(wordSpellings)
+        .where(
+          and(
+            eq(wordSpellings.userId, ctx.user.id),
+            inArray(wordSpellings.wordId, activeIds)
+          )
+        )
+        .groupBy(wordSpellings.level);
+    }
 
-    // Due for review
+    // Due for review - only count words with learningStatus="active"
     const now = new Date();
-    const dueCount = await db
-      .select({ count: count() })
-      .from(wordSpellings)
+    const activeWordIdsForDue = await db
+      .select({ id: words.id })
+      .from(words)
       .where(
         and(
-          eq(wordSpellings.userId, ctx.user.id),
-          lte(wordSpellings.nextReviewAt, now)
+          eq(words.userId, ctx.user.id),
+          eq(words.learningStatus, "active")
         )
       );
+    const activeIds = activeWordIdsForDue.map((w) => w.id);
 
-    // Manual source due (newly learned)
-    const manualDue = await db
-      .select({ count: count() })
-      .from(wordSpellings)
-      .where(
-        and(
-          eq(wordSpellings.userId, ctx.user.id),
-          eq(wordSpellings.source, "manual"),
-          lte(wordSpellings.nextReviewAt, now)
-        )
-      );
+    let dueCount: any = [{ count: 0 }];
+    let manualDue: any = [{ count: 0 }];
+
+    if (activeIds.length > 0) {
+      dueCount = await db
+        .select({ count: count() })
+        .from(wordSpellings)
+        .where(
+          and(
+            eq(wordSpellings.userId, ctx.user.id),
+            lte(wordSpellings.nextReviewAt, now),
+            inArray(wordSpellings.wordId, activeIds)
+          )
+        );
+
+      manualDue = await db
+        .select({ count: count() })
+        .from(wordSpellings)
+        .where(
+          and(
+            eq(wordSpellings.userId, ctx.user.id),
+            eq(wordSpellings.source, "manual"),
+            lte(wordSpellings.nextReviewAt, now),
+            inArray(wordSpellings.wordId, activeIds)
+          )
+        );
+    }
 
     // Total distinct words with errors
     const totalErrors = await db
