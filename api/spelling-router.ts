@@ -449,6 +449,19 @@ export const spellingRouter = createRouter({
         )
       );
 
+    // Get active word IDs for due review and byLevel
+    const now = new Date();
+    const activeWordIdsResult = await db
+      .select({ id: words.id })
+      .from(words)
+      .where(
+        and(
+          eq(words.userId, ctx.user.id),
+          eq(words.learningStatus, "active")
+        )
+      );
+    const activeIds = activeWordIdsResult.map((w) => w.id);
+
     // By level - only for active words
     let byLevel: any[] = [];
     if (activeIds.length > 0) {
@@ -468,17 +481,6 @@ export const spellingRouter = createRouter({
     }
 
     // Due for review - only count words with learningStatus="active"
-    const now = new Date();
-    const activeWordIdsForDue = await db
-      .select({ id: words.id })
-      .from(words)
-      .where(
-        and(
-          eq(words.userId, ctx.user.id),
-          eq(words.learningStatus, "active")
-        )
-      );
-    const activeIds = activeWordIdsForDue.map((w) => w.id);
 
     let dueCount: any = [{ count: 0 }];
     let manualDue: any = [{ count: 0 }];
