@@ -403,7 +403,7 @@ function BlocksMode({ onBack }: { onBack: () => void }) {
         </button>
         <p className="text-sm text-gray-600 whitespace-pre-line">{currentWord.definition}</p>
         {/* Example hidden until submitted */}
-        {result && currentWord.example && <p className="text-xs text-gray-400 mt-1 italic">{currentWord.example}</p>}
+        {result && currentWord.example && <p className="text-xs text-gray-400 mt-1 italic whitespace-pre-line">{currentWord.example}</p>}
       </div>
 
       {/* Result - show full word details after submit */}
@@ -424,7 +424,6 @@ function BlocksMode({ onBack }: { onBack: () => void }) {
           <div className="mt-3 pt-3 border-t border-gray-200/50">
             <p className="text-lg font-bold text-gray-900">{currentWord.word}</p>
             {currentWord.phonetic && <p className="text-sm text-gray-400 font-mono mt-1">{currentWord.phonetic}</p>}
-            {currentWord.example && <p className="text-xs text-gray-500 mt-2 italic">"{currentWord.example}"</p>}
             {currentWord.tags && currentWord.tags.length > 0 && (
               <div className="flex flex-wrap justify-center gap-1 mt-2">
                 {currentWord.tags.map((tag: any) => (
@@ -623,7 +622,7 @@ function FillBlankMode({ onBack }: { onBack: () => void }) {
           <Volume2 className="w-5 h-5 text-emerald-500" />
           <span className="text-xs text-gray-500">听发音</span>
         </button>
-        <p className="text-sm text-gray-600">{currentWord.definition}</p>
+        <p className="text-sm text-gray-600 whitespace-pre-line">{currentWord.definition}</p>
       </div>
 
       {/* Blank pattern - clickable boxes */}
@@ -687,7 +686,7 @@ function FillBlankMode({ onBack }: { onBack: () => void }) {
           <div className="mt-3 pt-3 border-t border-gray-200/50">
             <p className="text-lg font-bold text-gray-900">{currentWord.word}</p>
             {currentWord.phonetic && <p className="text-sm text-gray-400 font-mono mt-1">{currentWord.phonetic}</p>}
-            {currentWord.example && <p className="text-xs text-gray-500 mt-2 italic">&quot;{currentWord.example}&quot;</p>}
+            {currentWord.example && <p className="text-xs text-gray-500 mt-2 italic whitespace-pre-line">&quot;{currentWord.example}&quot;</p>}
             {currentWord.tags && currentWord.tags.length > 0 && (
               <div className="flex flex-wrap justify-center gap-1 mt-2">
                 {currentWord.tags.map((tag: any) => (
@@ -861,7 +860,7 @@ function FlashMode({ onBack }: { onBack: () => void }) {
           <p className="text-sm text-gray-500 mb-4">记住这个单词！</p>
           <h2 className="text-3xl font-bold text-gray-900 mb-2">{currentWord.word}</h2>
           {currentWord.phonetic && <p className="text-sm text-gray-400 font-mono mb-2">{currentWord.phonetic}</p>}
-          <p className="text-sm text-gray-600 mb-6">{currentWord.definition}</p>
+          <p className="text-sm text-gray-600 mb-6 whitespace-pre-line">{currentWord.definition}</p>
           <div className="flex items-center justify-center gap-2">
             <Clock className="w-5 h-5 text-amber-500" />
             <span className="text-2xl font-bold text-amber-500">{timeLeft}</span>
@@ -873,7 +872,7 @@ function FlashMode({ onBack }: { onBack: () => void }) {
         <div className="space-y-4 min-h-[60vh] flex flex-col">
           <div className="bg-amber-50 rounded-xl border border-amber-200 p-4 text-center">
             <Lightbulb className="w-6 h-6 text-amber-500 mx-auto mb-2" />
-            <p className="text-sm text-amber-700">{currentWord.definition}</p>
+            <p className="text-sm text-amber-700 whitespace-pre-line">{currentWord.definition}</p>
           </div>
 
           {/* Read-only display box - no system keyboard */}
@@ -964,8 +963,8 @@ function FlashMode({ onBack }: { onBack: () => void }) {
                 </button>
               </div>
               {currentWord.phonetic && <p className="text-sm text-gray-400 font-mono mt-0.5">{currentWord.phonetic}</p>}
-              <p className="text-sm text-gray-600 mt-2">{currentWord.definition}</p>
-              {currentWord.example && <p className="text-xs text-gray-500 mt-1 italic">&quot;{currentWord.example}&quot;</p>}
+              <p className="text-sm text-gray-600 mt-2 whitespace-pre-line">{currentWord.definition}</p>
+              {currentWord.example && <p className="text-xs text-gray-500 mt-1 italic whitespace-pre-line">&quot;{currentWord.example}&quot;</p>}
               {currentWord.tags && currentWord.tags.length > 0 && (
                 <div className="flex flex-wrap gap-1 mt-2">
                   {currentWord.tags.map((tag: any) => (
