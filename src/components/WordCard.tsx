@@ -171,7 +171,7 @@ export default function WordCard({ word, onEdit, onDelete }: WordCardProps) {
 
               {/* Actions */}
               <div className="flex flex-col items-end gap-1 shrink-0">
-                {/* Learning button */}
+                {/* Learning toggle: 加入学习 <-> 已加入 */}
                 {isIdle ? (
                   <Button
                     variant="outline"
@@ -183,48 +183,17 @@ export default function WordCard({ word, onEdit, onDelete }: WordCardProps) {
                     <GraduationCap className="w-3.5 h-3.5 mr-1" />
                     {addToLearning.isPending ? "..." : "加入学习"}
                   </Button>
-                ) : isActive ? (
-                  <div className="flex gap-1">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-7 px-2 text-xs text-amber-500 hover:text-amber-600 hover:bg-amber-50"
-                      onClick={() => pauseLearning.mutate({ wordId: word.id })}
-                    >
-                      <Pause className="w-3 h-3 mr-0.5" />暂停
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-7 px-2 text-xs text-gray-400 hover:text-red-500"
-                      onClick={() => {
-                        if (confirm("确定移除这个单词的学习状态？")) {
-                          removeFromLearning.mutate({ wordId: word.id });
-                        }
-                      }}
-                    >
-                      移除
-                    </Button>
-                  </div>
                 ) : (
-                  <div className="flex gap-1">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="h-7 px-2 text-xs border-emerald-200 text-emerald-600 hover:bg-emerald-50"
-                      onClick={() => addToLearning.mutate({ wordId: word.id })}
-                    >
-                      继续学习
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-7 px-2 text-xs text-gray-400 hover:text-red-500"
-                      onClick={() => removeFromLearning.mutate({ wordId: word.id })}
-                    >
-                      移除
-                    </Button>
-                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-7 px-2 text-xs border-emerald-200 bg-emerald-50 text-emerald-600 hover:bg-white hover:text-emerald-700"
+                    onClick={() => removeFromLearning.mutate({ wordId: word.id })}
+                    disabled={removeFromLearning.isPending}
+                  >
+                    <CheckCircle2 className="w-3.5 h-3.5 mr-1" />
+                    {removeFromLearning.isPending ? "..." : "已加入"}
+                  </Button>
                 )}
 
                 {/* Edit/Delete buttons */}
