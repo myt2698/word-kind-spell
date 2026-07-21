@@ -142,10 +142,10 @@ export default function WordForm({ open, onClose, onSubmit, editWord }: WordForm
           tagIds: editWord.tags.map((t) => t.id),
           proficiency: editWord.proficiency,
         });
-        // Find textbook for this unit
-        const allUnits = textbooks?.flatMap((tb: any) => tb.groups || []);
-        const unit = allUnits?.find((u: any) => u.id === editWord.groupId);
-        if (unit?.textbookId) setSelectedTextbookId(unit.textbookId);
+        // Use textbookId from editWord if available
+        if ((editWord as any)?.textbookId) {
+          setSelectedTextbookId((editWord as any).textbookId);
+        }
       } else {
         // Load last selected textbook & unit from localStorage
         const lastTextbookId = localStorage.getItem(LAST_TEXTBOOK_KEY);

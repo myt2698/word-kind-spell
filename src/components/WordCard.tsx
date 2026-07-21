@@ -43,6 +43,7 @@ export interface WordCardData {
   tags: TagInfo[];
   groupId?: number | null;
   groupName?: string | null;
+  textbookId?: number | null;
   textbookName?: string | null;
   createdAt: Date;
   updatedAt: Date;

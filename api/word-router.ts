@@ -120,20 +120,21 @@ export const wordRouter = createRouter({
         tagMap.set(row.wordId, existing);
       }
 
-      // Query 3: Batch fetch all group names + textbook names
-      const groupMap = new Map<number, { groupName: string; textbookName: string }>();
+      // Query 3: Batch fetch all group names + textbook names + textbookId
+      const groupMap = new Map<number, { groupName: string; textbookName: string; textbookId: number }>();
       if (groupIdsForNames.length > 0) {
         const groupRows = await db
           .select({
             id: wordGroups.id,
             groupName: wordGroups.name,
             textbookName: textbooks.name,
+            textbookId: textbooks.id,
           })
           .from(wordGroups)
           .innerJoin(textbooks, eq(wordGroups.textbookId, textbooks.id))
           .where(inArray(wordGroups.id, groupIdsForNames));
         for (const g of groupRows) {
-          groupMap.set(g.id, { groupName: g.groupName, textbookName: g.textbookName });
+          groupMap.set(g.id, { groupName: g.groupName, textbookName: g.textbookName, textbookId: g.textbookId });
         }
       }
 
@@ -145,6 +146,7 @@ export const wordRouter = createRouter({
           tags: tagMap.get(word.id) ?? [],
           groupId: word.groupId,
           groupName: groupInfo?.groupName ?? null,
+          textbookId: groupInfo?.textbookId ?? null,
           textbookName: groupInfo?.textbookName ?? "扩展词汇",
         };
       });
