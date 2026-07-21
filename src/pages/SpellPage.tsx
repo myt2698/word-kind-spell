@@ -102,7 +102,7 @@ function SpellHome({ onStart }: { onStart: (mode: SpellView) => void }) {
   if (!user) return null;
 
   const dueCount = reviewQueue?.length ?? 0;
-  const manualDue = reviewQueue?.filter((w) => w.source === "manual") ?? [];
+  const manualDue = reviewQueue?.filter((w) => w.source === "manual" && w.totalAttempts === 0) ?? [];
   // Show ALL due words in review dialog, not just auto
   const allDue = reviewQueue ?? [];
 

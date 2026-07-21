@@ -497,6 +497,7 @@ export const spellingRouter = createRouter({
           )
         );
 
+      // Newly learned = manual source + never practiced (totalAttempts=0)
       manualDue = await db
         .select({ count: count() })
         .from(wordSpellings)
@@ -504,7 +505,7 @@ export const spellingRouter = createRouter({
           and(
             eq(wordSpellings.userId, ctx.user.id),
             eq(wordSpellings.source, "manual"),
-            lte(wordSpellings.nextReviewAt, now),
+            eq(wordSpellings.totalAttempts, 0),
             inArray(wordSpellings.wordId, activeIds)
           )
         );
