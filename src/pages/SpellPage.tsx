@@ -331,23 +331,37 @@ function BlocksMode({ onBack }: { onBack: () => void }) {
           <span className="text-xs text-gray-500">点击听发音</span>
         </button>
         <p className="text-sm text-gray-600 whitespace-pre-line">{currentWord.definition}</p>
-        {currentWord.example && <p className="text-xs text-gray-400 mt-1 italic">{currentWord.example}</p>}
+        {/* Example hidden until submitted */}
+        {result && currentWord.example && <p className="text-xs text-gray-400 mt-1 italic">{currentWord.example}</p>}
       </div>
 
-      {/* Result */}
+      {/* Result - show full word details after submit */}
       {result && (
-        <div className={`rounded-xl p-3 mb-4 text-center ${result === "correct" ? "bg-green-50 border border-green-200" : "bg-red-50 border border-red-200"}`}>
+        <div className={`rounded-xl p-4 mb-4 text-center ${result === "correct" ? "bg-green-50 border border-green-200" : "bg-red-50 border border-red-200"}`}>
           {result === "correct" ? (
-            <div className="flex items-center justify-center gap-2">
+            <div className="flex items-center justify-center gap-2 mb-2">
               <CheckCircle2 className="w-5 h-5 text-green-500" />
               <span className="text-sm font-medium text-green-700">正确！</span>
             </div>
           ) : (
-            <div className="flex items-center justify-center gap-2">
+            <div className="flex items-center justify-center gap-2 mb-2">
               <XCircle className="w-5 h-5 text-red-500" />
-              <span className="text-sm font-medium text-red-700">错误，正确答案是：{currentWord.word}</span>
+              <span className="text-sm font-medium text-red-700">错误</span>
             </div>
           )}
+          {/* Full word info revealed after submit */}
+          <div className="mt-3 pt-3 border-t border-gray-200/50">
+            <p className="text-lg font-bold text-gray-900">{currentWord.word}</p>
+            {currentWord.phonetic && <p className="text-sm text-gray-400 font-mono mt-1">{currentWord.phonetic}</p>}
+            {currentWord.example && <p className="text-xs text-gray-500 mt-2 italic">"{currentWord.example}"</p>}
+            {currentWord.tags.length > 0 && (
+              <div className="flex flex-wrap justify-center gap-1 mt-2">
+                {currentWord.tags.map((tag: any) => (
+                  <span key={tag.id} className="text-[10px] px-1.5 py-0.5 bg-indigo-50 text-indigo-600 rounded">{tag.name}</span>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       )}
 
