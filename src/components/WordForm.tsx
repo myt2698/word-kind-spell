@@ -509,7 +509,7 @@ export default function WordForm({ open, onClose, onSubmit, editWord }: WordForm
               onValueChange={(v) => {
                 const tbId = v === "default" ? null : parseInt(v);
                 setSelectedTextbookId(tbId);
-                updateForm({ groupId: undefined });
+                updateForm({ groupId: null });
               }}
             >
               <SelectTrigger className="h-10">
@@ -530,7 +530,7 @@ export default function WordForm({ open, onClose, onSubmit, editWord }: WordForm
               <Select
                 value={form.groupId == null ? "default" : String(form.groupId)}
                 onValueChange={(v) =>
-                  updateForm({ groupId: v === "default" ? undefined : parseInt(v) })
+                  updateForm({ groupId: v === "default" ? null : parseInt(v) })
                 }
               >
                 <SelectTrigger className="h-10">
