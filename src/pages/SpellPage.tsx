@@ -800,23 +800,70 @@ function FlashMode({ onBack }: { onBack: () => void }) {
       )}
 
       {phase === "input" && (
-        <div className="space-y-4">
+        <div className="space-y-4 min-h-[60vh] flex flex-col">
           <div className="bg-amber-50 rounded-xl border border-amber-200 p-4 text-center">
             <Lightbulb className="w-6 h-6 text-amber-500 mx-auto mb-2" />
             <p className="text-sm text-amber-700">{currentWord.definition}</p>
-            {currentWord.phonetic && <p className="text-xs text-amber-500 font-mono mt-1">{currentWord.phonetic}</p>}
           </div>
-          <Input
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && input.trim() && checkAnswer()}
-            placeholder="输入你记住的单词"
-            className="h-12 text-center text-lg tracking-widest font-mono"
-            autoFocus
-          />
-          <Button className="w-full h-12 bg-gradient-to-r from-amber-500 to-orange-600" onClick={checkAnswer} disabled={!input.trim()}>
-            提交
-          </Button>
+
+          {/* Read-only display box - no system keyboard */}
+          <div className="flex-1 flex flex-col justify-center">
+            <div className="h-14 rounded-xl border-2 border-amber-300 bg-white flex items-center justify-center text-xl tracking-[0.3em] font-mono font-bold text-gray-900">
+              {input || <span className="text-gray-300 text-sm tracking-normal">点击键盘输入单词</span>}
+            </div>
+          </div>
+
+          {/* Virtual Keyboard */}
+          <div className="mt-auto">
+            <Button className="w-full h-11 bg-gradient-to-r from-amber-500 to-orange-600 mb-3" onClick={checkAnswer} disabled={!input.trim()}>
+              提交
+            </Button>
+
+            <div className="bg-gray-50 rounded-xl p-3">
+              {/* Row 1: QWERTYUIOP */}
+              <div className="flex justify-center gap-1 mb-1">
+                {["Q","W","E","R","T","Y","U","I","O","P"].map(letter => (
+                  <button
+                    key={letter}
+                    onClick={() => setInput((prev) => prev + letter.toLowerCase())}
+                    className="w-8 h-10 rounded-lg bg-white border border-gray-200 text-sm font-semibold text-gray-700 hover:bg-amber-50 hover:border-amber-300 active:scale-95 transition-all"
+                  >
+                    {letter}
+                  </button>
+                ))}
+              </div>
+              {/* Row 2: ASDFGHJKL */}
+              <div className="flex justify-center gap-1 mb-1">
+                {["A","S","D","F","G","H","J","K","L"].map(letter => (
+                  <button
+                    key={letter}
+                    onClick={() => setInput((prev) => prev + letter.toLowerCase())}
+                    className="w-8 h-10 rounded-lg bg-white border border-gray-200 text-sm font-semibold text-gray-700 hover:bg-amber-50 hover:border-amber-300 active:scale-95 transition-all"
+                  >
+                    {letter}
+                  </button>
+                ))}
+              </div>
+              {/* Row 3: ZXCVBNM + Delete */}
+              <div className="flex justify-center gap-1">
+                {["Z","X","C","V","B","N","M"].map(letter => (
+                  <button
+                    key={letter}
+                    onClick={() => setInput((prev) => prev + letter.toLowerCase())}
+                    className="w-8 h-10 rounded-lg bg-white border border-gray-200 text-sm font-semibold text-gray-700 hover:bg-amber-50 hover:border-amber-300 active:scale-95 transition-all"
+                  >
+                    {letter}
+                  </button>
+                ))}
+                <button
+                  onClick={() => setInput((prev) => prev.slice(0, -1))}
+                  className="w-14 h-10 rounded-lg bg-gray-200 border border-gray-300 text-sm font-semibold text-gray-600 hover:bg-red-50 hover:border-red-300 hover:text-red-500 active:scale-95 transition-all flex items-center justify-center"
+                >
+                  <Delete className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       )}
 
