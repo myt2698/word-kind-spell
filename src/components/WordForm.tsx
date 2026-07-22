@@ -306,7 +306,7 @@ export default function WordForm({ open, onClose, onSubmit, editWord }: WordForm
   const isPending = isLookingUp || lookupMutation.isPending;
 
   return (
-    <Dialog open={open} onOpenChange={(v) => !v && handleClose()}>
+    <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
       <DialogContent key={isEditingMode ? "edit" : "new"} className="max-w-lg max-h-[90vh] overflow-y-auto" onInteractOutside={(e) => e.preventDefault()}>
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
