@@ -1103,26 +1103,26 @@ function FillBlankMode({ onBack, words }: { onBack: () => void; words: any[] }) 
           </div>
 
           {/* A-Z keyboard */}
-          <div className="bg-gray-50 rounded-xl p-3">
+          <div className="bg-gray-50 rounded-xl p-3 sm:p-4 md:p-5">
             {/* Row 1: QWERTYUIOP */}
-            <div className="flex justify-center gap-1 mb-1">
+            <div className="flex justify-center gap-1 sm:gap-1.5 md:gap-2 mb-1 md:mb-2">
               {["q","w","e","r","t","y","u","i","o","p"].map(letter => (
                 <button
                   key={letter}
                   onClick={() => handleLetterPress(letter)}
-                  className="w-8 h-10 rounded-lg bg-white border border-gray-200 text-sm font-semibold text-gray-700 hover:bg-emerald-50 hover:border-emerald-300 active:scale-95 transition-all"
+                  className="w-8 h-10 sm:w-9 sm:h-11 md:w-11 md:h-13 lg:w-12 lg:h-14 rounded-lg bg-white border border-gray-200 text-sm sm:text-base md:text-lg font-semibold text-gray-700 hover:bg-emerald-50 hover:border-emerald-300 active:scale-95 transition-all"
                 >
                   {letter}
                 </button>
               ))}
             </div>
             {/* Row 2: asdfghjkl */}
-            <div className="flex justify-center gap-1 mb-1">
+            <div className="flex justify-center gap-1 sm:gap-1.5 md:gap-2 mb-1 md:mb-2">
               {["a","s","d","f","g","h","j","k","l"].map(letter => (
                 <button
                   key={letter}
                   onClick={() => handleLetterPress(letter)}
-                  className="w-8 h-10 rounded-lg bg-white border border-gray-200 text-sm font-semibold text-gray-700 hover:bg-emerald-50 hover:border-emerald-300 active:scale-95 transition-all"
+                  className="w-8 h-10 sm:w-9 sm:h-11 md:w-11 md:h-13 lg:w-12 lg:h-14 rounded-lg bg-white border border-gray-200 text-sm sm:text-base md:text-lg font-semibold text-gray-700 hover:bg-emerald-50 hover:border-emerald-300 active:scale-95 transition-all"
                 >
                   {letter}
                 </button>
@@ -1134,14 +1134,14 @@ function FillBlankMode({ onBack, words }: { onBack: () => void; words: any[] }) 
                 <button
                   key={letter}
                   onClick={() => handleLetterPress(letter)}
-                  className="w-8 h-10 rounded-lg bg-white border border-gray-200 text-sm font-semibold text-gray-700 hover:bg-emerald-50 hover:border-emerald-300 active:scale-95 transition-all"
+                  className="w-8 h-10 sm:w-9 sm:h-11 md:w-11 md:h-13 lg:w-12 lg:h-14 rounded-lg bg-white border border-gray-200 text-sm sm:text-base md:text-lg font-semibold text-gray-700 hover:bg-emerald-50 hover:border-emerald-300 active:scale-95 transition-all"
                 >
                   {letter}
                 </button>
               ))}
               <button
                 onClick={handleBackspace}
-                className="w-14 h-10 rounded-lg bg-gray-200 border border-gray-300 text-sm font-semibold text-gray-600 hover:bg-red-50 hover:border-red-300 hover:text-red-500 active:scale-95 transition-all flex items-center justify-center"
+                className="w-14 h-10 sm:w-16 sm:h-11 md:w-20 md:h-13 lg:w-22 lg:h-14 rounded-lg bg-gray-200 border border-gray-300 text-sm sm:text-base md:text-lg font-semibold text-gray-600 hover:bg-red-50 hover:border-red-300 hover:text-red-500 active:scale-95 transition-all flex items-center justify-center"
               >
                 <Delete className="w-4 h-4" />
               </button>
@@ -1279,26 +1279,26 @@ function FlashMode({ onBack, words }: { onBack: () => void; words: any[] }) {
               提交
             </Button>
 
-            <div className="bg-gray-50 rounded-xl p-3">
+            <div className="bg-gray-50 rounded-xl p-3 sm:p-4 md:p-5">
               {/* Row 1: QWERTYUIOP */}
-              <div className="flex justify-center gap-1 mb-1">
+              <div className="flex justify-center gap-1 sm:gap-1.5 md:gap-2 mb-1 md:mb-2">
                 {["q","w","e","r","t","y","u","i","o","p"].map(letter => (
                   <button
                     key={letter}
                     onClick={() => setInput((prev) => prev + letter)}
-                    className="w-8 h-10 rounded-lg bg-white border border-gray-200 text-sm font-semibold text-gray-700 hover:bg-amber-50 hover:border-amber-300 active:scale-95 transition-all"
+                    className="w-8 h-10 sm:w-9 sm:h-11 md:w-11 md:h-13 lg:w-12 lg:h-14 rounded-lg bg-white border border-gray-200 text-sm sm:text-base md:text-lg font-semibold text-gray-700 hover:bg-amber-50 hover:border-amber-300 active:scale-95 transition-all"
                   >
                     {letter}
                   </button>
                 ))}
               </div>
               {/* Row 2: asdfghjkl */}
-              <div className="flex justify-center gap-1 mb-1">
+              <div className="flex justify-center gap-1 sm:gap-1.5 md:gap-2 mb-1 md:mb-2">
                 {["a","s","d","f","g","h","j","k","l"].map(letter => (
                   <button
                     key={letter}
                     onClick={() => setInput((prev) => prev + letter)}
-                    className="w-8 h-10 rounded-lg bg-white border border-gray-200 text-sm font-semibold text-gray-700 hover:bg-amber-50 hover:border-amber-300 active:scale-95 transition-all"
+                    className="w-8 h-10 sm:w-9 sm:h-11 md:w-11 md:h-13 lg:w-12 lg:h-14 rounded-lg bg-white border border-gray-200 text-sm sm:text-base md:text-lg font-semibold text-gray-700 hover:bg-amber-50 hover:border-amber-300 active:scale-95 transition-all"
                   >
                     {letter}
                   </button>
@@ -1310,14 +1310,14 @@ function FlashMode({ onBack, words }: { onBack: () => void; words: any[] }) {
                   <button
                     key={letter}
                     onClick={() => setInput((prev) => prev + letter)}
-                    className="w-8 h-10 rounded-lg bg-white border border-gray-200 text-sm font-semibold text-gray-700 hover:bg-amber-50 hover:border-amber-300 active:scale-95 transition-all"
+                    className="w-8 h-10 sm:w-9 sm:h-11 md:w-11 md:h-13 lg:w-12 lg:h-14 rounded-lg bg-white border border-gray-200 text-sm sm:text-base md:text-lg font-semibold text-gray-700 hover:bg-amber-50 hover:border-amber-300 active:scale-95 transition-all"
                   >
                     {letter}
                   </button>
                 ))}
                 <button
                   onClick={() => setInput((prev) => prev.slice(0, -1))}
-                  className="w-14 h-10 rounded-lg bg-gray-200 border border-gray-300 text-sm font-semibold text-gray-600 hover:bg-red-50 hover:border-red-300 hover:text-red-500 active:scale-95 transition-all flex items-center justify-center"
+                  className="w-14 h-10 sm:w-16 sm:h-11 md:w-20 md:h-13 lg:w-22 lg:h-14 rounded-lg bg-gray-200 border border-gray-300 text-sm sm:text-base md:text-lg font-semibold text-gray-600 hover:bg-red-50 hover:border-red-300 hover:text-red-500 active:scale-95 transition-all flex items-center justify-center"
                 >
                   <Delete className="w-4 h-4" />
                 </button>
