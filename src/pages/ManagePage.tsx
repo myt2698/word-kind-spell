@@ -17,6 +17,7 @@ import {
 import {
   Tag, BookOpen, Edit3, Trash2, ChevronUp, ChevronDown,
   Star, GripVertical, X, Loader2, Plus, ChevronRight, FolderOpen,
+  Volume2, Download,
 } from "lucide-react";
 
 type ManageTab = "textbooks" | "tags";
@@ -143,6 +144,9 @@ export default function ManagePage() {
         {error && (
           <div className="bg-red-50 text-red-600 text-sm px-4 py-2.5 rounded-lg mb-4">{error}</div>
         )}
+
+        {/* Audio Management Card */}
+        <AudioManager />
 
         {/* Tab Switcher with inline add button */}
         <div className="flex items-center gap-2 mb-6">
@@ -457,6 +461,65 @@ export default function ManagePage() {
         )}
       </main>
       <MobileNav activeTab="manage" />
+    </div>
+  );
+}
+
+// ============================================================
+// Audio Manager Component
+// ============================================================
+function AudioManager() {
+  const utils = trpc.useUtils();
+  const { data: stats } = trpc.audio.getStats.useQuery();
+  const batchDownload = trpc.audio.batchDownload.useMutation({
+    onSuccess: () => {
+      utils.audio.getStats.invalidate();
+    },
+  });
+
+  const totalWords = stats?.totalWords ?? 0;
+  const totalAudios = stats?.totalAudios ?? 0;
+  const missing = Math.max(0, totalWords - totalAudios);
+  const percent = totalWords > 0 ? Math.round((totalAudios / totalWords) * 100) : 0;
+
+  return (
+    <div className="bg-white rounded-xl border border-gray-100 p-4 mb-6">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-amber-50 flex items-center justify-center">
+            <Volume2 className="w-5 h-5 text-amber-500" />
+          </div>
+          <div>
+            <h3 className="text-sm font-semibold text-gray-900">发音音频</h3>
+            <p className="text-xs text-gray-500">
+              {totalAudios} / {totalWords} 个单词有音频 ({percent}%)
+            </p>
+          </div>
+        </div>
+        {missing > 0 && (
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-9 text-xs border-amber-200 text-amber-600 hover:bg-amber-50"
+            onClick={() => batchDownload.mutate()}
+            disabled={batchDownload.isPending}
+          >
+            {batchDownload.isPending ? (
+              <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" />
+            ) : (
+              <Download className="w-3.5 h-3.5 mr-1" />
+            )}
+            下载 {missing} 个
+          </Button>
+        )}
+      </div>
+      {/* Progress bar */}
+      <div className="mt-3 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+        <div
+          className="h-full bg-amber-400 rounded-full transition-all duration-500"
+          style={{ width: `${percent}%` }}
+        />
+      </div>
     </div>
   );
 }

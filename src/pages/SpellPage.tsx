@@ -716,7 +716,7 @@ function BlocksMode({ onBack, words }: { onBack: () => void; words: any[] }) {
       {/* Word Info */}
       <div className="bg-white rounded-xl border border-gray-100 p-4 mb-4 text-center">
         <button
-          onClick={() => speakWord(currentWord.word)}
+          onClick={() => speakWord(currentWord.word, currentWord.id)}
           className="inline-flex items-center gap-2 mb-2"
         >
           <Volume2 className="w-5 h-5 text-indigo-500" />
@@ -939,7 +939,7 @@ function FillBlankMode({ onBack, words }: { onBack: () => void; words: any[] }) 
       {/* Word Info - 只显示释义 */}
       <div className="bg-white rounded-xl border border-gray-100 p-4 mb-4 text-center">
         <button
-          onClick={() => speakWord(currentWord.word)}
+          onClick={() => speakWord(currentWord.word, currentWord.id)}
           className="inline-flex items-center gap-2 mb-2"
         >
           <Volume2 className="w-5 h-5 text-emerald-500" />
@@ -1121,7 +1121,7 @@ function FlashMode({ onBack, words }: { onBack: () => void; words: any[] }) {
   useEffect(() => {
     if (phase === "show" && currentWord) {
       // Speak the word
-      speakWord(currentWord.word);
+      speakWord(currentWord.word, currentWord.id);
 
       setTimeLeft(3);
       const timer = setInterval(() => {

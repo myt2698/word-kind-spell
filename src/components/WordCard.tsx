@@ -100,7 +100,7 @@ export default function WordCard({ word, onEdit, onDelete }: WordCardProps) {
     },
   });
 
-  const handleSpeak = () => speakWord(word.word);
+  const handleSpeak = () => speakWord(word.word, word.id);
 
   const isActive = localStatus === "active";
   const isPaused = localStatus === "paused";

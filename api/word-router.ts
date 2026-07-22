@@ -1,8 +1,23 @@
 import { z } from "zod";
 import { createRouter, authedQuery } from "./middleware";
 import { getDb } from "./queries/connection";
-import { words, wordTags, tags, wordLogs, wordGroups, textbooks } from "@db/schema";
+import { words, wordTags, tags, wordLogs, wordGroups, textbooks, wordAudios } from "@db/schema";
 import { eq, and, like, or, desc, asc, sql, inArray } from "drizzle-orm";
+
+const YOUDAO_URL = "https://dict.youdao.com/dictvoice";
+
+async function downloadAudioFromYoudao(wordText: string): Promise<string | null> {
+  try {
+    const url = `${YOUDAO_URL}?audio=${encodeURIComponent(wordText)}&type=2`;
+    const response = await fetch(url);
+    if (!response.ok) return null;
+    const buffer = await response.arrayBuffer();
+    if (buffer.byteLength < 100) return null;
+    return Buffer.from(buffer).toString("base64");
+  } catch {
+    return null;
+  }
+}
 
 export const wordRouter = createRouter({
   // 获取用户的单词列表（支持搜索、多分组、多标签、课本联合筛选）
@@ -326,6 +341,17 @@ export const wordRouter = createRouter({
         userId: ctx.user.id,
         action: "create",
       });
+
+      // 自动下载发音音频（异步，不阻塞返回）
+      const audioBase64 = await downloadAudioFromYoudao(wordData.word ?? "");
+      if (audioBase64) {
+        await db.insert(wordAudios).values({
+          wordId,
+          audioData: audioBase64,
+          format: "mp3",
+          source: "youdao",
+        }).catch(() => { /* ignore duplicate */ });
+      }
 
       return { id: wordId };
     }),

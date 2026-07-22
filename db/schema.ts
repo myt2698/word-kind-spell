@@ -242,3 +242,27 @@ export const spellingSessions = mysqlTable("spelling_sessions", {
 
 export type SpellingSession = typeof spellingSessions.$inferSelect;
 export type InsertSpellingSession = typeof spellingSessions.$inferInsert;
+
+// ========== 音频存储表 ==========
+
+// 单词发音音频（从有道API下载，base64编码存储）
+export const wordAudios = mysqlTable("word_audios", {
+  id: serial("id").primaryKey(),
+  wordId: bigint("wordId", { mode: "number", unsigned: true })
+    .notNull()
+    .references(() => words.id, { onDelete: "cascade" }),
+  // 音频数据 base64 编码
+  audioData: text("audioData").notNull(),
+  // 音频格式: mp3
+  format: varchar("format", { length: 10 }).default("mp3").notNull(),
+  // 音频来源: youdao
+  source: varchar("source", { length: 20 }).default("youdao").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt")
+    .defaultNow()
+    .notNull()
+    .$onUpdate(() => new Date()),
+});
+
+export type WordAudio = typeof wordAudios.$inferSelect;
+export type InsertWordAudio = typeof wordAudios.$inferInsert;
