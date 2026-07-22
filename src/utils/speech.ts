@@ -1,13 +1,9 @@
 /**
- * Audio playback — local audio first, instant response.
+ * Audio playback — local audio first.
  *
- * Flow:
- * 1. Cache hit → play immediately (sync)
- * 2. Cache miss → fetch from server (async, ~100-300ms) → play local audio
- * 3. No local audio → Web Speech (instant fallback)
- * 4. No voices → Youdao API
- *
- * speakWord is async so the first click ALWAYS tries local audio first.
+ * Key insight: browsers (especially Chrome/Android) require AudioContext
+ * to be unlocked by a user gesture. We keep a persistent <audio> element
+ * and "prime" it on first click with an empty play(), then reuse it.
  */
 
 let cachedVoices: SpeechSynthesisVoice[] = [];
@@ -24,38 +20,60 @@ if (typeof window !== "undefined" && "speechSynthesis" in window) {
   window.speechSynthesis.onvoiceschanged = loadVoices;
 }
 
-/** Global audio cache: wordId → base64 | null */
-const audioCache = new Map<number, string | null>();
+// ---- Persistent audio element (unlocked once, reused forever) ----
+let _audioEl: HTMLAudioElement | null = null;
+let _audioUnlocked = false;
 
-/** Play base64 audio */
-function playBase64(base64: string) {
-  try {
-    const bytes = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
-    const url = URL.createObjectURL(new Blob([bytes], { type: "audio/mpeg" }));
-    const a = new Audio(url);
-    a.onended = () => URL.revokeObjectURL(url);
-    a.play().catch(() => {});
-  } catch { /* ignore */ }
+function getAudio(): HTMLAudioElement {
+  if (!_audioEl) {
+    _audioEl = document.createElement("audio");
+  }
+  return _audioEl;
 }
 
-/** Warm up speech synthesis engine */
-let engineWarmed = false;
-function warmEngine() {
-  if (engineWarmed) return;
+/** Unlock audio context — must be called INSIDE a click handler */
+function unlockAudio() {
+  if (_audioUnlocked) return;
   try {
-    const s = window.speechSynthesis;
-    const u = new SpeechSynthesisUtterance("");
-    u.volume = 0;
-    s.speak(u);
-    s.cancel();
+    const a = getAudio();
+    a.src = "data:audio/wav;base64,UklGRigAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQQAAACAgICAgICAf3hxAAB4cQB+cnEAfnJxAHhxAAB4cQB+cnEAfnJxAHhxAAB4cQB+cnEAfnJxAHhxAAB4cQB+cnEAfnJx";
+    a.play().catch(() => {});
   } catch { /* ignore */ }
-  engineWarmed = true;
+  _audioUnlocked = true;
+}
+
+/** Global audio cache */
+const audioCache = new Map<number, string | null>();
+
+/** Play base64 using the UNLOCKED persistent audio element */
+function playBase64(base64: string): boolean {
+  try {
+    unlockAudio();
+    const bytes = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
+    const url = URL.createObjectURL(new Blob([bytes], { type: "audio/mpeg" }));
+    const a = getAudio();
+    a.pause();
+    a.src = url;
+    a.currentTime = 0;
+    a.onended = () => URL.revokeObjectURL(url);
+    a.onerror = () => URL.revokeObjectURL(url);
+
+    const p = a.play();
+    if (p) {
+      p.catch(() => {
+        // Playback was blocked — revoke the URL to prevent leak
+        URL.revokeObjectURL(url);
+      });
+    }
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 /** Web Speech API */
 function speakWebSpeech(word: string): boolean {
   if (!("speechSynthesis" in window)) return false;
-  warmEngine();
   const list = cachedVoices.length > 0 ? cachedVoices : window.speechSynthesis.getVoices();
   const voice =
     list.find((v) => v.lang.startsWith("en") && v.name.includes("Google US")) ||
@@ -82,7 +100,12 @@ function speakWebSpeech(word: string): boolean {
 function speakYoudao(word: string) {
   if (!navigator.onLine) return;
   try {
-    new Audio(`https://dict.youdao.com/dictvoice?audio=${encodeURIComponent(word)}&type=2`).play().catch(() => {});
+    unlockAudio();
+    const a = getAudio();
+    a.pause();
+    a.src = `https://dict.youdao.com/dictvoice?audio=${encodeURIComponent(word)}&type=2`;
+    a.currentTime = 0;
+    a.play().catch(() => {});
   } catch { /* ignore */ }
 }
 
@@ -105,37 +128,29 @@ async function fetchAudio(wordId: number): Promise<string | null> {
 }
 
 /**
- * Speak a word. LOCAL AUDIO FIRST — always.
- *
- * With wordId:
- *   1. Check cache → play if hit
- *   2. Fetch from server → play if exists
- *   3. Web Speech fallback
- *
- * Without wordId:
- *   1. Web Speech → Youdao
+ * Speak a word. LOCAL AUDIO FIRST.
  */
 export async function speakWord(word: string, wordId?: number) {
   if (!word) return;
 
-  // Path A: With wordId — try local audio first
+  // With wordId: try local audio first
   if (wordId) {
-    // Fast: cache hit
+    // Cache hit
     if (audioCache.has(wordId)) {
       const cached = audioCache.get(wordId);
       if (cached) { playBase64(cached); return; }
-      // cached === null → no audio, fall through to Web Speech
+      // No local audio → fall through
     } else {
-      // Fetch from server (first time)
+      // Fetch from server
       const base64 = await fetchAudio(wordId);
       if (base64) { playBase64(base64); return; }
-      // No local audio, fall through to Web Speech
+      // No local audio → fall through
     }
   }
 
-  // Path B: Web Speech (fallback)
+  // Fallback: Web Speech
   if (speakWebSpeech(word)) return;
 
-  // Path C: Youdao API (last resort)
+  // Last resort: Youdao
   speakYoudao(word);
 }
