@@ -306,8 +306,8 @@ export default function WordForm({ open, onClose, onSubmit, editWord }: WordForm
   const isPending = isLookingUp || lookupMutation.isPending;
 
   return (
-    <Dialog open={open} onOpenChange={() => {}}>
-      <DialogContent key={isEditingMode ? "edit" : "new"} className="max-w-lg max-h-[90vh] overflow-y-auto">
+    <Dialog open={open} onOpenChange={(v) => !v && handleClose()}>
+      <DialogContent key={isEditingMode ? "edit" : "new"} className="max-w-lg max-h-[90vh] overflow-y-auto" onInteractOutside={(e) => e.preventDefault()}>
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <BookOpen className="w-5 h-5 text-indigo-500" />
@@ -624,8 +624,8 @@ export default function WordForm({ open, onClose, onSubmit, editWord }: WordForm
       </DialogContent>
 
       {/* New Tag Dialog */}
-      <Dialog open={newTagDialogOpen} onOpenChange={() => {}}>
-        <DialogContent className="sm:max-w-sm">
+      <Dialog open={newTagDialogOpen} onOpenChange={setNewTagDialogOpen}>
+        <DialogContent className="sm:max-w-sm" onInteractOutside={(e) => e.preventDefault()}>
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Tag className="w-4 h-4 text-emerald-500" />

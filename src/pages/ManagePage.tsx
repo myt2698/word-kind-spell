@@ -231,8 +231,8 @@ export default function ManagePage() {
             </div>}
 
             {/* Tag Edit/Create Dialog */}
-            <Dialog open={tagDialogOpen} onOpenChange={() => {}}>
-              <DialogContent className="sm:max-w-md">
+            <Dialog open={tagDialogOpen} onOpenChange={setTagDialogOpen}>
+              <DialogContent className="sm:max-w-md" onInteractOutside={(e) => e.preventDefault()}>
                 <DialogHeader>
                   <DialogTitle>{editingTagId ? "编辑标签" : "新建标签"}</DialogTitle>
                 </DialogHeader>
@@ -292,8 +292,8 @@ export default function ManagePage() {
             />
 
             {/* Long-press Delete Confirm Dialog */}
-            <Dialog open={deleteDialogOpen} onOpenChange={() => {}}>
-              <DialogContent className="sm:max-w-sm">
+            <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+              <DialogContent className="sm:max-w-sm" onInteractOutside={(e) => e.preventDefault()}>
                 <DialogHeader>
                   <DialogTitle className="text-center">删除标签</DialogTitle>
                 </DialogHeader>
@@ -406,8 +406,8 @@ export default function ManagePage() {
             </div>}
 
             {/* Textbook Dialog */}
-            <Dialog open={textbookDialogOpen} onOpenChange={() => {}}>
-              <DialogContent className="sm:max-w-md">
+            <Dialog open={textbookDialogOpen} onOpenChange={setTextbookDialogOpen}>
+              <DialogContent className="sm:max-w-md" onInteractOutside={(e) => e.preventDefault()}>
                 <DialogHeader>
                   <DialogTitle>{editingTextbookId ? "编辑课本" : "新建课本"}</DialogTitle>
                 </DialogHeader>
@@ -434,8 +434,8 @@ export default function ManagePage() {
             </Dialog>
 
             {/* Unit Dialog */}
-            <Dialog open={unitDialogOpen} onOpenChange={() => {}}>
-              <DialogContent className="sm:max-w-md">
+            <Dialog open={unitDialogOpen} onOpenChange={setUnitDialogOpen}>
+              <DialogContent className="sm:max-w-md" onInteractOutside={(e) => e.preventDefault()}>
                 <DialogHeader>
                   <DialogTitle>{editingUnitId ? "编辑单元" : "新建单元"}</DialogTitle>
                 </DialogHeader>

@@ -294,8 +294,8 @@ function SpellHome({ onStart }: { onStart: (mode: SpellView) => void }) {
       </div>
 
       {/* Dialog for word lists */}
-      <Dialog open={dialogOpen} onOpenChange={() => {}}>
-        <DialogContent className="sm:max-w-md max-h-[70vh] p-0 overflow-hidden">
+      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+        <DialogContent className="sm:max-w-md max-h-[70vh] p-0 overflow-hidden" onInteractOutside={(e) => e.preventDefault()}>
           <DialogHeader className="p-5 pb-3 border-b border-gray-100">
             <DialogTitle className="text-base font-semibold">
               {dialogData.title}
@@ -480,8 +480,8 @@ function WordSelectionDialog({
   const allSelected = allFilteredIds.length > 0 && allFilteredIds.every((id) => isSelected(id));
 
   return (
-    <Dialog open={open} onOpenChange={() => {}}>
-      <DialogContent className="sm:max-w-md max-h-[85dvh] p-0 overflow-hidden flex flex-col">
+    <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
+      <DialogContent className="sm:max-w-md max-h-[85dvh] p-0 overflow-hidden flex flex-col" onInteractOutside={(e) => e.preventDefault()}>
         <DialogHeader className="p-5 pb-3 border-b border-gray-100">
           <DialogTitle className="text-base font-semibold flex items-center gap-2">
             <ListChecks className="w-4 h-4 text-indigo-500" />
