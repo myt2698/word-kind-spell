@@ -122,9 +122,10 @@ export default function WordCard({ word, onEdit, onDelete }: WordCardProps) {
                   )}
                   <button
                     onClick={handleSpeak}
-                    className="p-1 rounded-md hover:bg-gray-100 text-gray-400 hover:text-indigo-500 transition-colors"
+                    className="p-2 rounded-lg hover:bg-indigo-50 text-gray-400 hover:text-indigo-600 transition-colors active:scale-90"
+                    title="播放发音"
                   >
-                    <Volume2 className="w-4 h-4" />
+                    <Volume2 className="w-5 h-5" />
                   </button>
 
                   {/* Learning status badge */}
@@ -208,8 +209,21 @@ export default function WordCard({ word, onEdit, onDelete }: WordCardProps) {
 
             {/* Expand toggle */}
             {(word.example || word.notes) && (
-              <button onClick={() => setExpanded(!expanded)} className="flex items-center gap-1 mt-2 text-xs text-gray-400 hover:text-gray-600 transition-colors">
-                {expanded ? <><ChevronUp className="w-3 h-3" /> 收起详情</> : <><ChevronDown className="w-3 h-3" /> 查看详情</>}
+              <button
+                onClick={() => setExpanded(!expanded)}
+                className="flex items-center gap-1.5 mt-2 px-3 py-1.5 -ml-2 rounded-lg text-xs text-gray-500 hover:text-gray-700 hover:bg-gray-100 transition-colors active:bg-gray-200"
+              >
+                {expanded ? (
+                  <>
+                    <ChevronUp className="w-4 h-4" />
+                    <span>收起详情</span>
+                  </>
+                ) : (
+                  <>
+                    <ChevronDown className="w-4 h-4" />
+                    <span>查看详情</span>
+                  </>
+                )}
               </button>
             )}
           </div>

@@ -1,7 +1,10 @@
 /**
  * Cross-browser TTS with Youdao API fallback
- * Critical: audio.play() MUST be called synchronously within a user gesture handler
- * for Huawei/Safari browsers to allow playback.
+ * - Primary: Youdao online pronunciation (works on all devices with internet)
+ * - Fallback: Web Speech API (works offline)
+ *
+ * Key: Creates a fresh Audio element per click for maximum reliability.
+ * The old "persistent audio" approach failed on some browsers.
  */
 
 // ---- Web Speech API voice cache ----
@@ -19,30 +22,16 @@ if (typeof window !== "undefined" && "speechSynthesis" in window) {
   window.speechSynthesis.onvoiceschanged = loadVoices;
 }
 
-// ---- Persistent audio element (crucial for Huawei browser) ----
-let audioEl: HTMLAudioElement | null = null;
 let audioUnlocked = false;
 
-function getAudio(): HTMLAudioElement {
-  if (!audioEl) {
-    audioEl = new Audio();
-    audioEl.crossOrigin = "anonymous";
-    audioEl.preload = "auto";
-  }
-  return audioEl;
-}
-
 /**
- * Unlock audio on first user interaction.
- * Must be called directly inside a click/touch event handler.
+ * Unlock audio context on first user gesture.
  */
 function unlockAudio() {
   if (audioUnlocked) return;
   try {
-    const a = getAudio();
-    a.src = "";
-    const p = a.play();
-    if (p) p.catch(() => {});
+    const a = new Audio();
+    a.play().catch(() => {});
   } catch { /* ignore */ }
   audioUnlocked = true;
 }
@@ -53,33 +42,39 @@ function unlockAudio() {
 export function speakWord(word: string) {
   if (!word) return;
 
-  // 1. Try to unlock audio context (first click only)
+  // 1. Unlock audio context
   unlockAudio();
 
-  // 2. Stop any ongoing speech
+  // 2. Cancel ongoing speech synthesis
   try { window.speechSynthesis.cancel(); } catch { /* ignore */ }
 
-  // 3. Play via Youdao API — set src and play() in the same synchronous call
+  // 3. Fresh Audio element each time — most reliable cross-browser approach
   if (navigator.onLine) {
     try {
-      const a = getAudio();
-      // Pause current first
-      a.pause();
-      // Set new source
+      const a = new Audio();
       a.src = `https://dict.youdao.com/dictvoice?audio=${encodeURIComponent(word)}&type=2`;
-      a.currentTime = 0;
-      // Play synchronously — this is the key for Huawei browser
-      const playPromise = a.play();
-      if (playPromise) {
-        playPromise.catch((err) => {
-          console.warn("[speak] Audio play blocked:", err?.name);
-          // Fallback to Web Speech
-          speakLocal(word);
-        });
-      }
+
+      // Play as soon as enough data is loaded
+      const playWhenReady = () => {
+        const p = a.play();
+        if (p) p.catch(() => speakLocal(word));
+      };
+
+      // Modern browsers: canplaythrough means we can play to end
+      a.addEventListener("canplaythrough", playWhenReady, { once: true });
+
+      // Fallback: if it takes too long, try anyway
+      setTimeout(() => {
+        if (a.paused) {
+          a.removeEventListener("canplaythrough", playWhenReady);
+          const p = a.play();
+          if (p) p.catch(() => speakLocal(word));
+        }
+      }, 1500);
+
       return;
-    } catch (e) {
-      console.warn("[speak] Youdao error:", e);
+    } catch {
+      // If Audio constructor itself fails, fall through
     }
   }
 
