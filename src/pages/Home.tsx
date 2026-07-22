@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { trpc } from "@/providers/trpc";
+import { preloadAudio } from "@/utils/speech";
 import AppHeader from "@/components/AppHeader";
 import MobileNav from "@/components/MobileNav";
 import FilterBar, { type SortBy } from "@/components/FilterBar";
@@ -42,6 +43,13 @@ export default function Home() {
     { enabled: !!selectedTextbookId }
   );
   const { data: allTags } = trpc.tag.list.useQuery();
+
+  // Preload audio for all visible words
+  useEffect(() => {
+    if (words && words.length > 0) {
+      preloadAudio(words.map((w) => w.id));
+    }
+  }, [words]);
 
   // Selected names
   const selectedTextbookName = selectedTextbookId

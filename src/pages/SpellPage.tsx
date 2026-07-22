@@ -41,7 +41,7 @@ import {
 } from "@/utils/phonics";
 import { useSearchParams } from "react-router";
 
-import { speakWord } from "@/utils/speech";
+import { speakWord, preloadAudio } from "@/utils/speech";
 
 // ============================================================
 // Today Words Context - Manage selected words for today's practice
@@ -181,6 +181,13 @@ function SpellHome({ onStart }: { onStart: (mode: SpellView) => void }) {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [dialogType, setDialogType] = useState<string>("");
   const [selectDialogOpen, setSelectDialogOpen] = useState(false);
+
+  // Preload audio for all learning words
+  useEffect(() => {
+    if (learningQueue && learningQueue.length > 0) {
+      preloadAudio(learningQueue.map((w) => w.id));
+    }
+  }, [learningQueue]);
 
   if (authLoading) {
     return <div className="min-h-screen flex items-center justify-center"><Loader2 className="w-8 h-8 animate-spin text-indigo-500" /></div>;
