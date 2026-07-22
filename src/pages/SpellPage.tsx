@@ -513,23 +513,15 @@ function WordSelectionDialog({
   words: any[];
 }) {
   const { selectedIds, toggleWord, selectAll, clearAll, isSelected } = useTodayWords();
-  const [search, setSearch] = useState("");
 
-  const filteredWords = search.trim()
-    ? words.filter(
-        (w) =>
-          w.word.toLowerCase().includes(search.toLowerCase()) ||
-          (w.definition && w.definition.toLowerCase().includes(search.toLowerCase()))
-      )
-    : words;
-
-  const allFilteredIds = filteredWords.map((w) => w.id);
-  const allSelected = allFilteredIds.length > 0 && allFilteredIds.every((id) => isSelected(id));
+  const allWordIds = words.map((w) => w.id);
+  const allSelected = words.length > 0 && allWordIds.every((id) => isSelected(id));
 
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
       <DialogContent className="sm:max-w-md max-h-[85dvh] p-0 overflow-hidden flex flex-col" onInteractOutside={(e) => e.preventDefault()}>
-        <DialogHeader className="p-5 pb-3 border-b border-gray-100">
+        {/* Header */}
+        <DialogHeader className="p-5 pb-3 border-b border-gray-100 shrink-0">
           <DialogTitle className="text-base font-semibold flex items-center gap-2">
             <ListChecks className="w-4 h-4 text-indigo-500" />
             选择今日练习单词
@@ -537,36 +529,24 @@ function WordSelectionDialog({
           </DialogTitle>
         </DialogHeader>
 
-        {/* Search */}
-        <div className="px-5 py-3">
-          <Input
-            placeholder="搜索单词..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="h-9"
-          />
-        </div>
-
         {/* Actions */}
-        <div className="px-5 pb-2 flex items-center justify-between">
+        <div className="px-5 py-3 flex items-center justify-between shrink-0 border-b border-gray-50">
           <button
-            onClick={() => allSelected ? clearAll() : selectAll(allFilteredIds)}
+            onClick={() => allSelected ? clearAll() : selectAll(allWordIds)}
             className="text-xs text-indigo-500 hover:text-indigo-600 font-medium"
           >
             {allSelected ? "取消全选" : "全选"}
           </button>
-          <span className="text-xs text-gray-400">{filteredWords.length} 个单词</span>
+          <span className="text-xs text-gray-400">{words.length} 个单词</span>
         </div>
 
-        {/* Word List - explicit height with overflow-auto for reliable scrolling */}
-        <div className="flex-1 overflow-y-auto px-5" style={{ maxHeight: 'calc(85dvh - 220px)' }}>
-          <div className="pb-3 space-y-1">
-            {filteredWords.length === 0 ? (
-              <div className="text-center py-8 text-gray-400 text-sm">
-                {search.trim() ? "没有匹配的单词" : "暂无学习中的单词"}
-              </div>
+        {/* Word List - flex-1 fills remaining space, overflow-y-auto for scrolling */}
+        <div className="flex-1 overflow-y-auto px-5 py-3 min-h-0">
+          <div className="space-y-1.5">
+            {words.length === 0 ? (
+              <div className="text-center py-8 text-gray-400 text-sm">暂无学习中的单词</div>
             ) : (
-              filteredWords.map((w) => (
+              words.map((w) => (
                 <label
                   key={w.id}
                   className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-all ${
