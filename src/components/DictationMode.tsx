@@ -168,14 +168,9 @@ export default function DictationMode({ words, onBack }: DictationModeProps) {
           <>
             <Headphones className="w-16 h-16 text-purple-100 mx-auto mb-4" />
             <p className="text-lg font-semibold text-gray-900 mb-1">准备听写</p>
-            <p className="text-sm text-gray-500 mb-4">
-              每个单词会读两遍：第一遍正常语速，第二遍慢速
+            <p className="text-sm text-gray-500 mb-6">
+              请准备好纸笔，听音频写出单词
             </p>
-            <div className="space-y-1 text-xs text-gray-400 mb-6">
-              <p>单音节词 等待 4 秒</p>
-              <p>双音节词 等待 6 秒</p>
-              <p>多音节词 等待 10 秒</p>
-            </div>
             <Button className="h-11 px-8 bg-gradient-to-r from-purple-500 to-indigo-600" onClick={start}>
               <Play className="w-4 h-4 mr-2" />
               开始听写
@@ -189,7 +184,7 @@ export default function DictationMode({ words, onBack }: DictationModeProps) {
             <div className="flex items-center justify-between mb-4">
               <span className="text-xs text-gray-400">{statusText}</span>
               <span className="text-xs text-purple-500 font-medium">
-                {syllables > 2 ? "长词" : syllables === 2 ? "双音节" : "单音节"} · 等待{waitTime / 1000}秒
+                请写下你听到的单词
               </span>
             </div>
 
