@@ -10,7 +10,8 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import WordForm, { type WordFormData } from "./WordForm";
-import { Hash, BookOpen, Folder, GraduationCap, Edit3, Loader2 } from "lucide-react";
+import { speakWord } from "@/utils/speech";
+import { Hash, BookOpen, Folder, GraduationCap, Edit3, Loader2, Volume2 } from "lucide-react";
 
 interface TagDetailDialogProps {
   tagId: number | null;
@@ -123,6 +124,13 @@ export default function TagDetailDialog({ tagId, open, onClose, onEdit }: TagDet
                           {word.phonetic}
                         </span>
                       )}
+                      <button
+                        onClick={() => speakWord(word.word, word.id)}
+                        className="p-1.5 rounded-lg hover:bg-indigo-50 text-gray-400 hover:text-indigo-600 transition-colors active:scale-90"
+                        title="播放发音"
+                      >
+                        <Volume2 className="w-4 h-4" />
+                      </button>
                     </div>
                     <p className="text-xs text-gray-600 mt-1 leading-relaxed line-clamp-2">
                       {word.definition}
