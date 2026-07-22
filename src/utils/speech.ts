@@ -16,6 +16,15 @@ function loadVoices() {
 if (typeof window !== "undefined" && "speechSynthesis" in window) {
   loadVoices();
   window.speechSynthesis.onvoiceschanged = loadVoices;
+  // Warm-up: Chrome's speechSynthesis is lazy-loaded and the first
+  // speak() call often fails silently. Sending an empty utterance
+  // wakes up the engine so the *real* first click works immediately.
+  try {
+    const warm = new SpeechSynthesisUtterance("");
+    warm.volume = 0;
+    window.speechSynthesis.speak(warm);
+    window.speechSynthesis.cancel();
+  } catch { /* ignore */ }
 }
 
 let audioUnlocked = false;
