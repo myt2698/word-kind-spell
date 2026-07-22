@@ -113,3 +113,36 @@ button, a {
   user-select: none;
   -webkit-user-select: none;
 }
+
+/* ============================================
+   Tablet & Desktop Responsive
+   ============================================ */
+
+/* Tablets (768px+) - wider content area */
+@media (min-width: 768px) {
+  .max-w-lg {
+    max-width: 640px;
+  }
+}
+
+/* Desktop & large tablets (1024px+) - centered layout */
+@media (min-width: 1024px) {
+  .max-w-lg {
+    max-width: 720px;
+  }
+}
+
+/* Landscape mode on tablets - better use of space */
+@media (min-width: 768px) and (orientation: landscape) {
+  .grid-cols-4 {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+/* Reduce padding on small screens */
+@media (max-width: 380px) {
+  .px-4 {
+    padding-left: 0.75rem;
+    padding-right: 0.75rem;
+  }
+}
