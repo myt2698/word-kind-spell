@@ -1,24 +1,17 @@
 /**
  * Cross-browser TTS with Youdao API fallback
- * Primary: Youdao online pronunciation (works on all devices with internet)
- * Fallback: Web Speech API (works offline, but many Android tablets lack English voices)
- *
- * Youdao API: https://dict.youdao.com/dictvoice?audio={word}&type=2 (US)
- *             https://dict.youdao.com/dictvoice?audio={word}&type=1 (UK)
+ * Critical: audio.play() MUST be called synchronously within a user gesture handler
+ * for Huawei/Safari browsers to allow playback.
  */
 
-// Cache for Web Speech voices
+// ---- Web Speech API voice cache ----
 let cachedVoices: SpeechSynthesisVoice[] = [];
 
 function loadVoices() {
   try {
     const voices = window.speechSynthesis.getVoices();
-    if (voices && voices.length > 0) {
-      cachedVoices = voices;
-    }
-  } catch {
-    /* ignore */
-  }
+    if (voices && voices.length > 0) cachedVoices = voices;
+  } catch { /* ignore */ }
 }
 
 if (typeof window !== "undefined" && "speechSynthesis" in window) {
@@ -26,133 +19,106 @@ if (typeof window !== "undefined" && "speechSynthesis" in window) {
   window.speechSynthesis.onvoiceschanged = loadVoices;
 }
 
-// Track last audio instance so we can stop it
-let lastAudio: HTMLAudioElement | null = null;
+// ---- Persistent audio element (crucial for Huawei browser) ----
+let audioEl: HTMLAudioElement | null = null;
+let audioUnlocked = false;
+
+function getAudio(): HTMLAudioElement {
+  if (!audioEl) {
+    audioEl = new Audio();
+    audioEl.crossOrigin = "anonymous";
+    audioEl.preload = "auto";
+  }
+  return audioEl;
+}
 
 /**
- * Speak a word using the best available method
- * Priority: Youdao API > Web Speech API
+ * Unlock audio on first user interaction.
+ * Must be called directly inside a click/touch event handler.
+ */
+function unlockAudio() {
+  if (audioUnlocked) return;
+  try {
+    const a = getAudio();
+    a.src = "";
+    const p = a.play();
+    if (p) p.catch(() => {});
+  } catch { /* ignore */ }
+  audioUnlocked = true;
+}
+
+/**
+ * Speak a word. Call this directly from an onClick handler.
  */
 export function speakWord(word: string) {
   if (!word) return;
 
-  // Stop any ongoing audio first
-  if (lastAudio) {
-    lastAudio.pause();
-    lastAudio = null;
-  }
+  // 1. Try to unlock audio context (first click only)
+  unlockAudio();
 
-  // Check if we're online and use Youdao API (most reliable)
+  // 2. Stop any ongoing speech
+  try { window.speechSynthesis.cancel(); } catch { /* ignore */ }
+
+  // 3. Play via Youdao API — set src and play() in the same synchronous call
   if (navigator.onLine) {
-    playYoudao(word);
-    return;
+    try {
+      const a = getAudio();
+      // Pause current first
+      a.pause();
+      // Set new source
+      a.src = `https://dict.youdao.com/dictvoice?audio=${encodeURIComponent(word)}&type=2`;
+      a.currentTime = 0;
+      // Play synchronously — this is the key for Huawei browser
+      const playPromise = a.play();
+      if (playPromise) {
+        playPromise.catch((err) => {
+          console.warn("[speak] Audio play blocked:", err?.name);
+          // Fallback to Web Speech
+          speakLocal(word);
+        });
+      }
+      return;
+    } catch (e) {
+      console.warn("[speak] Youdao error:", e);
+    }
   }
 
-  // Offline: fallback to Web Speech API
+  // 4. Offline fallback
   speakLocal(word);
 }
 
-/**
- * Play pronunciation using Youdao dictionary API
- * This works on all devices (Huawei, iOS, Android) with internet
- */
-function playYoudao(word: string) {
-  try {
-    const audio = new Audio(
-      `https://dict.youdao.com/dictvoice?audio=${encodeURIComponent(word)}&type=2`
-    );
-    lastAudio = audio;
-
-    audio.onended = () => {
-      lastAudio = null;
-    };
-    audio.onerror = () => {
-      lastAudio = null;
-      // Fallback to local if Youdao fails
-      speakLocal(word);
-    };
-
-    // Some browsers require user gesture to play audio
-    const playPromise = audio.play();
-    if (playPromise) {
-      playPromise.catch(() => {
-        lastAudio = null;
-        speakLocal(word);
-      });
-    }
-  } catch {
-    speakLocal(word);
-  }
-}
-
-/**
- * Fallback: Web Speech API (works offline)
- * Known limitations:
- * - Huawei tablets: usually no English voices available
- * - iOS Safari: voices load async, requires user gesture
- */
+/** Web Speech API fallback */
 function speakLocal(word: string) {
   if (!("speechSynthesis" in window)) return;
 
   const doSpeak = () => {
     try {
       window.speechSynthesis.cancel();
-      const utterance = new SpeechSynthesisUtterance(word);
-      utterance.lang = "en-US";
-      utterance.rate = 0.85;
-      utterance.volume = 1;
-      utterance.pitch = 1;
-
-      const voiceList =
-        cachedVoices.length > 0
-          ? cachedVoices
-          : window.speechSynthesis.getVoices();
-
-      const enVoice =
-        voiceList.find(
-          (v) => v.lang.startsWith("en") && v.name.includes("Google US")
-        ) ||
-        voiceList.find(
-          (v) => v.lang.startsWith("en") && v.name.includes("Google")
-        ) ||
-        voiceList.find(
-          (v) => v.lang.startsWith("en") && v.name.includes("Samantha")
-        ) ||
-        voiceList.find(
-          (v) => v.lang.startsWith("en") && v.name.includes("Daniel")
-        ) ||
-        voiceList.find((v) => v.lang.startsWith("en"));
-
-      if (enVoice) utterance.voice = enVoice;
-
+      const u = new SpeechSynthesisUtterance(word);
+      u.lang = "en-US";
+      u.rate = 0.85;
+      u.volume = 1;
+      const list = cachedVoices.length > 0 ? cachedVoices : window.speechSynthesis.getVoices();
+      const v =
+        list.find((x) => x.lang.startsWith("en") && x.name.includes("Google US")) ||
+        list.find((x) => x.lang.startsWith("en") && x.name.includes("Google")) ||
+        list.find((x) => x.lang.startsWith("en") && x.name.includes("Samantha")) ||
+        list.find((x) => x.lang.startsWith("en") && x.name.includes("Daniel")) ||
+        list.find((x) => x.lang.startsWith("en"));
+      if (v) u.voice = v;
       setTimeout(() => {
-        try {
-          window.speechSynthesis.speak(utterance);
-        } catch (e) {
-          console.error("speak error:", e);
-        }
+        try { window.speechSynthesis.speak(u); } catch { /* ignore */ }
       }, 50);
-    } catch (e) {
-      console.error("TTS error:", e);
-    }
+    } catch { /* ignore */ }
   };
 
-  const voiceList =
-    cachedVoices.length > 0
-      ? cachedVoices
-      : window.speechSynthesis.getVoices();
-
-  if (!voiceList || voiceList.length === 0) {
-    const checkAndSpeak = () => {
+  const list = cachedVoices.length > 0 ? cachedVoices : window.speechSynthesis.getVoices();
+  if (!list || list.length === 0) {
+    setTimeout(() => {
       loadVoices();
       const v = window.speechSynthesis.getVoices();
-      if (v && v.length > 0) {
-        doSpeak();
-      } else {
-        setTimeout(checkAndSpeak, 100);
-      }
-    };
-    setTimeout(checkAndSpeak, 100);
+      if (v && v.length > 0) doSpeak();
+    }, 100);
   } else {
     doSpeak();
   }
