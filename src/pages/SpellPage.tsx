@@ -287,7 +287,7 @@ function SpellHome({ onStart }: { onStart: (mode: SpellView) => void }) {
       </div>
 
       {/* Dialog for word lists */}
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+      <Dialog open={dialogOpen} onOpenChange={() => {}}>
         <DialogContent className="sm:max-w-md max-h-[70vh] p-0 overflow-hidden">
           <DialogHeader className="p-5 pb-3 border-b border-gray-100">
             <DialogTitle className="text-base font-semibold">
@@ -473,8 +473,8 @@ function WordSelectionDialog({
   const allSelected = allFilteredIds.length > 0 && allFilteredIds.every((id) => isSelected(id));
 
   return (
-    <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
-      <DialogContent className="sm:max-w-md max-h-[80vh] p-0 overflow-hidden">
+    <Dialog open={open} onOpenChange={() => {}}>
+      <DialogContent className="sm:max-w-md max-h-[85dvh] p-0 overflow-hidden flex flex-col">
         <DialogHeader className="p-5 pb-3 border-b border-gray-100">
           <DialogTitle className="text-base font-semibold flex items-center gap-2">
             <ListChecks className="w-4 h-4 text-indigo-500" />
@@ -504,9 +504,9 @@ function WordSelectionDialog({
           <span className="text-xs text-gray-400">{filteredWords.length} 个单词</span>
         </div>
 
-        {/* Word List */}
-        <ScrollArea className="max-h-[45vh]">
-          <div className="px-5 pb-3 space-y-1">
+        {/* Word List - flex-1 fills remaining space */}
+        <ScrollArea className="flex-1 min-h-0 px-5">
+          <div className="pb-3 space-y-1">
             {filteredWords.length === 0 ? (
               <div className="text-center py-8 text-gray-400 text-sm">
                 {search.trim() ? "没有匹配的单词" : "暂无学习中的单词"}

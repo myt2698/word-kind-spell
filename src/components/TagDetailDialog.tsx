@@ -63,7 +63,7 @@ export default function TagDetailDialog({ tagId, open, onClose, onEdit }: TagDet
     : null;
 
   return (
-    <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
+    <Dialog open={open} onOpenChange={() => {}}>
       <DialogContent className="sm:max-w-md max-h-[80vh] p-0 overflow-hidden">
         <DialogHeader className="p-5 pb-3 border-b border-gray-100 relative">
           {isLoading ? (

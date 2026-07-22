@@ -112,7 +112,7 @@ export default function GroupManager({ open, onClose }: GroupManagerProps) {
   const handleDragEnd = () => setDragIndex(null);
 
   return (
-    <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
+    <Dialog open={open} onOpenChange={() => {}}>
       <DialogContent className="max-w-md max-h-[85vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">

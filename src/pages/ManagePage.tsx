@@ -227,7 +227,7 @@ export default function ManagePage() {
             </div>}
 
             {/* Tag Edit/Create Dialog */}
-            <Dialog open={tagDialogOpen} onOpenChange={setTagDialogOpen}>
+            <Dialog open={tagDialogOpen} onOpenChange={() => {}}>
               <DialogContent className="sm:max-w-md">
                 <DialogHeader>
                   <DialogTitle>{editingTagId ? "编辑标签" : "新建标签"}</DialogTitle>
@@ -288,7 +288,7 @@ export default function ManagePage() {
             />
 
             {/* Long-press Delete Confirm Dialog */}
-            <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+            <Dialog open={deleteDialogOpen} onOpenChange={() => {}}>
               <DialogContent className="sm:max-w-sm">
                 <DialogHeader>
                   <DialogTitle className="text-center">删除标签</DialogTitle>
@@ -402,7 +402,7 @@ export default function ManagePage() {
             </div>}
 
             {/* Textbook Dialog */}
-            <Dialog open={textbookDialogOpen} onOpenChange={setTextbookDialogOpen}>
+            <Dialog open={textbookDialogOpen} onOpenChange={() => {}}>
               <DialogContent className="sm:max-w-md">
                 <DialogHeader>
                   <DialogTitle>{editingTextbookId ? "编辑课本" : "新建课本"}</DialogTitle>
@@ -430,7 +430,7 @@ export default function ManagePage() {
             </Dialog>
 
             {/* Unit Dialog */}
-            <Dialog open={unitDialogOpen} onOpenChange={setUnitDialogOpen}>
+            <Dialog open={unitDialogOpen} onOpenChange={() => {}}>
               <DialogContent className="sm:max-w-md">
                 <DialogHeader>
                   <DialogTitle>{editingUnitId ? "编辑单元" : "新建单元"}</DialogTitle>

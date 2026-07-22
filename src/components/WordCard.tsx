@@ -246,7 +246,7 @@ export default function WordCard({ word, onEdit, onDelete }: WordCardProps) {
       />
 
       {/* Tag Edit Dialog */}
-      <Dialog open={editTagOpen} onOpenChange={setEditTagOpen}>
+      <Dialog open={editTagOpen} onOpenChange={() => {}}>
         <DialogContent className="sm:max-w-sm">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
