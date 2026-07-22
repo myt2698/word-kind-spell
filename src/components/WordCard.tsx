@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { trpc } from "@/providers/trpc";
-import { speakWord } from "@/utils/speech";
+import { speakWord, unlockAudio } from "@/utils/speech";
 import TagDetailDialog from "./TagDetailDialog";
 import {
   Dialog,
@@ -121,7 +121,8 @@ export default function WordCard({ word, onEdit, onDelete }: WordCardProps) {
                     <span className="text-sm text-gray-400 font-mono">{word.phonetic}</span>
                   )}
                   <button
-                    onClick={handleSpeak}
+                    onTouchStart={() => unlockAudio()}
+                    onClick={() => speakWord(word.word, word.id)}
                     className="p-2 rounded-lg hover:bg-indigo-50 text-gray-400 hover:text-indigo-600 transition-colors active:scale-90"
                     title="播放发音"
                   >

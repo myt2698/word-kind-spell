@@ -100,6 +100,11 @@ function speakYoudao(word: string) {
   } catch { /* ignore */ }
 }
 
+/** Unlock audio. MUST be called inside a touchstart handler (before click). */
+export function unlockAudio() {
+  try { getAudio().play().catch(() => {}); } catch { /* ignore */ }
+}
+
 /**
  * Speak a word — SYNC. No await, no fetch inside.
  * 1. Cache hit (base64) -> play instantly
