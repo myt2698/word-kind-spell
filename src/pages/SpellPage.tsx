@@ -179,7 +179,19 @@ function SpellHome({ onStart }: { onStart: (mode: SpellView) => void }) {
   const { data: errorWords } = trpc.spelling.getErrorWords.useQuery();
   const utils = trpc.useUtils();
   const clearErrors = trpc.spelling.clearErrors.useMutation({
-    onSuccess: () => {
+    // Optimistic update: remove immediately from UI, then sync with server
+    onMutate: async ({ wordId }) => {
+      await utils.spelling.getErrorWords.cancel();
+      const prev = utils.spelling.getErrorWords.getData();
+      utils.spelling.getErrorWords.setData(undefined, (old) =>
+        old ? old.filter((w) => w.id !== wordId) : old
+      );
+      return { prev };
+    },
+    onError: (_err, _vars, ctx) => {
+      if (ctx?.prev) utils.spelling.getErrorWords.setData(undefined, ctx.prev);
+    },
+    onSettled: () => {
       utils.spelling.getErrorWords.invalidate();
       utils.spelling.getStats.invalidate();
     },
