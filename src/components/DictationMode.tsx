@@ -1,12 +1,13 @@
 /**
  * Dictation Mode - Listen and Write
  * Plays each word twice with dynamic pacing based on syllable count.
+ * Uses local audio cache first (fastest), falls back to Web Speech / Youdao.
  */
 
 import { useState, useEffect, useCallback, useRef } from "react";
+import { speakWord, preloadAudio } from "@/utils/speech";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, Play, Pause, SkipForward, Headphones } from "lucide-react";
-// Phonics util no longer needed for dictation (whole-word playback)
 
 interface DictationModeProps {
   words: any[];
@@ -18,38 +19,25 @@ type Phase = "idle" | "playing" | "paused" | "done";
 /** Count syllables in a word */
 function countSyllables(word: string): number {
   try {
-    return splitSyllables(word).length;
-  } catch {
     // Fallback: count vowel groups
     const lower = word.toLowerCase();
     const matches = lower.match(/[aeiouy]+/g);
     return matches ? matches.length : 1;
+  } catch {
+    return 1;
   }
 }
 
 /** Get wait time in ms based on syllable count */
 function getWaitTime(syllableCount: number): number {
-  if (syllableCount === 1) return 4000; // 3-5s
-  if (syllableCount === 2) return 6500; // 5-8s
-  return 10000; // 8-12s
+  if (syllableCount === 1) return 4000;
+  if (syllableCount === 2) return 6500;
+  return 10000;
 }
 
-/** Speak a word with given rate */
-function speak(word: string, rate: number) {
-  if (!("speechSynthesis" in window)) return;
-  window.speechSynthesis.cancel();
-  const u = new SpeechSynthesisUtterance(word);
-  u.lang = "en-US";
-  u.rate = rate;
-  u.volume = 1;
-  // Pick best English voice
-  const voices = window.speechSynthesis.getVoices();
-  const v =
-    voices.find((x) => x.lang.startsWith("en") && x.name.includes("Google US")) ||
-    voices.find((x) => x.lang.startsWith("en") && x.name.includes("Google")) ||
-    voices.find((x) => x.lang.startsWith("en"));
-  if (v) u.voice = v;
-  window.speechSynthesis.speak(u);
+/** Play word using speakWord (local audio first) */
+function play(word: string, wordId: number) {
+  speakWord(word, wordId);
 }
 
 export default function DictationMode({ words, onBack }: DictationModeProps) {
@@ -64,6 +52,13 @@ export default function DictationMode({ words, onBack }: DictationModeProps) {
   const currentWord = words[currentIdx];
   const syllables = currentWord ? countSyllables(currentWord.word) : 1;
   const waitTime = getWaitTime(syllables);
+
+  // Preload all audio when component mounts
+  useEffect(() => {
+    if (words.length > 0) {
+      preloadAudio(words.map((w) => w.id));
+    }
+  }, [words]);
 
   const clearTimer = () => {
     if (timerRef.current) {
@@ -87,20 +82,19 @@ export default function DictationMode({ words, onBack }: DictationModeProps) {
       setStatusText(`第 ${idx + 1} / ${total} 个`);
 
       // Step 1: First read (normal speed)
-      speak(word.word, 0.9);
+      play(word.word, word.id);
 
-      // Step 2: Second read — slower, whole word (no syllable splitting)
+      // Step 2: Second read — slower
       timerRef.current = setTimeout(() => {
         if (pausedRef.current) return;
-
-        speak(word.word, 0.55); // Slower but whole word
+        play(word.word, word.id);
 
         // Step 3: Wait, then next word
         timerRef.current = setTimeout(() => {
           if (pausedRef.current) return;
           playSequence(idx + 1);
         }, getWaitTime(sylCount));
-      }, waitTime + 800); // +800ms for the speech itself
+      }, waitTime + 800);
     },
     [total, words, waitTime]
   );
@@ -115,7 +109,6 @@ export default function DictationMode({ words, onBack }: DictationModeProps) {
   const pause = () => {
     pausedRef.current = true;
     clearTimer();
-    window.speechSynthesis.cancel();
     setPhase("paused");
     setStatusText(`已暂停 · 第 ${currentIdx + 1} / ${total} 个`);
   };
@@ -128,7 +121,6 @@ export default function DictationMode({ words, onBack }: DictationModeProps) {
 
   const skip = () => {
     clearTimer();
-    window.speechSynthesis.cancel();
     playSequence(currentIdx + 1);
   };
 
@@ -136,7 +128,6 @@ export default function DictationMode({ words, onBack }: DictationModeProps) {
   useEffect(() => {
     return () => {
       clearTimer();
-      window.speechSynthesis.cancel();
     };
   }, []);
 
@@ -178,7 +169,7 @@ export default function DictationMode({ words, onBack }: DictationModeProps) {
             <Headphones className="w-16 h-16 text-purple-100 mx-auto mb-4" />
             <p className="text-lg font-semibold text-gray-900 mb-1">准备听写</p>
             <p className="text-sm text-gray-500 mb-4">
-              每个单词会读两遍：第一遍正常语速，第二遍慢速拆解音节
+              每个单词会读两遍：第一遍正常语速，第二遍慢速
             </p>
             <div className="space-y-1 text-xs text-gray-400 mb-6">
               <p>单音节词 等待 4 秒</p>
@@ -217,9 +208,6 @@ export default function DictationMode({ words, onBack }: DictationModeProps) {
               <span className="w-2 h-2 bg-purple-400 rounded-full animate-pulse" style={{ animationDelay: "0.4s" }} />
               <span className="text-sm text-purple-500 ml-2">正在播放...</span>
             </div>
-
-            {/* Current word hint (optional, for debugging) */}
-            <p className="text-xs text-gray-300 mb-4">{currentWord.word}</p>
 
             {/* Controls */}
             <div className="flex items-center justify-center gap-3">
