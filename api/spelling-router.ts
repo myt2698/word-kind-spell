@@ -591,6 +591,47 @@ export const spellingRouter = createRouter({
     }));
   }),
 
+  /** Clear all error records for a word (mark as mastered) */
+  clearErrors: authedQuery
+    .input(z.object({ wordId: z.number() }))
+    .mutation(async ({ ctx, input }) => {
+      const db = getDb();
+
+      // Verify the word belongs to the user
+      const wordCheck = await db
+        .select({ id: words.id })
+        .from(words)
+        .where(and(eq(words.id, input.wordId), eq(words.userId, ctx.user.id)))
+        .limit(1);
+
+      if (wordCheck.length === 0) {
+        return { success: false, message: "单词不存在" };
+      }
+
+      // Delete all error records for this word
+      const result = await db
+        .delete(spellingErrors)
+        .where(
+          and(
+            eq(spellingErrors.wordId, input.wordId),
+            eq(spellingErrors.userId, ctx.user.id)
+          )
+        );
+
+      // Also reset errorCount in wordSpellings
+      await db
+        .update(wordSpellings)
+        .set({ errorCount: 0 })
+        .where(
+          and(
+            eq(wordSpellings.wordId, input.wordId),
+            eq(wordSpellings.userId, ctx.user.id)
+          )
+        );
+
+      return { success: true, deletedCount: result.length };
+    }),
+
   // ========== Practice Words ==========
 
   getPracticeWords: authedQuery

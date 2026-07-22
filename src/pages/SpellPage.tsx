@@ -176,6 +176,13 @@ function SpellHome({ onStart }: { onStart: (mode: SpellView) => void }) {
   const { data: reviewQueue, isLoading } = trpc.spelling.getReviewQueue.useQuery();
   const { data: learningQueue } = trpc.spelling.getLearningQueue.useQuery();
   const { data: errorWords } = trpc.spelling.getErrorWords.useQuery();
+  const utils = trpc.useUtils();
+  const clearErrors = trpc.spelling.clearErrors.useMutation({
+    onSuccess: () => {
+      utils.spelling.getErrorWords.invalidate();
+      utils.spelling.getStats.invalidate();
+    },
+  });
   const { data: stats } = trpc.spelling.getStats.useQuery();
   const { selectedIds, todayWords } = useTodayWords();
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -312,8 +319,19 @@ function SpellHome({ onStart }: { onStart: (mode: SpellView) => void }) {
                   <div key={w.id} className={`flex items-center gap-3 p-3 rounded-xl ${c.bg} border ${c.border}`}>
                     <span className={`text-sm font-medium flex-1 ${c.text}`}>{w.word}</span>
                     {w.phonetic && <span className="text-xs text-gray-400 font-mono">{w.phonetic}</span>}
-                    {dialogType === "errors" && w.errorCount && (
-                      <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${c.badge}`}>错{w.errorCount}次</span>
+                    {dialogType === "errors" && (
+                      <>
+                        {w.errorCount ? (
+                          <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${c.badge}`}>错{w.errorCount}次</span>
+                        ) : null}
+                        <button
+                          onClick={() => clearErrors.mutate({ wordId: w.id })}
+                          className="text-xs text-gray-400 hover:text-rose-500 px-1.5 py-0.5 rounded hover:bg-rose-50 transition-colors"
+                          title="移除错题"
+                        >
+                          移除
+                        </button>
+                      </>
                     )}
                     {dialogType === "review" && w.level && (
                       <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${
