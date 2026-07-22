@@ -21,6 +21,7 @@ import {
   Zap,
   Puzzle,
   Keyboard,
+  Headphones,
   ArrowLeft,
   RotateCcw,
   Trophy,
@@ -42,6 +43,7 @@ import {
 import { useSearchParams } from "react-router";
 
 import { speakWord, preloadAudio } from "@/utils/speech";
+import DictationMode from "@/components/DictationMode";
 
 // ============================================================
 // Today Words Context - Manage selected words for today's practice
@@ -127,7 +129,7 @@ function TodayWordsProvider({ children, allWords }: { children: React.ReactNode;
 // ============================================================
 // Types
 // ============================================================
-type SpellView = "home" | "blocks" | "fillblank" | "flash";
+type SpellView = "home" | "blocks" | "fillblank" | "flash" | "dictation";
 
 // ============================================================
 // Main Component
@@ -159,9 +161,8 @@ export default function SpellPage() {
       <AppHeader />
       <TodayWordsProvider allWords={allWords}>
         {view === "home" && <SpellHome onStart={(v) => setView(v)} />}
-        {view === "blocks" && <PracticeModeWrapper mode="blocks" onBack={() => setView("home")} />}
-        {view === "fillblank" && <PracticeModeWrapper mode="fillblank" onBack={() => setView("home")} />}
-        {view === "flash" && <PracticeModeWrapper mode="flash" onBack={() => setView("home")} />}
+        {view !== "home" && view !== "dictation" && <PracticeModeWrapper mode={view} onBack={() => setView("home")} />}
+        {view === "dictation" && <DictationWrapper onBack={() => setView("home")} />}
       </TodayWordsProvider>
       <MobileNav activeTab="spell" />
     </div>
@@ -466,6 +467,22 @@ function SpellHome({ onStart }: { onStart: (mode: SpellView) => void }) {
           </div>
           <Play className={`w-5 h-5 ${selectedIds.length > 0 ? "text-amber-400" : "text-gray-300"}`} />
         </button>
+
+        <button
+          onClick={() => selectedIds.length > 0 ? onStart("dictation") : setSelectDialogOpen(true)}
+          className="w-full flex items-center gap-4 p-4 bg-white rounded-xl border border-gray-100 hover:border-purple-200 hover:shadow-md transition-all text-left"
+        >
+          <div className="w-12 h-12 rounded-xl bg-purple-50 flex items-center justify-center shrink-0">
+            <Headphones className="w-6 h-6 text-purple-500" />
+          </div>
+          <div className="flex-1">
+            <h3 className="text-base font-semibold text-gray-900">听写模式</h3>
+            <p className="text-xs text-gray-500">
+              {selectedIds.length > 0 ? "每个单词读两遍，听音写词" : "请先选择今日练习单词"}
+            </p>
+          </div>
+          <Play className={`w-5 h-5 ${selectedIds.length > 0 ? "text-purple-400" : "text-gray-300"}`} />
+        </button>
       </div>
     </main>
   );
@@ -593,6 +610,31 @@ function WordSelectionDialog({
       </DialogContent>
     </Dialog>
   );
+}
+
+// ============================================================
+// Dictation Wrapper - passes todayWords to DictationMode
+// ============================================================
+function DictationWrapper({ onBack }: { onBack: () => void }) {
+  const { todayWords, selectedIds } = useTodayWords();
+
+  if (selectedIds.length === 0) {
+    return (
+      <main className="max-w-lg mx-auto px-4 py-6 pb-24 min-h-screen flex flex-col items-center justify-center">
+        <div className="text-center">
+          <ListChecks className="w-12 h-12 text-gray-300 mx-auto mb-4" />
+          <p className="text-gray-500 mb-1">还没有选择今日练习单词</p>
+          <p className="text-xs text-gray-400 mb-4">请先返回首页选择要练习的单词</p>
+          <Button className="bg-gradient-to-r from-indigo-500 to-blue-600" onClick={onBack}>
+            <ArrowLeft className="w-4 h-4 mr-1" />
+            返回选词
+          </Button>
+        </div>
+      </main>
+    );
+  }
+
+  return <DictationMode words={todayWords} onBack={onBack} />;
 }
 
 // ============================================================
