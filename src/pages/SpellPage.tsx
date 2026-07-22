@@ -1103,17 +1103,6 @@ function FillBlankMode({ onBack, words }: { onBack: () => void; words: any[] }) 
       {/* Virtual Keyboard */}
       {!result && (
         <div className="mt-auto">
-          {/* Submit button */}
-          <div className="mb-3">
-            <Button
-              className="w-full h-11 bg-gradient-to-r from-emerald-500 to-teal-600"
-              disabled={!allFilled}
-              onClick={checkAnswer}
-            >
-              {allFilled ? "提交答案" : `还需填写 ${blankCount - answers.filter(a => a).length} 个字母`}
-            </Button>
-          </div>
-
           {/* A-Z keyboard */}
           <div className="bg-gray-50 rounded-xl p-3 sm:p-4 md:p-5">
             {/* Row 1: QWERTYUIOP */}
@@ -1153,9 +1142,22 @@ function FillBlankMode({ onBack, words }: { onBack: () => void; words: any[] }) 
               ))}
               <button
                 onClick={handleBackspace}
-                className="w-14 h-10 sm:w-16 sm:h-11 md:w-20 md:h-13 lg:w-22 lg:h-14 rounded-lg bg-gray-200 border border-gray-300 text-sm sm:text-base md:text-lg font-semibold text-gray-600 hover:bg-red-50 hover:border-red-300 hover:text-red-500 active:scale-95 transition-all flex items-center justify-center"
+                className="w-10 h-10 sm:w-11 sm:h-11 md:w-13 md:h-13 lg:w-14 lg:h-14 rounded-lg bg-gray-200 border border-gray-300 text-sm sm:text-base font-semibold text-gray-600 hover:bg-red-50 hover:border-red-300 hover:text-red-500 active:scale-95 transition-all flex items-center justify-center"
+                title="删除"
               >
-                <Delete className="w-4 h-4" />
+                <Delete className="w-4 h-4 sm:w-5 sm:h-5" />
+              </button>
+              <button
+                onClick={checkAnswer}
+                disabled={!allFilled}
+                className={`h-10 sm:h-11 md:h-13 lg:h-14 rounded-lg text-xs sm:text-sm md:text-base font-semibold transition-all active:scale-95 flex items-center justify-center px-2 sm:px-3 ${
+                  allFilled
+                    ? "bg-gradient-to-r from-emerald-500 to-teal-600 text-white shadow-md"
+                    : "bg-gray-300 text-gray-500 cursor-not-allowed"
+                }`}
+                title="提交答案"
+              >
+                提交
               </button>
             </div>
           </div>
@@ -1261,7 +1263,16 @@ function FlashMode({ onBack, words }: { onBack: () => void; words: any[] }) {
       {phase === "show" && (
         <div className="bg-white rounded-xl border border-gray-100 p-8 text-center">
           <p className="text-sm text-gray-500 mb-4">记住这个单词！</p>
-          <h2 className="text-3xl font-bold text-gray-900 mb-2">{currentWord.word}</h2>
+          <div className="flex items-center justify-center gap-3 mb-2">
+            <h2 className="text-3xl font-bold text-gray-900">{currentWord.word}</h2>
+            <button
+              onClick={() => speakWord(currentWord.word, currentWord.id)}
+              className="p-2 rounded-lg hover:bg-amber-50 text-gray-400 hover:text-amber-600 transition-colors active:scale-90"
+              title="重听发音"
+            >
+              <Volume2 className="w-5 h-5" />
+            </button>
+          </div>
           {currentWord.phonetic && <p className="text-sm text-gray-400 font-mono mb-2">{currentWord.phonetic}</p>}
           <p className="text-sm text-gray-600 mb-6 whitespace-pre-line">{currentWord.definition}</p>
           <div className="flex items-center justify-center gap-2">
@@ -1287,10 +1298,6 @@ function FlashMode({ onBack, words }: { onBack: () => void; words: any[] }) {
 
           {/* Virtual Keyboard */}
           <div className="mt-auto">
-            <Button className="w-full h-11 bg-gradient-to-r from-amber-500 to-orange-600 mb-3" onClick={checkAnswer} disabled={!input.trim()}>
-              提交
-            </Button>
-
             <div className="bg-gray-50 rounded-xl p-3 sm:p-4 md:p-5">
               {/* Row 1: QWERTYUIOP */}
               <div className="flex justify-center gap-1 sm:gap-1.5 md:gap-2 mb-1 md:mb-2">
@@ -1329,9 +1336,22 @@ function FlashMode({ onBack, words }: { onBack: () => void; words: any[] }) {
                 ))}
                 <button
                   onClick={() => setInput((prev) => prev.slice(0, -1))}
-                  className="w-14 h-10 sm:w-16 sm:h-11 md:w-20 md:h-13 lg:w-22 lg:h-14 rounded-lg bg-gray-200 border border-gray-300 text-sm sm:text-base md:text-lg font-semibold text-gray-600 hover:bg-red-50 hover:border-red-300 hover:text-red-500 active:scale-95 transition-all flex items-center justify-center"
+                  className="w-10 h-10 sm:w-11 sm:h-11 md:w-13 md:h-13 lg:w-14 lg:h-14 rounded-lg bg-gray-200 border border-gray-300 text-sm sm:text-base font-semibold text-gray-600 hover:bg-red-50 hover:border-red-300 hover:text-red-500 active:scale-95 transition-all flex items-center justify-center"
+                  title="删除"
                 >
-                  <Delete className="w-4 h-4" />
+                  <Delete className="w-4 h-4 sm:w-5 sm:h-5" />
+                </button>
+                <button
+                  onClick={checkAnswer}
+                  disabled={!input.trim()}
+                  className={`h-10 sm:h-11 md:h-13 lg:h-14 rounded-lg text-xs sm:text-sm md:text-base font-semibold transition-all active:scale-95 flex items-center justify-center px-2 sm:px-3 ${
+                    input.trim()
+                      ? "bg-gradient-to-r from-amber-500 to-orange-600 text-white shadow-md"
+                      : "bg-gray-300 text-gray-500 cursor-not-allowed"
+                  }`}
+                  title="提交答案"
+                >
+                  提交
                 </button>
               </div>
             </div>
