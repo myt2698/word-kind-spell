@@ -87,7 +87,7 @@ export const wordRouter = createRouter({
           ? words.createdAt
           : input?.sortBy === "alphabetical"
             ? words.word
-            : words.createdAt;
+            : words.updatedAt;
       const orderFn = input?.sortBy === "oldest" ? asc : desc;
 
       // Query 1: Get word list
@@ -96,7 +96,7 @@ export const wordRouter = createRouter({
       const orderByClause = exactMatchFirst && searchLower
         ? [
             desc(sql`CASE WHEN LOWER(${words.word}) = ${searchLower} THEN 3 WHEN LOWER(${words.word}) LIKE ${searchLower + '%'} THEN 2 ELSE 1 END`),
-            desc(words.createdAt)
+            desc(words.updatedAt)
           ]
         : [orderFn(orderColumn)];
 
@@ -375,10 +375,11 @@ export const wordRouter = createRouter({
       const db = getDb();
       const { id, tagIds, ...wordData } = input;
 
-      // 清理 undefined 值
+      // 清理 undefined 值，并自动更新 updatedAt
       const updateData = Object.fromEntries(
         Object.entries(wordData).filter(([, v]) => v !== undefined)
       );
+      (updateData as any).updatedAt = new Date();
 
       await db
         .update(words)
