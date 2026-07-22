@@ -1,12 +1,13 @@
 /**
- * Audio playback — local audio first, Web Speech fallback
+ * Audio playback — local audio first, instant response.
  *
- * Strategy:
- * 1. Cache hit (local audio loaded) → play instantly (sync)
- * 2. No cache → Web Speech immediately (sync, no delay) + fetch local in background
- * 3. No Web Speech voices → Youdao API
+ * Flow:
+ * 1. Cache hit → play immediately (sync)
+ * 2. Cache miss → fetch from server (async, ~100-300ms) → play local audio
+ * 3. No local audio → Web Speech (instant fallback)
+ * 4. No voices → Youdao API
  *
- * This ensures the user ALWAYS hears something on the first click.
+ * speakWord is async so the first click ALWAYS tries local audio first.
  */
 
 let cachedVoices: SpeechSynthesisVoice[] = [];
@@ -25,9 +26,8 @@ if (typeof window !== "undefined" && "speechSynthesis" in window) {
 
 /** Global audio cache: wordId → base64 | null */
 const audioCache = new Map<number, string | null>();
-const fetchingSet = new Set<number>();
 
-/** Play base64 audio data */
+/** Play base64 audio */
 function playBase64(base64: string) {
   try {
     const bytes = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
@@ -38,25 +38,7 @@ function playBase64(base64: string) {
   } catch { /* ignore */ }
 }
 
-/** Fetch audio from server and cache it (fire-and-forget) */
-function fetchAndCacheAudio(wordId: number) {
-  if (fetchingSet.has(wordId)) return;
-  fetchingSet.add(wordId);
-
-  fetch(`/api/trpc/audio.getByWordId?input=${encodeURIComponent(JSON.stringify({ wordId }))}`)
-    .then((r) => r.json())
-    .then((json) => {
-      const result = json.result?.data;
-      if (result?.hasAudio && result?.audioData) {
-        audioCache.set(wordId, result.audioData);
-      } else {
-        audioCache.set(wordId, null);
-      }
-    })
-    .catch(() => { /* ignore */ });
-}
-
-/** Warm up speech synthesis engine (Chrome lazy-load bug) */
+/** Warm up speech synthesis engine */
 let engineWarmed = false;
 function warmEngine() {
   if (engineWarmed) return;
@@ -70,12 +52,10 @@ function warmEngine() {
   engineWarmed = true;
 }
 
-/** Web Speech API — synchronous, instant */
+/** Web Speech API */
 function speakWebSpeech(word: string): boolean {
   if (!("speechSynthesis" in window)) return false;
-
   warmEngine();
-
   const list = cachedVoices.length > 0 ? cachedVoices : window.speechSynthesis.getVoices();
   const voice =
     list.find((v) => v.lang.startsWith("en") && v.name.includes("Google US")) ||
@@ -83,9 +63,7 @@ function speakWebSpeech(word: string): boolean {
     list.find((v) => v.lang.startsWith("en") && v.name.includes("Samantha")) ||
     list.find((v) => v.lang.startsWith("en") && v.name.includes("Daniel")) ||
     list.find((v) => v.lang.startsWith("en"));
-
   if (!voice) return false;
-
   try {
     const s = window.speechSynthesis;
     s.resume();
@@ -97,12 +75,10 @@ function speakWebSpeech(word: string): boolean {
     u.voice = voice;
     s.speak(u);
     return true;
-  } catch {
-    return false;
-  }
+  } catch { return false; }
 }
 
-/** Youdao API fallback */
+/** Youdao API */
 function speakYoudao(word: string) {
   if (!navigator.onLine) return;
   try {
@@ -110,37 +86,56 @@ function speakYoudao(word: string) {
   } catch { /* ignore */ }
 }
 
+/** Fetch audio from server */
+async function fetchAudio(wordId: number): Promise<string | null> {
+  if (audioCache.has(wordId)) return audioCache.get(wordId) ?? null;
+  try {
+    const res = await fetch(`/api/trpc/audio.getByWordId?input=${encodeURIComponent(JSON.stringify({ wordId }))}`);
+    const json = await res.json();
+    const result = json.result?.data;
+    if (result?.hasAudio && result?.audioData) {
+      audioCache.set(wordId, result.audioData);
+      return result.audioData;
+    }
+    audioCache.set(wordId, null);
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 /**
- * Speak a word.
+ * Speak a word. LOCAL AUDIO FIRST — always.
  *
  * With wordId:
- *   - Cache hit → play local audio instantly
- *   - Cache miss → Web Speech NOW + fetch local in background
+ *   1. Check cache → play if hit
+ *   2. Fetch from server → play if exists
+ *   3. Web Speech fallback
  *
  * Without wordId:
- *   - Web Speech → Youdao fallback
+ *   1. Web Speech → Youdao
  */
-export function speakWord(word: string, wordId?: number) {
+export async function speakWord(word: string, wordId?: number) {
   if (!word) return;
 
-  // Fast path: cached local audio (second click onwards)
-  if (wordId && audioCache.has(wordId)) {
-    const cached = audioCache.get(wordId);
-    if (cached) {
-      playBase64(cached);
-      return;
+  // Path A: With wordId — try local audio first
+  if (wordId) {
+    // Fast: cache hit
+    if (audioCache.has(wordId)) {
+      const cached = audioCache.get(wordId);
+      if (cached) { playBase64(cached); return; }
+      // cached === null → no audio, fall through to Web Speech
+    } else {
+      // Fetch from server (first time)
+      const base64 = await fetchAudio(wordId);
+      if (base64) { playBase64(base64); return; }
+      // No local audio, fall through to Web Speech
     }
-    // cached === null means no audio exists, fall through to Web Speech
   }
 
-  // Start fetching local audio in background (if wordId provided and not yet fetched)
-  if (wordId && !audioCache.has(wordId)) {
-    fetchAndCacheAudio(wordId);
-  }
-
-  // Immediate path: Web Speech (always works on first click)
+  // Path B: Web Speech (fallback)
   if (speakWebSpeech(word)) return;
 
-  // Last resort: Youdao API
+  // Path C: Youdao API (last resort)
   speakYoudao(word);
 }
