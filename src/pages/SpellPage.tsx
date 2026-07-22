@@ -504,8 +504,8 @@ function WordSelectionDialog({
           <span className="text-xs text-gray-400">{filteredWords.length} 个单词</span>
         </div>
 
-        {/* Word List - flex-1 fills remaining space */}
-        <ScrollArea className="flex-1 min-h-0 px-5">
+        {/* Word List - explicit height with overflow-auto for reliable scrolling */}
+        <div className="flex-1 overflow-y-auto px-5" style={{ maxHeight: 'calc(85dvh - 220px)' }}>
           <div className="pb-3 space-y-1">
             {filteredWords.length === 0 ? (
               <div className="text-center py-8 text-gray-400 text-sm">
@@ -550,7 +550,7 @@ function WordSelectionDialog({
               ))
             )}
           </div>
-        </ScrollArea>
+        </div>
 
         {/* Footer */}
         <div className="p-5 border-t border-gray-100 flex gap-3">
