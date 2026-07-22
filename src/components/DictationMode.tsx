@@ -6,7 +6,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, Play, Pause, SkipForward, Headphones } from "lucide-react";
-import { splitSyllables } from "@/utils/phonics";
+// Phonics util no longer needed for dictation (whole-word playback)
 
 interface DictationModeProps {
   words: any[];
@@ -82,7 +82,6 @@ export default function DictationMode({ words, onBack }: DictationModeProps) {
 
       const word = words[idx];
       const sylCount = countSyllables(word.word);
-      const syllableParts = splitSyllables(word.word);
 
       setCurrentIdx(idx);
       setStatusText(`第 ${idx + 1} / ${total} 个`);
@@ -90,27 +89,11 @@ export default function DictationMode({ words, onBack }: DictationModeProps) {
       // Step 1: First read (normal speed)
       speak(word.word, 0.9);
 
-      // Step 2: Wait, then second read (slow, syllable-by-syllable)
+      // Step 2: Second read — slower, whole word (no syllable splitting)
       timerRef.current = setTimeout(() => {
         if (pausedRef.current) return;
 
-        let secondText: string;
-        if (sylCount >= 2 && syllableParts.length > 1) {
-          // Spell out syllables slowly
-          secondText = syllableParts.join(" — ");
-        } else {
-          secondText = word.word;
-        }
-
-        const u = new SpeechSynthesisUtterance(secondText);
-        u.lang = "en-US";
-        u.rate = 0.5; // Slow
-        u.volume = 1;
-        const voices = window.speechSynthesis.getVoices();
-        const v = voices.find((x) => x.lang.startsWith("en"));
-        if (v) u.voice = v;
-        window.speechSynthesis.cancel();
-        window.speechSynthesis.speak(u);
+        speak(word.word, 0.55); // Slower but whole word
 
         // Step 3: Wait, then next word
         timerRef.current = setTimeout(() => {
