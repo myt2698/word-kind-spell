@@ -1,11 +1,11 @@
-import { Card, CardContent } from "@/components/ui/card";
+// Simple div-based list item — no Card/hover effects that break mobile touch
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { trpc } from "@/providers/trpc";
-import { speakWord, unlockAudio } from "@/utils/speech";
+import { speakWord } from "@/utils/speech";
 import TagDetailDialog from "./TagDetailDialog";
 import {
   Dialog,
@@ -108,105 +108,99 @@ export default function WordCard({ word, onEdit, onDelete }: WordCardProps) {
 
   return (
     <>
-      <Card className="group hover:shadow-lg transition-all duration-300 border-gray-100 overflow-hidden">
-        <CardContent className="p-0">
-          {/* Main row */}
-          <div className="p-4">
-            <div className="flex items-start justify-between gap-3">
-              <div className="flex-1 min-w-0">
-                {/* Word and phonetic */}
-                <div className="flex items-center gap-2 flex-wrap">
-                  <h3 className="text-lg font-bold text-gray-900">{word.word}</h3>
-                  {word.phonetic && (
-                    <span className="text-sm text-gray-400 font-mono">{word.phonetic}</span>
-                  )}
-                  <button
-                    onTouchStart={() => unlockAudio()}
-                    onClick={() => speakWord(word.word, word.id)}
-                    className="p-2 rounded-lg hover:bg-indigo-50 text-gray-400 hover:text-indigo-600 transition-colors active:scale-90"
-                    title="播放发音"
-                  >
-                    <Volume2 className="w-5 h-5" />
-                  </button>
+      {/* Simple div list item — no Card/hover effects that break mobile touch */}
+      <div className="bg-white rounded-xl border border-gray-100 p-4">
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex-1 min-w-0">
+            {/* Word and phonetic */}
+            <div className="flex items-center gap-2 flex-wrap">
+              <h3 className="text-lg font-bold text-gray-900">{word.word}</h3>
+              {word.phonetic && (
+                <span className="text-sm text-gray-400 font-mono">{word.phonetic}</span>
+              )}
+              <button
+                onClick={() => speakWord(word.word, word.id)}
+                className="p-2 rounded-lg hover:bg-indigo-50 text-gray-400 hover:text-indigo-600 transition-colors active:scale-90"
+                title="播放发音"
+              >
+                <Volume2 className="w-5 h-5" />
+              </button>
 
-                  {/* Learning status badge */}
-                  {isActive && (
-                    <Badge className="text-[10px] px-1.5 py-0 bg-emerald-50 text-emerald-600 border-emerald-200 hover:bg-emerald-50">
-                      <CheckCircle2 className="w-2.5 h-2.5 mr-0.5" />学习中
-                    </Badge>
-                  )}
-                  {isPaused && (
-                    <Badge className="text-[10px] px-1.5 py-0 bg-amber-50 text-amber-600 border-amber-200 hover:bg-amber-50">
-                      <Pause className="w-2.5 h-2.5 mr-0.5" />暂停
-                    </Badge>
-                  )}
-                </div>
-
-                {/* Definition */}
-                <p className="text-sm text-gray-700 mt-1.5 leading-relaxed whitespace-pre-line">{word.definition}</p>
-
-                {/* Group and Tags - visually distinct */}
-                <div className="flex flex-wrap items-center gap-1.5 mt-2">
-                  {/* Unit (Group) - gray style, non-clickable */}
-                  {word.textbookName && (
-                    <Badge variant="outline" className="text-xs px-2 py-0.5 bg-gray-50 text-gray-500 border-gray-200 cursor-default">
-                      <Folder className="w-3 h-3 mr-1" />
-                      {word.textbookName}
-                      {word.groupName ? ` > ${word.groupName}` : ""}
-                    </Badge>
-                  )}
-                  {/* Tags - indigo style, clickable */}
-                  {word.tags.map((tag) => (
-                    <button
-                      key={tag.id}
-                      onClick={() => setTagDialogId(tag.id)}
-                      className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-md bg-indigo-50 text-indigo-600 border border-indigo-200 hover:bg-indigo-100 hover:border-indigo-300 hover:text-indigo-700 transition-colors cursor-pointer"
-                    >
-                      <Tag className="w-3 h-3" />
-                      {tag.name}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Actions */}
-              <div className="flex flex-col items-end gap-1 shrink-0">
-                {/* Learning toggle: 加入学习 <-> 已加入 */}
-                {isIdle ? (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="h-7 px-2 text-xs border-emerald-200 text-emerald-600 hover:bg-emerald-50 hover:text-emerald-700"
-                    onClick={() => addToLearning.mutate({ wordId: word.id })}
-                    disabled={addToLearning.isPending}
-                  >
-                    <GraduationCap className="w-3.5 h-3.5 mr-1" />
-                    {addToLearning.isPending ? "..." : "加入学习"}
-                  </Button>
-                ) : (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="h-7 px-2 text-xs border-emerald-200 bg-emerald-50 text-emerald-600 hover:bg-white hover:text-emerald-700"
-                    onClick={() => removeFromLearning.mutate({ wordId: word.id })}
-                    disabled={removeFromLearning.isPending}
-                  >
-                    <CheckCircle2 className="w-3.5 h-3.5 mr-1" />
-                    {removeFromLearning.isPending ? "..." : "已加入"}
-                  </Button>
-                )}
-
-                {/* Edit/Delete buttons */}
-                <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <Button variant="ghost" size="icon" className="h-7 w-7 text-gray-400 hover:text-indigo-600" onClick={() => onEdit(word)}>
-                    <Edit3 className="w-3.5 h-3.5" />
-                  </Button>
-                  <Button variant="ghost" size="icon" className="h-7 w-7 text-gray-400 hover:text-red-500" onClick={() => onDelete(word.id)}>
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </Button>
-                </div>
-              </div>
+              {/* Learning status badge */}
+              {isActive && (
+                <Badge className="text-[10px] px-1.5 py-0 bg-emerald-50 text-emerald-600 border-emerald-200 hover:bg-emerald-50">
+                  <CheckCircle2 className="w-2.5 h-2.5 mr-0.5" />学习中
+                </Badge>
+              )}
+              {isPaused && (
+                <Badge className="text-[10px] px-1.5 py-0 bg-amber-50 text-amber-600 border-amber-200 hover:bg-amber-50">
+                  <Pause className="w-2.5 h-2.5 mr-0.5" />暂停
+                </Badge>
+              )}
             </div>
+
+            {/* Definition */}
+            <p className="text-sm text-gray-700 mt-1.5 leading-relaxed whitespace-pre-line">{word.definition}</p>
+
+            {/* Group and Tags */}
+            <div className="flex flex-wrap items-center gap-1.5 mt-2">
+              {word.textbookName && (
+                <Badge variant="outline" className="text-xs px-2 py-0.5 bg-gray-50 text-gray-500 border-gray-200 cursor-default">
+                  <Folder className="w-3 h-3 mr-1" />
+                  {word.textbookName}
+                  {word.groupName ? ` > ${word.groupName}` : ""}
+                </Badge>
+              )}
+              {word.tags.map((tag) => (
+                <button
+                  key={tag.id}
+                  onClick={() => setTagDialogId(tag.id)}
+                  className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-md bg-indigo-50 text-indigo-600 border border-indigo-200 hover:bg-indigo-100 hover:border-indigo-300 hover:text-indigo-700 transition-colors cursor-pointer"
+                >
+                  <Tag className="w-3 h-3" />
+                  {tag.name}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Actions — always visible, no hover opacity */}
+          <div className="flex flex-col items-end gap-1 shrink-0">
+            {isIdle ? (
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-7 px-2 text-xs border-emerald-200 text-emerald-600 hover:bg-emerald-50 hover:text-emerald-700"
+                onClick={() => addToLearning.mutate({ wordId: word.id })}
+                disabled={addToLearning.isPending}
+              >
+                <GraduationCap className="w-3.5 h-3.5 mr-1" />
+                {addToLearning.isPending ? "..." : "加入学习"}
+              </Button>
+            ) : (
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-7 px-2 text-xs border-emerald-200 bg-emerald-50 text-emerald-600 hover:bg-white hover:text-emerald-700"
+                onClick={() => removeFromLearning.mutate({ wordId: word.id })}
+                disabled={removeFromLearning.isPending}
+              >
+                <CheckCircle2 className="w-3.5 h-3.5 mr-1" />
+                {removeFromLearning.isPending ? "..." : "已加入"}
+              </Button>
+            )}
+
+            {/* Edit/Delete — always visible */}
+            <div className="flex items-center gap-1">
+              <Button variant="ghost" size="icon" className="h-7 w-7 text-gray-400 hover:text-indigo-600" onClick={() => onEdit(word)}>
+                <Edit3 className="w-3.5 h-3.5" />
+              </Button>
+              <Button variant="ghost" size="icon" className="h-7 w-7 text-gray-400 hover:text-red-500" onClick={() => onDelete(word.id)}>
+                <Trash2 className="w-3.5 h-3.5" />
+              </Button>
+            </div>
+          </div>
+        </div>
 
             {/* Expand toggle */}
             {(word.example || word.notes) && (
@@ -227,7 +221,6 @@ export default function WordCard({ word, onEdit, onDelete }: WordCardProps) {
                 )}
               </button>
             )}
-          </div>
 
           {/* Expanded content */}
           {expanded && (word.example || word.notes) && (
@@ -246,8 +239,7 @@ export default function WordCard({ word, onEdit, onDelete }: WordCardProps) {
               )}
             </div>
           )}
-        </CardContent>
-      </Card>
+      </div>
 
       {/* Tag Detail Dialog */}
       <TagDetailDialog
