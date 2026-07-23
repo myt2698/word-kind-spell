@@ -26,7 +26,12 @@ import {
   CheckCircle2,
   Loader2,
 } from "lucide-react";
-import { useState, useMemo } from "react";
+import { useState } from "react";
+
+interface TagInfo {
+  id: number;
+  name: string;
+}
 
 export interface WordCardData {
   id: number;
@@ -35,10 +40,15 @@ export interface WordCardData {
   definition: string;
   example?: string | null;
   notes?: string | null;
+  proficiency: "new" | "learning" | "familiar" | "mastered";
+  tags: TagInfo[];
+  groupId?: number | null;
   groupName?: string | null;
+  textbookId?: number | null;
   textbookName?: string | null;
-  tags: { id: number; name: string }[];
-  learningStatus?: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+  learningStatus?: "idle" | "active" | "paused";
 }
 
 interface WordCardProps {
@@ -49,31 +59,44 @@ interface WordCardProps {
 
 export default function WordCard({ word, onEdit, onDelete }: WordCardProps) {
   const [expanded, setExpanded] = useState(false);
+  const [localStatus, setLocalStatus] = useState(word.learningStatus || "idle");
   const [tagDialogId, setTagDialogId] = useState<number | null>(null);
   const [editTagOpen, setEditTagOpen] = useState(false);
   const [editTagForm, setEditTagForm] = useState({ id: 0, name: "", description: "" });
 
-  const [localStatus, setLocalStatus] = useState(word.learningStatus || "idle");
-
   const utils = trpc.useUtils();
-  const addToLearning = trpc.spelling.addToLearning.useMutation({
-    onMutate: () => setLocalStatus("active"),
-    onError: () => setLocalStatus(word.learningStatus || "idle"),
-    onSuccess: () => utils.spelling.getLearningQueue.invalidate(),
-  });
-  const removeFromLearning = trpc.spelling.removeFromLearning.useMutation({
-    onMutate: () => setLocalStatus("idle"),
-    onError: () => setLocalStatus(word.learningStatus || "idle"),
-    onSuccess: () => utils.spelling.getLearningQueue.invalidate(),
-  });
 
   const updateTag = trpc.tag.update.useMutation({
     onSuccess: () => {
       utils.tag.list.invalidate();
       utils.tag.listWithCount.invalidate();
-      utils.tag.getById.invalidate();
       utils.word.list.invalidate();
-      setEditTagOpen(false);
+    },
+  });
+
+  const addToLearning = trpc.spelling.addToLearning.useMutation({
+    onSuccess: () => {
+      setLocalStatus("active");
+      utils.spelling.getStats.invalidate();
+      utils.spelling.getLearningQueue.invalidate();
+      utils.word.list.invalidate();
+    },
+  });
+
+  const removeFromLearning = trpc.spelling.removeFromLearning.useMutation({
+    onSuccess: () => {
+      setLocalStatus("idle");
+      utils.spelling.getStats.invalidate();
+      utils.spelling.getLearningQueue.invalidate();
+      utils.word.list.invalidate();
+    },
+  });
+
+  const pauseLearning = trpc.spelling.pauseLearning.useMutation({
+    onSuccess: () => {
+      setLocalStatus("paused");
+      utils.spelling.getStats.invalidate();
+      utils.word.list.invalidate();
     },
   });
 
@@ -83,11 +106,9 @@ export default function WordCard({ word, onEdit, onDelete }: WordCardProps) {
   const isPaused = localStatus === "paused";
   const isIdle = localStatus === "idle";
 
-  const hasDetails = word.example || word.notes;
-
   return (
     <>
-      {/* Card */}
+      {/* Simple div list item — no Card/hover effects that break mobile touch */}
       <div className="bg-white rounded-xl border border-gray-100 p-4">
         <div className="flex items-start justify-between gap-3">
           <div className="flex-1 min-w-0">
@@ -98,7 +119,7 @@ export default function WordCard({ word, onEdit, onDelete }: WordCardProps) {
                 <span className="text-sm text-gray-400 font-mono">{word.phonetic}</span>
               )}
               <button
-                onClick={handleSpeak}
+                onClick={() => speakWord(word.word, word.id)}
                 className="p-2 rounded-lg hover:bg-indigo-50 text-gray-400 hover:text-indigo-600 transition-colors active:scale-90"
                 title="播放发音"
               >
@@ -143,7 +164,7 @@ export default function WordCard({ word, onEdit, onDelete }: WordCardProps) {
             </div>
           </div>
 
-          {/* Actions */}
+          {/* Actions — always visible, no hover opacity */}
           <div className="flex flex-col items-end gap-1 shrink-0">
             {isIdle ? (
               <Button
@@ -169,6 +190,7 @@ export default function WordCard({ word, onEdit, onDelete }: WordCardProps) {
               </Button>
             )}
 
+            {/* Edit/Delete — always visible */}
             <div className="flex items-center gap-1">
               <Button variant="ghost" size="icon" className="h-7 w-7 text-gray-400 hover:text-indigo-600" onClick={() => onEdit(word)}>
                 <Edit3 className="w-3.5 h-3.5" />
@@ -180,43 +202,43 @@ export default function WordCard({ word, onEdit, onDelete }: WordCardProps) {
           </div>
         </div>
 
-        {/* Expand toggle */}
-        {hasDetails && (
-          <button
-            onClick={() => setExpanded(!expanded)}
-            className="flex items-center gap-1.5 mt-2 px-3 py-1.5 -ml-2 rounded-lg text-xs text-gray-500 hover:text-gray-700 hover:bg-gray-100 transition-colors active:bg-gray-200"
-          >
-            {expanded ? (
-              <>
-                <ChevronUp className="w-4 h-4" />
-                <span>收起详情</span>
-              </>
-            ) : (
-              <>
-                <ChevronDown className="w-4 h-4" />
-                <span>查看详情</span>
-              </>
+            {/* Expand toggle */}
+            {(word.example || word.notes) && (
+              <button
+                onClick={() => setExpanded(!expanded)}
+                className="flex items-center gap-1.5 mt-2 px-3 py-1.5 -ml-2 rounded-lg text-xs text-gray-500 hover:text-gray-700 hover:bg-gray-100 transition-colors active:bg-gray-200"
+              >
+                {expanded ? (
+                  <>
+                    <ChevronUp className="w-4 h-4" />
+                    <span>收起详情</span>
+                  </>
+                ) : (
+                  <>
+                    <ChevronDown className="w-4 h-4" />
+                    <span>查看详情</span>
+                  </>
+                )}
+              </button>
             )}
-          </button>
-        )}
 
-        {/* Expanded content */}
-        {expanded && hasDetails && (
-          <div className="mt-2 pt-2 border-t border-gray-50 space-y-2">
-            {word.example && (
-              <div>
-                <p className="text-xs text-gray-400 mb-1">例句</p>
-                <HighlightedExample example={word.example} word={word.word} />
-              </div>
-            )}
-            {word.notes && (
-              <div>
-                <p className="text-xs text-gray-400 mb-1">备注</p>
-                <p className="text-sm text-gray-600 bg-amber-50 rounded-lg p-2.5 whitespace-pre-line">{word.notes}</p>
-              </div>
-            )}
-          </div>
-        )}
+          {/* Expanded content */}
+          {expanded && (word.example || word.notes) && (
+            <div className="px-4 pb-4 pt-0 space-y-2 border-t border-gray-50">
+              {word.example && (
+                <div className="mt-3">
+                  <p className="text-xs text-gray-400 mb-1">例句</p>
+                  <HighlightedExample example={word.example} word={word.word} />
+                </div>
+              )}
+              {word.notes && (
+                <div className="mt-2">
+                  <p className="text-xs text-gray-400 mb-1">备注</p>
+                  <p className="text-sm text-gray-600 bg-amber-50 rounded-lg p-2.5 whitespace-pre-line">{word.notes}</p>
+                </div>
+              )}
+            </div>
+          )}
       </div>
 
       {/* Tag Detail Dialog */}
@@ -267,11 +289,16 @@ export default function WordCard({ word, onEdit, onDelete }: WordCardProps) {
                 className="flex-1 h-10 bg-gradient-to-r from-emerald-500 to-teal-600"
                 disabled={!editTagForm.name.trim() || updateTag.isPending}
                 onClick={() => {
-                  updateTag.mutate({
-                    id: editTagForm.id,
-                    name: editTagForm.name.trim(),
-                    description: editTagForm.description.trim() || undefined,
-                  });
+                  updateTag.mutate(
+                    {
+                      id: editTagForm.id,
+                      name: editTagForm.name,
+                      description: editTagForm.description || undefined,
+                    },
+                    {
+                      onSuccess: () => setEditTagOpen(false),
+                    }
+                  );
                 }}
               >
                 {updateTag.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : "保存"}
@@ -285,64 +312,122 @@ export default function WordCard({ word, onEdit, onDelete }: WordCardProps) {
 }
 
 /**
+ * Stem match: find the word + suffix (inflection) in a token.
+ * Returns { stem, suffix } if matched, null otherwise.
+ */
+function stemMatch(token: string, word: string): { stem: string; suffix: string } | null {
+  const t = token.toLowerCase();
+  const w = word.toLowerCase();
+
+  // Direct prefix match: "birds" starts with "bird"
+  if (t.startsWith(w)) {
+    const suffix = token.slice(word.length);
+    if (suffix.length === 0) return { stem: token, suffix: "" };
+    // Validate it's a known inflection suffix
+    const validSuffixes = [
+      "s", "es", "ed", "ing", "er", "est", "d", "'s", "'d", "'ll",
+      "'re", "'ve", "'m", "’s", "’d", "’ll", "’re", "’ve", "’m",
+    ];
+    if (validSuffixes.includes(suffix.toLowerCase())) {
+      return { stem: token.slice(0, word.length), suffix };
+    }
+  }
+
+  // y → i transformation: "flies" → "fly" + "s" (y becomes i + es)
+  if (w.endsWith("y") && t.startsWith(w.slice(0, -1) + "i")) {
+    const suffix = token.slice(word.length - 1); // after "fl" comes "ies"
+    if (suffix.toLowerCase() === "es" || suffix.toLowerCase() === "s") {
+      return { stem: token.slice(0, word.length - 1) + "y", suffix };
+    }
+  }
+
+  // e-dropping: "making" from "make" (e dropped + ing)
+  if (w.endsWith("e") && t.startsWith(w.slice(0, -1))) {
+    const suffix = token.slice(word.length - 1);
+    const validDropping = ["ing", "ed", "er", "est"];
+    if (validDropping.includes(suffix.toLowerCase())) {
+      return { stem: token.slice(0, word.length - 1) + "e", suffix };
+    }
+  }
+
+  // Consonant doubling: "running" from "run" (n doubled + ing)
+  if (w.length >= 3) {
+    const last3 = w.slice(-3); // e.g. "run"
+    const doubled = last3.slice(-1); // last char "n"
+    if (t.startsWith(w + doubled)) {
+      const suffix = token.slice(w.length + 1);
+      const validDoubled = ["ing", "ed", "er", "est"];
+      if (validDoubled.includes(suffix.toLowerCase())) {
+        return { stem: token.slice(0, w.length + 1), suffix };
+      }
+    }
+  }
+
+  return null;
+}
+
+/**
  * Highlight the target word in the example sentence.
- * Uses simple string split with useMemo for performance.
  * Base word = green, inflection suffix = yellow.
  */
 function HighlightedExample({ example, word }: { example: string; word: string }) {
-  const tokens = useMemo(() => {
-    if (!word || !example) return [{ text: example || "", hl: false }];
+  // Split into tokens (words + punctuation)
+  const escaped = word.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  // Match any word that starts with the target word (for inflections)
+  const regex = new RegExp(`\\b(${escaped}\\w*)\\b`, "gi");
 
-    const lw = word.toLowerCase();
-    const le = example.toLowerCase();
-    const result: { text: string; hl: boolean }[] = [];
-    let i = 0;
-    let loopCount = 0;
-    const MAX_LOOPS = 1000;
+  const parts: { type: "text" | "stem" | "suffix"; value: string }[] = [];
+  let lastIndex = 0;
 
-    while (i < example.length && loopCount < MAX_LOOPS) {
-      loopCount++;
-      const idx = le.indexOf(lw, i);
-      if (idx === -1) {
-        result.push({ text: example.slice(i), hl: false });
-        break;
-      }
-      if (idx > i) {
-        result.push({ text: example.slice(i, idx), hl: false });
-      }
-
-      const after = idx + word.length;
-      const chAfter = after < example.length ? example[after] : " ";
-      const chBefore = idx > 0 ? example[idx - 1] : " ";
-      const isBoundary = (c: string) => /\s|[.,;:!?"'()\-\[\]{}]/.test(c);
-
-      if (isBoundary(chBefore) && isBoundary(chAfter)) {
-        result.push({ text: example.slice(idx, after), hl: true });
-        i = after;
-      } else if (isBoundary(chBefore) && after < example.length && /\w/.test(chAfter)) {
-        let end = after;
-        while (end < example.length && /\w/.test(example[end])) end++;
-        result.push({ text: example.slice(idx, after), hl: true });
-        result.push({ text: example.slice(after, end), hl: false });
-        i = end;
-      } else {
-        result.push({ text: example.slice(idx, after), hl: false });
-        i = after;
-      }
+  let match: RegExpExecArray | null;
+  while ((match = regex.exec(example)) !== null) {
+    // Add text before match
+    if (match.index > lastIndex) {
+      parts.push({ type: "text", value: example.slice(lastIndex, match.index) });
     }
 
-    return result;
-  }, [example, word]);
+    const fullWord = match[1];
+    const result = stemMatch(fullWord, word);
+
+    if (result && result.suffix) {
+      // Has inflection: stem (green) + suffix (yellow)
+      parts.push({ type: "stem", value: result.stem });
+      parts.push({ type: "suffix", value: result.suffix });
+    } else if (result) {
+      // Exact match, no suffix
+      parts.push({ type: "stem", value: fullWord });
+    } else {
+      // Matched by regex but not a valid inflection
+      parts.push({ type: "text", value: fullWord });
+    }
+
+    lastIndex = regex.lastIndex;
+  }
+
+  // Remaining text
+  if (lastIndex < example.length) {
+    parts.push({ type: "text", value: example.slice(lastIndex) });
+  }
 
   return (
     <p className="text-base text-gray-600 bg-gray-50 rounded-lg p-2.5 whitespace-pre-line">
-      {tokens.map((t, idx) =>
-        t.hl ? (
-          <span key={idx} className="font-semibold text-emerald-600">{t.text}</span>
-        ) : (
-          <span key={idx}>{t.text}</span>
-        )
-      )}
+      {parts.map((part, i) => {
+        if (part.type === "stem") {
+          return (
+            <span key={i} className="font-semibold text-emerald-600">
+              {part.value}
+            </span>
+          );
+        }
+        if (part.type === "suffix") {
+          return (
+            <span key={i} className="font-medium text-amber-500">
+              {part.value}
+            </span>
+          );
+        }
+        return <span key={i}>{part.value}</span>;
+      })}
     </p>
   );
 }
