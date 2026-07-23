@@ -61,11 +61,11 @@ export default function ManagePage() {
 
   // Mutations
   const createTextbook = trpc.textbook.create.useMutation({
-    onSuccess: () => { utils.textbook.list.invalidate(); setTextbookForm({ name: "", description: "" }); setError(""); },
+    onSuccess: () => { utils.textbook.list.invalidate(); setTextbookForm({ name: "", description: "" }); setTextbookDialogOpen(false); setError(""); },
     onError: (err) => setError(err.message),
   });
   const updateTextbook = trpc.textbook.update.useMutation({
-    onSuccess: () => { utils.textbook.list.invalidate(); setEditingTextbookId(null); setError(""); },
+    onSuccess: () => { utils.textbook.list.invalidate(); setEditingTextbookId(null); setTextbookDialogOpen(false); setError(""); },
     onError: (err) => setError(err.message),
   });
   const deleteTextbook = trpc.textbook.delete.useMutation({
