@@ -312,26 +312,123 @@ export default function WordCard({ word, onEdit, onDelete }: WordCardProps) {
 }
 
 /**
- * Highlight the target word in the example sentence (case-insensitive, whole word match)
+ * Stem match: find the word + suffix (inflection) in a token.
+ * Returns { stem, suffix } if matched, null otherwise.
+ */
+function stemMatch(token: string, word: string): { stem: string; suffix: string } | null {
+  const t = token.toLowerCase();
+  const w = word.toLowerCase();
+
+  // Direct prefix match: "birds" starts with "bird"
+  if (t.startsWith(w)) {
+    const suffix = token.slice(word.length);
+    if (suffix.length === 0) return { stem: token, suffix: "" };
+    // Validate it's a known inflection suffix
+    const validSuffixes = [
+      "s", "es", "ed", "ing", "er", "est", "d", "'s", "'d", "'ll",
+      "'re", "'ve", "'m", "’s", "’d", "’ll", "’re", "’ve", "’m",
+    ];
+    if (validSuffixes.includes(suffix.toLowerCase())) {
+      return { stem: token.slice(0, word.length), suffix };
+    }
+  }
+
+  // y → i transformation: "flies" → "fly" + "s" (y becomes i + es)
+  if (w.endsWith("y") && t.startsWith(w.slice(0, -1) + "i")) {
+    const suffix = token.slice(word.length - 1); // after "fl" comes "ies"
+    if (suffix.toLowerCase() === "es" || suffix.toLowerCase() === "s") {
+      return { stem: token.slice(0, word.length - 1) + "y", suffix };
+    }
+  }
+
+  // e-dropping: "making" from "make" (e dropped + ing)
+  if (w.endsWith("e") && t.startsWith(w.slice(0, -1))) {
+    const suffix = token.slice(word.length - 1);
+    const validDropping = ["ing", "ed", "er", "est"];
+    if (validDropping.includes(suffix.toLowerCase())) {
+      return { stem: token.slice(0, word.length - 1) + "e", suffix };
+    }
+  }
+
+  // Consonant doubling: "running" from "run" (n doubled + ing)
+  if (w.length >= 3) {
+    const last3 = w.slice(-3); // e.g. "run"
+    const doubled = last3.slice(-1); // last char "n"
+    if (t.startsWith(w + doubled)) {
+      const suffix = token.slice(w.length + 1);
+      const validDoubled = ["ing", "ed", "er", "est"];
+      if (validDoubled.includes(suffix.toLowerCase())) {
+        return { stem: token.slice(0, w.length + 1), suffix };
+      }
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Highlight the target word in the example sentence.
+ * Base word = green, inflection suffix = yellow.
  */
 function HighlightedExample({ example, word }: { example: string; word: string }) {
-  // Escape special regex chars in word
+  // Split into tokens (words + punctuation)
   const escaped = word.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  // Split by whole word match (case-insensitive)
-  const parts = example.split(new RegExp(`(${escaped})`, "gi"));
+  // Match any word that starts with the target word (for inflections)
+  const regex = new RegExp(`\\b(${escaped}\\w*)\\b`, "gi");
+
+  const parts: { type: "text" | "stem" | "suffix"; value: string }[] = [];
+  let lastIndex = 0;
+
+  let match: RegExpExecArray | null;
+  while ((match = regex.exec(example)) !== null) {
+    // Add text before match
+    if (match.index > lastIndex) {
+      parts.push({ type: "text", value: example.slice(lastIndex, match.index) });
+    }
+
+    const fullWord = match[1];
+    const result = stemMatch(fullWord, word);
+
+    if (result && result.suffix) {
+      // Has inflection: stem (green) + suffix (yellow)
+      parts.push({ type: "stem", value: result.stem });
+      parts.push({ type: "suffix", value: result.suffix });
+    } else if (result) {
+      // Exact match, no suffix
+      parts.push({ type: "stem", value: fullWord });
+    } else {
+      // Matched by regex but not a valid inflection
+      parts.push({ type: "text", value: fullWord });
+    }
+
+    lastIndex = regex.lastIndex;
+  }
+
+  // Remaining text
+  if (lastIndex < example.length) {
+    parts.push({ type: "text", value: example.slice(lastIndex) });
+  }
 
   return (
     <p className="text-sm text-gray-600 italic bg-gray-50 rounded-lg p-2.5 whitespace-pre-line">
       &ldquo;
-      {parts.map((part, i) =>
-        part.toLowerCase() === word.toLowerCase() ? (
-          <span key={i} className="font-semibold text-emerald-600">
-            {part}
-          </span>
-        ) : (
-          <span key={i}>{part}</span>
-        )
-      )}
+      {parts.map((part, i) => {
+        if (part.type === "stem") {
+          return (
+            <span key={i} className="font-semibold text-emerald-600">
+              {part.value}
+            </span>
+          );
+        }
+        if (part.type === "suffix") {
+          return (
+            <span key={i} className="font-medium text-amber-500">
+              {part.value}
+            </span>
+          );
+        }
+        return <span key={i}>{part.value}</span>;
+      })}
       &rdquo;
     </p>
   );
