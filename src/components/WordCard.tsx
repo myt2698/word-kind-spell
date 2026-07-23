@@ -325,7 +325,7 @@ function HighlightedExample({ example, word }: { example: string; word: string }
       &ldquo;
       {parts.map((part, i) =>
         part.toLowerCase() === word.toLowerCase() ? (
-          <span key={i} className="font-bold text-indigo-600 bg-indigo-100 px-1 rounded">
+          <span key={i} className="font-semibold text-emerald-600">
             {part}
           </span>
         ) : (
