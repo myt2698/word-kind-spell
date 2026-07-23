@@ -211,8 +211,11 @@ export default function WordCard({ word, onEdit, onDelete }: WordCardProps) {
 
           {/* Expand indicator */}
           {hasDetails && (
-            <div className="flex items-center justify-center mt-2">
-              <ChevronDown className={`w-4 h-4 text-gray-300 transition-transform ${expanded ? "rotate-180" : ""}`} />
+            <div className="flex items-center justify-center mt-2 pt-1 border-t border-dashed border-gray-100">
+              <span className={`text-xs transition-all ${expanded ? "text-gray-400" : "text-gray-300"}`}>
+                {expanded ? "收起详情" : "点击查看详情"}
+              </span>
+              <ChevronDown className={`w-3.5 h-3.5 ml-1 transition-transform ${expanded ? "text-gray-400 rotate-180" : "text-gray-300"}`} />
             </div>
           )}
         </div>
@@ -307,122 +310,56 @@ export default function WordCard({ word, onEdit, onDelete }: WordCardProps) {
 }
 
 /**
- * Stem match: find the word + suffix (inflection) in a token.
- * Returns { stem, suffix } if matched, null otherwise.
- */
-function stemMatch(token: string, word: string): { stem: string; suffix: string } | null {
-  const t = token.toLowerCase();
-  const w = word.toLowerCase();
-
-  // Direct prefix match: "birds" starts with "bird"
-  if (t.startsWith(w)) {
-    const suffix = token.slice(word.length);
-    if (suffix.length === 0) return { stem: token, suffix: "" };
-    // Validate it's a known inflection suffix
-    const validSuffixes = [
-      "s", "es", "ed", "ing", "er", "est", "d", "'s", "'d", "'ll",
-      "'re", "'ve", "'m", "’s", "’d", "’ll", "’re", "’ve", "’m",
-    ];
-    if (validSuffixes.includes(suffix.toLowerCase())) {
-      return { stem: token.slice(0, word.length), suffix };
-    }
-  }
-
-  // y → i transformation: "flies" → "fly" + "s" (y becomes i + es)
-  if (w.endsWith("y") && t.startsWith(w.slice(0, -1) + "i")) {
-    const suffix = token.slice(word.length - 1); // after "fl" comes "ies"
-    if (suffix.toLowerCase() === "es" || suffix.toLowerCase() === "s") {
-      return { stem: token.slice(0, word.length - 1) + "y", suffix };
-    }
-  }
-
-  // e-dropping: "making" from "make" (e dropped + ing)
-  if (w.endsWith("e") && t.startsWith(w.slice(0, -1))) {
-    const suffix = token.slice(word.length - 1);
-    const validDropping = ["ing", "ed", "er", "est"];
-    if (validDropping.includes(suffix.toLowerCase())) {
-      return { stem: token.slice(0, word.length - 1) + "e", suffix };
-    }
-  }
-
-  // Consonant doubling: "running" from "run" (n doubled + ing)
-  if (w.length >= 3) {
-    const last3 = w.slice(-3); // e.g. "run"
-    const doubled = last3.slice(-1); // last char "n"
-    if (t.startsWith(w + doubled)) {
-      const suffix = token.slice(w.length + 1);
-      const validDoubled = ["ing", "ed", "er", "est"];
-      if (validDoubled.includes(suffix.toLowerCase())) {
-        return { stem: token.slice(0, w.length + 1), suffix };
-      }
-    }
-  }
-
-  return null;
-}
-
-/**
  * Highlight the target word in the example sentence.
- * Base word = green, inflection suffix = yellow.
+ * Simple string-based matching — no regex while loop.
  */
 function HighlightedExample({ example, word }: { example: string; word: string }) {
-  // Split into tokens (words + punctuation)
-  const escaped = word.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  // Match any word that starts with the target word (for inflections)
-  const regex = new RegExp(`\\b(${escaped}\\w*)\\b`, "gi");
+  if (!word || !example) return <p className="text-base text-gray-600 bg-gray-50 rounded-lg p-2.5 whitespace-pre-line">{example}</p>;
 
-  const parts: { type: "text" | "stem" | "suffix"; value: string }[] = [];
-  let lastIndex = 0;
+  const lw = word.toLowerCase();
+  const le = example.toLowerCase();
+  const tokens: { text: string; hl: boolean }[] = [];
+  let i = 0;
 
-  let match: RegExpExecArray | null;
-  while ((match = regex.exec(example)) !== null) {
-    // Add text before match
-    if (match.index > lastIndex) {
-      parts.push({ type: "text", value: example.slice(lastIndex, match.index) });
+  while (i < example.length) {
+    const idx = le.indexOf(lw, i);
+    if (idx === -1) {
+      tokens.push({ text: example.slice(i), hl: false });
+      break;
+    }
+    if (idx > i) {
+      tokens.push({ text: example.slice(i, idx), hl: false });
     }
 
-    const fullWord = match[1];
-    const result = stemMatch(fullWord, word);
+    const after = idx + word.length;
+    const chAfter = after < example.length ? example[after] : " ";
+    const chBefore = idx > 0 ? example[idx - 1] : " ";
+    const isBoundary = (c: string) => /\s|[.,;:!?"'()\-\[\]{}]/.test(c);
 
-    if (result && result.suffix) {
-      // Has inflection: stem (green) + suffix (yellow)
-      parts.push({ type: "stem", value: result.stem });
-      parts.push({ type: "suffix", value: result.suffix });
-    } else if (result) {
-      // Exact match, no suffix
-      parts.push({ type: "stem", value: fullWord });
+    if (isBoundary(chBefore) && isBoundary(chAfter)) {
+      tokens.push({ text: example.slice(idx, after), hl: true });
+      i = after;
+    } else if (isBoundary(chBefore) && after < example.length && /\w/.test(chAfter)) {
+      let end = after;
+      while (end < example.length && /\w/.test(example[end])) end++;
+      tokens.push({ text: example.slice(idx, after), hl: true });
+      tokens.push({ text: example.slice(after, end), hl: false });
+      i = end;
     } else {
-      // Matched by regex but not a valid inflection
-      parts.push({ type: "text", value: fullWord });
+      tokens.push({ text: example.slice(idx, after), hl: false });
+      i = after;
     }
-
-    lastIndex = regex.lastIndex;
-  }
-
-  // Remaining text
-  if (lastIndex < example.length) {
-    parts.push({ type: "text", value: example.slice(lastIndex) });
   }
 
   return (
     <p className="text-base text-gray-600 bg-gray-50 rounded-lg p-2.5 whitespace-pre-line">
-      {parts.map((part, i) => {
-        if (part.type === "stem") {
-          return (
-            <span key={i} className="font-semibold text-emerald-600">
-              {part.value}
-            </span>
-          );
-        }
-        if (part.type === "suffix") {
-          return (
-            <span key={i} className="font-medium text-amber-500">
-              {part.value}
-            </span>
-          );
-        }
-        return <span key={i}>{part.value}</span>;
-      })}
+      {tokens.map((t, idx) =>
+        t.hl ? (
+          <span key={idx} className="font-semibold text-emerald-600">{t.text}</span>
+        ) : (
+          <span key={idx}>{t.text}</span>
+        )
+      )}
     </p>
   );
 }
