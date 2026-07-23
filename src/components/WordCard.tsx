@@ -228,7 +228,7 @@ export default function WordCard({ word, onEdit, onDelete }: WordCardProps) {
               {word.example && (
                 <div className="mt-3">
                   <p className="text-xs text-gray-400 mb-1">例句</p>
-                  <p className="text-sm text-gray-600 italic bg-gray-50 rounded-lg p-2.5 whitespace-pre-line">{word.example}</p>
+                  <HighlightedExample example={word.example} word={word.word} />
                 </div>
               )}
               {word.notes && (
@@ -308,5 +308,31 @@ export default function WordCard({ word, onEdit, onDelete }: WordCardProps) {
         </DialogContent>
       </Dialog>
     </>
+  );
+}
+
+/**
+ * Highlight the target word in the example sentence (case-insensitive, whole word match)
+ */
+function HighlightedExample({ example, word }: { example: string; word: string }) {
+  // Escape special regex chars in word
+  const escaped = word.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  // Split by whole word match (case-insensitive)
+  const parts = example.split(new RegExp(`(${escaped})`, "gi"));
+
+  return (
+    <p className="text-sm text-gray-600 italic bg-gray-50 rounded-lg p-2.5 whitespace-pre-line">
+      &ldquo;
+      {parts.map((part, i) =>
+        part.toLowerCase() === word.toLowerCase() ? (
+          <span key={i} className="font-bold text-indigo-600 bg-indigo-100 px-1 rounded">
+            {part}
+          </span>
+        ) : (
+          <span key={i}>{part}</span>
+        )
+      )}
+      &rdquo;
+    </p>
   );
 }
