@@ -35,6 +35,7 @@ export default function TagManager({ open, onClose }: TagManagerProps) {
     onSuccess: () => {
       utils.tag.list.invalidate();
       utils.tag.listWithCount.invalidate();
+      utils.tag.getById.invalidate(); // Refresh tag detail dialog
       setEditingId(null);
       setForm({ name: "" });
     },
@@ -44,6 +45,7 @@ export default function TagManager({ open, onClose }: TagManagerProps) {
     onSuccess: () => {
       utils.tag.list.invalidate();
       utils.tag.listWithCount.invalidate();
+      utils.tag.getById.invalidate(); // Refresh tag detail dialog
     },
   });
 
