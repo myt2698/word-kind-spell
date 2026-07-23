@@ -82,7 +82,6 @@ export default function WordForm({ open, onClose, onSubmit, editWord }: WordForm
   const [newTagDialogOpen, setNewTagDialogOpen] = useState(false);
   const [newTagName, setNewTagName] = useState("");
   const [newTagDesc, setNewTagDesc] = useState("");
-  const [newTagIds, setNewTagIds] = useState<Set<number>>(new Set());
   const [isLookingUp, setIsLookingUp] = useState(false);
   const [dictError, setDictError] = useState("");
   const [hasAutoFilled, setHasAutoFilled] = useState(false);
@@ -277,10 +276,6 @@ export default function WordForm({ open, onClose, onSubmit, editWord }: WordForm
       utils.tag.listWithCount.invalidate();
       if (data.created || !form.tagIds.includes(data.id)) {
         setForm((prev) => ({ ...prev, tagIds: [...prev.tagIds, data.id] }));
-      }
-      // Track newly created tag for sorting
-      if (data.created) {
-        setNewTagIds((prev) => new Set(prev).add(data.id));
       }
       setNewTagName("");
       setNewTagDesc("");
@@ -586,15 +581,7 @@ export default function WordForm({ open, onClose, onSubmit, editWord }: WordForm
             <div className="flex flex-wrap gap-1.5">
               {allTags
                 ?.slice()
-                .sort((a, b) => {
-                  // Newly created tags first (by creation time desc), then alphabetically
-                  const aNew = newTagIds.has(a.id);
-                  const bNew = newTagIds.has(b.id);
-                  if (aNew && !bNew) return -1;
-                  if (!aNew && bNew) return 1;
-                  if (aNew && bNew) return 0; // keep creation order for new tags
-                  return a.name.localeCompare(b.name, "zh-CN");
-                })
+                .sort((a, b) => a.name.localeCompare(b.name, "zh-CN"))
                 .map((tag) => (
                   <button
                     key={tag.id}
