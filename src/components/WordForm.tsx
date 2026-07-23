@@ -505,7 +505,7 @@ export default function WordForm({ open, onClose, onSubmit, editWord }: WordForm
               value={form.example}
               onChange={(e) => updateForm({ example: e.target.value })}
               placeholder="输入例句（可选）"
-              className="min-h-[60px] resize-none"
+              className="min-h-[120px] resize-y"
             />
           </div>
 
@@ -519,7 +519,7 @@ export default function WordForm({ open, onClose, onSubmit, editWord }: WordForm
               value={form.notes}
               onChange={(e) => updateForm({ notes: e.target.value })}
               placeholder="添加你的学习备注、记忆技巧等"
-              className="min-h-[60px] resize-y"
+              className="min-h-[120px] resize-y"
             />
           </div>
 
