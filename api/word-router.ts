@@ -83,11 +83,9 @@ export const wordRouter = createRouter({
 
       // Determine sort order
       const orderColumn =
-        input?.sortBy === "oldest"
-          ? words.createdAt
-          : input?.sortBy === "alphabetical"
-            ? words.word
-            : words.updatedAt;
+        input?.sortBy === "alphabetical"
+          ? words.word
+          : words.updatedAt;
       const orderFn = input?.sortBy === "oldest" ? asc : desc;
 
       // Query 1: Get word list
