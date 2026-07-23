@@ -410,7 +410,7 @@ function HighlightedExample({ example, word }: { example: string; word: string }
   }
 
   return (
-    <p className="text-sm text-gray-600 italic bg-gray-50 rounded-lg p-2.5 whitespace-pre-line">
+    <p className="text-base text-gray-600 bg-gray-50 rounded-lg p-2.5 whitespace-pre-line">
       {parts.map((part, i) => {
         if (part.type === "stem") {
           return (
