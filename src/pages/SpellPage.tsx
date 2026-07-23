@@ -689,7 +689,7 @@ function BlocksMode({ onBack, words }: { onBack: () => void; words: any[] }) {
   });
 
   const [index, setIndex] = useState(0);
-  const [slots, setSlots] = useState<string[]>([]);
+  const [slots, setSlots] = useState<Array<{ letter: string; poolId: string } | null>>([]);
   const [pool, setPool] = useState<Array<{ id: string; letter: string; used: boolean }>>([]);
   const [result, setResult] = useState<"correct" | "wrong" | null>(null);
   const [score, setScore] = useState(0);
@@ -708,30 +708,30 @@ function BlocksMode({ onBack, words }: { onBack: () => void; words: any[] }) {
       const poolItems = blocks.map((b) => ({ id: b.id, letter: b.letters, used: false }));
       poolItems.sort(() => Math.random() - 0.5);
       setPool(poolItems);
-      setSlots(new Array(blocks.length).fill(""));
+      setSlots(new Array(blocks.length).fill(null));
       setResult(null);
     }
   }, [currentWord]);
 
   const handleSlotClick = (slotIdx: number) => {
     if (!slots[slotIdx] || result) return;
-    const letter = slots[slotIdx];
-    setSlots((s) => { const n = [...s]; n[slotIdx] = ""; return n; });
-    setPool((p) => p.map((item) => item.letter === letter && item.used ? { ...item, used: false } : item));
+    const { poolId } = slots[slotIdx]!;
+    setSlots((s) => { const n = [...s]; n[slotIdx] = null; return n; });
+    setPool((p) => p.map((item) => item.id === poolId ? { ...item, used: false } : item));
   };
 
   const handlePoolClick = (poolIdx: number) => {
     if (pool[poolIdx].used || result) return;
     const emptySlot = slots.findIndex((s) => !s);
     if (emptySlot === -1) return;
-    const letter = pool[poolIdx].letter;
-    setSlots((s) => { const n = [...s]; n[emptySlot] = letter; return n; });
+    const { letter, id: poolId } = pool[poolIdx];
+    setSlots((s) => { const n = [...s]; n[emptySlot] = { letter, poolId }; return n; });
     setPool((p) => p.map((item, i) => i === poolIdx ? { ...item, used: true } : item));
   };
 
   const checkAnswer = () => {
     if (!currentWord) return;
-    const userAnswer = slots.join("");
+    const userAnswer = slots.map((s) => s?.letter ?? "").join("");
     const correct = userAnswer.toLowerCase() === currentWord.word.toLowerCase();
     setResult(correct ? "correct" : "wrong");
     setSessionResults((r) => [...r, { word: currentWord.word, correct }]);
@@ -757,7 +757,7 @@ function BlocksMode({ onBack, words }: { onBack: () => void; words: any[] }) {
   if (showSummary) return <SessionSummary results={sessionResults} score={score} total={words?.length ?? 0} onBack={onBack} onRetry={() => { setIndex(0); setScore(0); setSessionResults([]); setShowSummary(false); }} />;
   if (!currentWord) return <div className="min-h-screen flex items-center justify-center"><p className="text-gray-500">暂无单词可练习</p></div>;
 
-  const allFilled = slots.every((s) => s.length > 0);
+  const allFilled = slots.every((s) => s !== null);
 
   return (
     <main className="max-w-lg mx-auto px-4 py-6 pb-24">
@@ -829,14 +829,14 @@ function BlocksMode({ onBack, words }: { onBack: () => void; words: any[] }) {
             className={`w-12 h-14 rounded-xl border-2 flex items-center justify-center text-lg font-bold transition-all ${
               slot
                 ? result
-                  ? letterBlocks[i] && slot.toLowerCase() === letterBlocks[i].letters.toLowerCase()
+                  ? letterBlocks[i] && slot.letter.toLowerCase() === letterBlocks[i].letters.toLowerCase()
                     ? "border-green-400 bg-green-50 text-green-700"
                     : "border-red-400 bg-red-50 text-red-700"
                   : "border-indigo-300 bg-indigo-50 text-indigo-700"
                 : "border-dashed border-gray-300 bg-gray-50"
             }`}
           >
-            {slot}
+            {slot?.letter ?? ""}
           </button>
         ))}
       </div>
