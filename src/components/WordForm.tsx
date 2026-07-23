@@ -82,6 +82,7 @@ export default function WordForm({ open, onClose, onSubmit, editWord }: WordForm
   const [newTagDialogOpen, setNewTagDialogOpen] = useState(false);
   const [newTagName, setNewTagName] = useState("");
   const [newTagDesc, setNewTagDesc] = useState("");
+  const [newTagIds, setNewTagIds] = useState<Set<number>>(new Set());
   const [isLookingUp, setIsLookingUp] = useState(false);
   const [dictError, setDictError] = useState("");
   const [hasAutoFilled, setHasAutoFilled] = useState(false);
@@ -276,6 +277,10 @@ export default function WordForm({ open, onClose, onSubmit, editWord }: WordForm
       utils.tag.listWithCount.invalidate();
       if (data.created || !form.tagIds.includes(data.id)) {
         setForm((prev) => ({ ...prev, tagIds: [...prev.tagIds, data.id] }));
+      }
+      // Track newly created tag for sorting
+      if (data.created) {
+        setNewTagIds((prev) => new Set(prev).add(data.id));
       }
       setNewTagName("");
       setNewTagDesc("");
@@ -579,21 +584,32 @@ export default function WordForm({ open, onClose, onSubmit, editWord }: WordForm
               <Tag className="w-3.5 h-3.5" /> 标签
             </Label>
             <div className="flex flex-wrap gap-1.5">
-              {allTags?.map((tag) => (
-                <button
-                  key={tag.id}
-                  type="button"
-                  onClick={() => toggleTag(tag.id)}
-                  className={`inline-flex items-center gap-1 px-2.5 py-1 text-xs rounded-full border transition-all ${
-                    form.tagIds.includes(tag.id)
-                      ? "bg-indigo-50 text-indigo-600 border-indigo-300 ring-2 ring-offset-1 ring-indigo-200 font-medium"
-                      : "bg-gray-50 text-gray-500 border-gray-200 opacity-70 hover:opacity-100"
-                  }`}
-                >
-                  {tag.name}
-                  {form.tagIds.includes(tag.id) && <X className="w-3 h-3" />}
-                </button>
-              ))}
+              {allTags
+                ?.slice()
+                .sort((a, b) => {
+                  // Newly created tags first (by creation time desc), then alphabetically
+                  const aNew = newTagIds.has(a.id);
+                  const bNew = newTagIds.has(b.id);
+                  if (aNew && !bNew) return -1;
+                  if (!aNew && bNew) return 1;
+                  if (aNew && bNew) return 0; // keep creation order for new tags
+                  return a.name.localeCompare(b.name, "zh-CN");
+                })
+                .map((tag) => (
+                  <button
+                    key={tag.id}
+                    type="button"
+                    onClick={() => toggleTag(tag.id)}
+                    className={`inline-flex items-center gap-1 px-2.5 py-1 text-xs rounded-full border transition-all ${
+                      form.tagIds.includes(tag.id)
+                        ? "bg-indigo-50 text-indigo-600 border-indigo-300 ring-2 ring-offset-1 ring-indigo-200 font-medium"
+                        : "bg-gray-50 text-gray-500 border-gray-200 opacity-70 hover:opacity-100"
+                    }`}
+                  >
+                    {tag.name}
+                    {form.tagIds.includes(tag.id) && <X className="w-3 h-3" />}
+                  </button>
+                ))}
             </div>
             <Button
               type="button"
