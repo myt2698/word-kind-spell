@@ -35,7 +35,7 @@ export const textbookRouter = createRouter({
     return newTb[0]!;
   }),
 
-  // Create textbook
+  // Create textbook + auto-create Unit 1~6
   create: authedQuery
     .input(z.object({ name: z.string().min(1), description: z.string().optional() }))
     .mutation(async ({ ctx, input }) => {
@@ -45,7 +45,19 @@ export const textbookRouter = createRouter({
         name: input.name,
         description: input.description || null,
       });
-      return { id: Number(result[0].insertId) };
+      const textbookId = Number(result[0].insertId);
+
+      // Auto-create Unit 1 ~ Unit 6
+      for (let i = 1; i <= 6; i++) {
+        await db.insert(wordGroups).values({
+          userId: ctx.user.id,
+          textbookId,
+          name: `Unit ${i}`,
+          sortOrder: i,
+        });
+      }
+
+      return { id: textbookId };
     }),
 
   // List textbooks with group count (excludes default "扩展词汇" textbook)
