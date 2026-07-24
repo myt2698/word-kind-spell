@@ -37,6 +37,8 @@ const CONSONANT_BLENDS = new Set([
   "bl", "br", "cl", "cr", "dr", "fr", "tr", "pr",
   "gl", "gr", "pl", "sl", "sm", "sn", "sp", "st", "sw", "sc", "sk", "tw", "wh",
   "ch", "sh", "th", "ph", "ck", "ng",
+  // Double consonants (two same letters = one sound)
+  "ff", "ll", "ss", "tt", "pp", "mm", "nn", "rr", "dd", "gg", "bb", "cc", "zz",
 ]);
 
 // ========== Priority 2: Prefixes / Suffixes / Compound Words ==========
