@@ -1,0 +1,32 @@
+services:
+  - type: web
+    name: wordmind
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 3000
+      - key: DATABASE_URL
+        sync: false  # Set manually in Render dashboard
+      - key: APP_ID
+        sync: false
+      - key: APP_SECRET
+        sync: false
+      - key: VITE_APP_ID
+        sync: false
+      - key: VITE_KIMI_AUTH_URL
+        value: https://auth.kimi.com
+      - key: KIMI_AUTH_URL
+        value: https://auth.kimi.com
+      - key: KIMI_OPEN_URL
+        value: https://open.kimi.com
+      - key: OWNER_UNION_ID
+        sync: false
+      - key: YOUDAO_APP_KEY
+        sync: false
+      - key: YOUDAO_APP_SECRET
+        sync: false
+    healthCheckPath: /
+    autoDeploy: true
