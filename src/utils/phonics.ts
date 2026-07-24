@@ -1,119 +1,263 @@
 /**
  * Phonics Engine - Syllable Splitting & Phonics Rule Detection
- * Based on PRD Section 4.2
+ * Based on English syllable division rules:
+ * 1. Vowel combos, consonant blends, consonant digraphs are indivisible blocks
+ * 2. Prefixes/suffixes (-cle, -tle, -dle, -ckle, -er, -or) and compound words
+ * 3. VCCV core rule: long vowel → consonant goes back; short vowel → consonant goes front
+ * 4. Special cases dictionary
  */
 
-const VOWELS = new Set(["a", "e", "i", "o", "u", "y"]);
+const VOWELS = new Set(["a", "e", "i", "o", "u"]);
+const Y_VOWEL = new Set(["a", "e", "i", "o", "u", "y"]);
 
-/** Check if char is a vowel */
-export function isVowel(char: string): boolean {
-  return VOWELS.has(char.toLowerCase());
+/** Check if char is a vowel (a/e/i/o/u, not y unless at end) */
+function isVowel(ch: string, pos: number, total: number): boolean {
+  const lower = ch.toLowerCase();
+  if (VOWELS.has(lower)) return true;
+  // y acts as vowel at end of word or between consonants
+  if (lower === "y") {
+    return pos > 0 && pos === total - 1;
+  }
+  return false;
 }
 
-/** Check if char is a consonant */
-export function isConsonant(char: string): boolean {
-  return /^[a-z]$/i.test(char) && !isVowel(char);
-}
+// ========== Priority 1: Indivisible Blocks ==========
 
-// Vowel combinations (digraphs/diphthongs)
-export const VOWEL_COMBOS = new Set([
-  "ai", "ay", "ea", "ee", "ie", "oa", "ow", "oi", "oy", "oo", "ou", "ue", "ui",
-  "au", "aw", "ew", "igh",
+/** Vowel combinations (digraphs/diphthongs) - never split */
+const VOWEL_COMBOS = new Set([
+  "ai", "ay", "ea", "ee", "ie", "oa", "oo", "ou", "ow",
+  "oi", "oy", "au", "aw", "ew", "ue", "ui", "igh",
 ]);
 
-// Consonant blends/clusters (should not be split)
-export const CONSONANT_BLENDS = new Set([
-  "bl", "br", "cl", "cr", "dr", "fl", "fr", "gl", "gr", "pl", "pr", "sk", "sl", "sm", "sn", "sp", "st", "sw", "tr", "tw",
-  "scr", "shr", "spl", "spr", "squ", "str", "thr",
-  "ch", "sh", "th", "wh", "ph", "ck", "ng", "nk", "gh", "kn", "wr", "mb", "mn",
+/** R-controlled vowels */
+const R_CONTROLLED = new Set(["ar", "er", "ir", "or", "ur"]);
+
+/** Consonant blends - never split */
+const CONSONANT_BLENDS = new Set([
+  "bl", "br", "cl", "cr", "dr", "fr", "tr", "pr",
+  "gl", "gr", "pl", "sl", "sm", "sn", "sp", "st", "sw", "sc", "sk", "tw", "wh",
+  "ch", "sh", "th", "ph", "ck", "ng",
 ]);
 
-// Magic e patterns
-export const MAGIC_E_PATTERNS: Array<{ pattern: RegExp; name: string }> = [
-  { pattern: /a_e/, name: "魔法e (a_e)" },
-  { pattern: /i_e/, name: "魔法e (i_e)" },
-  { pattern: /o_e/, name: "魔法e (o_e)" },
-  { pattern: /u_e/, name: "魔法e (u_e)" },
-];
+// ========== Priority 2: Prefixes / Suffixes / Compound Words ==========
 
-// R-controlled patterns
-export const R_CONTROLLED = new Set(["ar", "er", "ir", "or", "ur"]);
+const PREFIXES = new Set([
+  "un", "re", "dis", "mis", "pre", "over", "under", "out", "up", "down",
+]);
 
-export interface SyllableResult {
-  syllables: string[];
-  phonicsTags: PhonicsTag[];
+const SUFFIXES = new Set([
+  "er", "or", "ar", "est", "ness", "less", "ful", "ment", "tion", "sion",
+]);
+
+/** Special endings that form their own syllable */
+const SPECIAL_ENDINGS = ["cle", "tle", "dle", "ckle", "gle", "ble", "ple", "fle", "kle", "zle"];
+
+/** Short vowel sounds (closed syllable indicator) */
+const SHORT_VOWEL_INDICATORS: Record<string, string[]> = {
+  a: ["cat", "hat", "mat", "ran", "sat", "bad", "had", "dad", "mad", "sad", "bag", "rag", "tag", "cap", "map", "nap", "tap", "rat", "bat", "fat", "pat", "van", "can", "man", "pan"],
+  e: ["bed", "red", "led", "fed", "wet", "get", "let", "met", "net", "pet", "set", "bet", "hen", "men", "pen", "ten", "den", "vet", "web", "jet"],
+  i: ["bit", "fit", "hit", "kit", "lit", "pit", "sit", "win", "pin", "tin", "bin", "din", "fin", "gin", "him", "dim", "rid", "hid", "bid", "did", "kid", "lid", "mid"],
+  o: ["hot", "not", "got", "lot", "pot", "dot", "cot", "jot", "rot", "tot", "dog", "fog", "hog", "log", "bog", "cog", "jog", "mob", "rob", "sob", "job", "nod", "rod", "cod", "pod"],
+  u: ["but", "cut", "hut", "nut", "rut", "gum", "hum", "sum", "bum", "mum", "dug", "hug", "jug", "mug", "pug", "rug", "tug", "bud", "mud", "pub", "rub", "sub", "tub"],
+};
+
+/** Common words that are exceptions to rules */
+const EXCEPTION_WORDS: Record<string, string[]> = {
+  "every": ["ev", "ery"],
+  "business": ["busi", "ness"],
+  "favorite": ["fa", "vor", "ite"],
+  "chocolate": ["cho", "co", "late"],
+  "different": ["dif", "fer", "ent"],
+  "interest": ["in", "ter", "est"],
+  "family": ["fa", "mi", "ly"],
+  "animal": ["a", "ni", "mal"],
+  "vegetable": ["ve", "ge", "ta", "ble"],
+  "comfortable": ["com", "for", "ta", "ble"],
+};
+
+/**
+ * Check if a vowel is likely short based on common word patterns
+ */
+function isShortVowel(vowel: string, before: string, after: string): boolean {
+  // Check if followed by single consonant + another vowel (often short)
+  if (after.length >= 2 && isConsonant(after[0]) && isVowelOrY(after[1])) {
+    return true;
+  }
+  // Check if followed by double consonant (definitely short)
+  if (after.length >= 2 && after[0] === after[1]) {
+    return true;
+  }
+  // Single consonant at end of word (closed syllable)
+  if (after.length === 1 && isConsonant(after[0])) {
+    return true;
+  }
+  return false;
 }
+
+function isVowelOrY(ch: string): boolean {
+  return Y_VOWEL.has(ch.toLowerCase());
+}
+
+function isConsonant(ch: string): boolean {
+  return /^[a-z]$/i.test(ch) && !VOWELS.has(ch.toLowerCase());
+}
+
+/**
+ * Find all vowel groups (single vowels or vowel combos) in a word
+ * Returns array of {start, end, text} for each vowel sound unit
+ */
+function findVowelGroups(word: string): Array<{ start: number; end: number; text: string }> {
+  const groups: Array<{ start: number; end: number; text: string }> = [];
+  const lower = word.toLowerCase();
+  let i = 0;
+
+  while (i < lower.length) {
+    // Check 3-letter vowel combos first (igh)
+    if (i < lower.length - 2) {
+      const tri = lower.substring(i, i + 3);
+      if (tri === "igh") {
+        groups.push({ start: i, end: i + 3, text: tri });
+        i += 3;
+        continue;
+      }
+    }
+
+    // Check 2-letter vowel combos
+    if (i < lower.length - 1) {
+      const bi = lower.substring(i, i + 2);
+      if (VOWEL_COMBOS.has(bi) || R_CONTROLLED.has(bi)) {
+        groups.push({ start: i, end: i + 2, text: bi });
+        i += 2;
+        continue;
+      }
+    }
+
+    // Single vowel
+    if (isVowelOrY(lower[i])) {
+      // Silent e at end of word
+      if (lower[i] === "e" && i === lower.length - 1 && groups.length > 0) {
+        // Skip silent e
+        i++;
+        continue;
+      }
+      groups.push({ start: i, end: i + 1, text: lower[i] });
+      i++;
+      continue;
+    }
+
+    i++;
+  }
+
+  return groups;
+}
+
+/**
+ * Split word into syllables using the priority-based algorithm
+ */
+export function splitSyllables(word: string): string[] {
+  const lower = word.toLowerCase().trim();
+  if (!lower || lower.length <= 2) return [lower];
+
+  // Check exception dictionary first
+  if (EXCEPTION_WORDS[lower]) {
+    return [...EXCEPTION_WORDS[lower]];
+  }
+
+  // Find all vowel groups
+  const vowelGroups = findVowelGroups(lower);
+  if (vowelGroups.length <= 1) return [lower];
+
+  const splitPoints: number[] = [];
+
+  for (let i = 0; i < vowelGroups.length - 1; i++) {
+    const v1 = vowelGroups[i];
+    const v2 = vowelGroups[i + 1];
+    const gapStart = v1.end;
+    const gapEnd = v2.start;
+    const consonants = lower.substring(gapStart, gapEnd);
+
+    if (consonants.length === 0) {
+      // Adjacent vowels - check if compound word split
+      // (handled by no split between adjacent vowel groups)
+      continue;
+    }
+
+    if (consonants.length === 1) {
+      // V-C-V pattern: check if vowel is long or short
+      // Long vowel → consonant goes to next syllable (V / CV)
+      // Short vowel → consonant stays with previous (VC / V)
+      if (isShortVowel(v1.text, lower.substring(0, v1.start), consonants + lower.substring(v2.start))) {
+        splitPoints.push(gapStart + 1); // consonant stays with first
+      } else {
+        splitPoints.push(gapStart); // consonant goes to second
+      }
+      continue;
+    }
+
+    if (consonants.length === 2) {
+      // V-CC-V pattern: check if it's a blend
+      const pair = consonants;
+      if (CONSONANT_BLENDS.has(pair)) {
+        // Blend stays together → goes to next syllable
+        splitPoints.push(gapStart);
+      } else {
+        // Split in the middle (VC / CV)
+        splitPoints.push(gapStart + 1);
+      }
+      continue;
+    }
+
+    if (consonants.length >= 3) {
+      // V-CCC-V or more: keep blends together
+      // Try to split before the last consonant or consonant blend
+      if (CONSONANT_BLENDS.has(consonants.substring(1))) {
+        splitPoints.push(gapStart + 1);
+      } else if (CONSONANT_BLENDS.has(consonants.substring(0, 2))) {
+        splitPoints.push(gapStart + 2);
+      } else {
+        splitPoints.push(gapStart + Math.floor(consonants.length / 2));
+      }
+      continue;
+    }
+  }
+
+  // Check for special endings (-cle, -tle, -dle, -ckle, etc.)
+  for (const ending of SPECIAL_ENDINGS) {
+    if (lower.endsWith(ending) && lower.length > ending.length + 1) {
+      const beforeEnding = lower.length - ending.length;
+      // The consonant before the ending forms a syllable with it
+      // e.g., pick-le, lit-tle
+      if (!splitPoints.includes(beforeEnding - 1)) {
+        // Remove nearby split points and add correct one
+        const idx = splitPoints.findIndex((p) => Math.abs(p - beforeEnding) <= 1);
+        if (idx >= 0) splitPoints.splice(idx, 1);
+        splitPoints.push(beforeEnding - 1);
+      }
+    }
+  }
+
+  // Build syllables from split points
+  splitPoints.sort((a, b) => a - b);
+  const uniquePoints = [...new Set(splitPoints)].filter((p) => p > 0 && p < lower.length);
+
+  const syllables: string[] = [];
+  let start = 0;
+  for (const point of uniquePoints) {
+    syllables.push(lower.substring(start, point));
+    start = point;
+  }
+  syllables.push(lower.substring(start));
+
+  return syllables.filter((s) => s.length > 0);
+}
+
+// ========== Types ==========
 
 export interface PhonicsTag {
   type: "vowel_combo" | "consonant_blend" | "magic_e" | "r_controlled" | "syllable";
   text: string;
-  position: [number, number]; // start, end (exclusive)
+  position: [number, number];
   description: string;
-}
-
-/**
- * Split word into syllables using phonics rules
- * Rule 1: Two分手 (VC-CV) - split between two consonants
- * Rule 2: One归后 (V-CV) - consonant goes to next syllable
- * Rule 3: Blends don't split
- */
-export function splitSyllables(word: string): string[] {
-  const lower = word.toLowerCase();
-  if (lower.length <= 3) return [lower];
-
-  // Find all vowel positions
-  const vowelPositions: number[] = [];
-  for (let i = 0; i < lower.length; i++) {
-    if (isVowel(lower[i])) {
-      vowelPositions.push(i);
-    }
-  }
-
-  // No vowels or single vowel cluster
-  if (vowelPositions.length <= 1) return [lower];
-
-  const syllables: string[] = [];
-  let start = 0;
-
-  for (let i = 0; i < vowelPositions.length - 1; i++) {
-    const v1Pos = vowelPositions[i];
-    const v2Pos = vowelPositions[i + 1];
-    const consonantsBetween = v2Pos - v1Pos - 1;
-
-    let splitPoint: number;
-
-    if (consonantsBetween === 0) {
-      // Adjacent vowels - don't split (diphthong)
-      continue;
-    } else if (consonantsBetween === 1) {
-      // Rule 2: One归后 - consonant goes to next syllable
-      splitPoint = v1Pos + 1;
-    } else if (consonantsBetween === 2) {
-      // Check if it's a blend
-      const c1 = lower[v1Pos + 1];
-      const c2 = lower[v2Pos - 1];
-      const pair = c1 + c2;
-
-      if (CONSONANT_BLENDS.has(pair)) {
-        // Don't split blends - move to next syllable
-        splitPoint = v1Pos + 1;
-      } else {
-        // Rule 1: Two分手 - split in the middle
-        splitPoint = v1Pos + 2;
-      }
-    } else {
-      // Rule 1: Two分手 - split in the middle
-      splitPoint = v1Pos + 1 + Math.floor(consonantsBetween / 2);
-    }
-
-    syllables.push(lower.substring(start, splitPoint));
-    start = splitPoint;
-  }
-
-  // Add the final syllable
-  syllables.push(lower.substring(start));
-
-  return syllables.filter((s) => s.length > 0);
 }
 
 /**
@@ -138,70 +282,62 @@ export function detectPhonicsTags(word: string): PhonicsTag[] {
 
   // 2. Detect consonant blends
   for (let i = 0; i < lower.length - 1; i++) {
-    // Check 3-letter blends first
     if (i < lower.length - 2) {
-      const trigram = lower.substring(i, i + 3);
-      if (CONSONANT_BLENDS.has(trigram)) {
+      const tri = lower.substring(i, i + 3);
+      if (CONSONANT_BLENDS.has(tri) && tri.length === 3) {
         tags.push({
           type: "consonant_blend",
-          text: trigram,
+          text: tri,
           position: [i, i + 3],
-          description: `辅音连缀 "${trigram}"`,
+          description: `辅音连缀 "${tri}"`,
         });
-        i += 2; // Skip ahead
+        i += 2;
         continue;
       }
     }
-    const bigram = lower.substring(i, i + 2);
-    if (CONSONANT_BLENDS.has(bigram)) {
-      // Avoid overlapping with already tagged positions
+    const bi = lower.substring(i, i + 2);
+    if (CONSONANT_BLENDS.has(bi)) {
       const overlapping = tags.some(
-        (t) => t.type === "consonant_blend" &&
+        (t) =>
+          t.type === "consonant_blend" &&
           ((t.position[0] <= i && t.position[1] > i) ||
-           (t.position[0] < i + 2 && t.position[1] >= i + 2))
+            (t.position[0] < i + 2 && t.position[1] >= i + 2)),
       );
       if (!overlapping) {
         tags.push({
           type: "consonant_blend",
-          text: bigram,
+          text: bi,
           position: [i, i + 2],
-          description: `辅音组合 "${bigram}"`,
+          description: `辅音组合 "${bi}"`,
         });
       }
     }
   }
 
-  // 3. Detect magic e patterns (a_e, i_e, o_e, u_e)
+  // 3. Detect magic e patterns
   for (let i = 0; i < lower.length - 2; i++) {
     const v1 = lower[i];
     const mid = lower[i + 1];
     const e = lower[i + 2];
-    if (
-      isVowel(v1) &&
-      e === "e" &&
-      isConsonant(mid) &&
-      !isVowel(mid)
-    ) {
-      const pattern = `${v1}_${e}`;
-      const name = `魔法e (${pattern})`;
+    if (VOWELS.has(v1) && e === "e" && isConsonant(mid)) {
       tags.push({
         type: "magic_e",
         text: `${v1}${mid}e`,
         position: [i, i + 3],
-        description: `${name}: ${v1} 发长音`,
+        description: `魔法e: ${v1} 发长音`,
       });
     }
   }
 
   // 4. Detect r-controlled vowels
   for (let i = 0; i < lower.length - 1; i++) {
-    const bigram = lower.substring(i, i + 2);
-    if (R_CONTROLLED.has(bigram)) {
+    const bi = lower.substring(i, i + 2);
+    if (R_CONTROLLED.has(bi)) {
       tags.push({
         type: "r_controlled",
-        text: bigram,
+        text: bi,
         position: [i, i + 2],
-        description: `R控元音 "${bigram}"`,
+        description: `R控元音 "${bi}"`,
       });
     }
   }
@@ -219,28 +355,22 @@ export function detectPhonicsTags(word: string): PhonicsTag[] {
     pos += syl.length;
   }
 
-  // Sort by position
   tags.sort((a, b) => a.position[0] - b.position[0] || b.position[1] - a.position[1]);
-
   return tags;
 }
 
-/**
- * Get color for a phonics tag type
- */
 export function getPhonicsColor(type: PhonicsTag["type"]): string {
   switch (type) {
-    case "vowel_combo": return "#f59e0b"; // amber
-    case "consonant_blend": return "#6366f1"; // indigo
-    case "magic_e": return "#ec4899"; // pink
-    case "r_controlled": return "#10b981"; // emerald
-    case "syllable": return "#6b7280"; // gray
+    case "vowel_combo": return "#f59e0b";
+    case "consonant_blend": return "#6366f1";
+    case "magic_e": return "#ec4899";
+    case "r_controlled": return "#10b981";
+    case "syllable": return "#6b7280";
   }
 }
 
 /**
  * Generate blocks for "积木拼拼乐" mode
- * Splits word into letter blocks, grouping phonics combinations
  */
 export function generateLetterBlocks(word: string): Array<{
   id: string;
@@ -253,93 +383,77 @@ export function generateLetterBlocks(word: string): Array<{
     return [{ id: "b0", letters: lower, isCombo: false }];
   }
 
-  const tags = detectPhonicsTags(word);
-  const nonSyllableTags = tags.filter((t) => t.type !== "syllable");
-
-  // Sort by length (longest first) to prioritize multi-letter combos
-  nonSyllableTags.sort((a, b) => (b.position[1] - b.position[0]) - (a.position[1] - a.position[0]));
-
-  const covered = new Set<number>();
+  const syllables = splitSyllables(word);
   const blocks: Array<{ id: string; letters: string; isCombo: boolean; comboType?: string }> = [];
   let blockId = 0;
 
-  // First pass: add phonics combo blocks
-  for (const tag of nonSyllableTags) {
-    const [s, e] = tag.position;
-    // Check if any position is already covered
-    let overlap = false;
-    for (let i = s; i < e; i++) {
-      if (covered.has(i)) { overlap = true; break; }
+  // Split each syllable into letter blocks based on phonics combos
+  for (const syl of syllables) {
+    const sylLower = syl.toLowerCase();
+    const covered = new Set<number>();
+    const sylBlocks: Array<{ letters: string; isCombo: boolean; comboType?: string; start: number }> = [];
+
+    // Find vowel combos in this syllable
+    for (let i = 0; i < sylLower.length - 1; i++) {
+      if (covered.has(i)) continue;
+
+      // Check 3-letter combos
+      if (i < sylLower.length - 2) {
+        const tri = sylLower.substring(i, i + 3);
+        if (tri === "igh" || VOWEL_COMBOS.has(tri)) {
+          for (let j = i; j < i + 3; j++) covered.add(j);
+          sylBlocks.push({ letters: tri, isCombo: true, comboType: "vowel_combo", start: i });
+          continue;
+        }
+      }
+
+      // Check 2-letter combos
+      const bi = sylLower.substring(i, i + 2);
+      if (VOWEL_COMBOS.has(bi) || R_CONTROLLED.has(bi)) {
+        for (let j = i; j < i + 2; j++) covered.add(j);
+        sylBlocks.push({ letters: bi, isCombo: true, comboType: "vowel_combo", start: i });
+        continue;
+      }
+
+      // Check consonant blends
+      if (CONSONANT_BLENDS.has(bi)) {
+        for (let j = i; j < i + 2; j++) covered.add(j);
+        sylBlocks.push({ letters: bi, isCombo: true, comboType: "consonant_blend", start: i });
+        continue;
+      }
     }
-    if (overlap) continue;
 
-    for (let i = s; i < e; i++) covered.add(i);
-    blocks.push({
-      id: `b${blockId++}`,
-      letters: lower.substring(s, e),
-      isCombo: true,
-      comboType: tag.type,
-    });
-  }
+    // Fill in single letters for uncovered positions
+    for (let i = 0; i < sylLower.length; i++) {
+      if (!covered.has(i)) {
+        sylBlocks.push({ letters: sylLower[i], isCombo: false, start: i });
+      }
+    }
 
-  // Second pass: add single-letter blocks for uncovered positions
-  const singleBlocks: Array<{ id: string; letters: string; isCombo: boolean; index: number }> = [];
-  for (let i = 0; i < lower.length; i++) {
-    if (!covered.has(i)) {
-      singleBlocks.push({
+    // Sort by position within syllable
+    sylBlocks.sort((a, b) => a.start - b.start);
+
+    // Add to main blocks
+    for (const b of sylBlocks) {
+      blocks.push({
         id: `b${blockId++}`,
-        letters: lower[i],
-        isCombo: false,
-        index: i,
+        letters: b.letters,
+        isCombo: b.isCombo,
+        comboType: b.comboType,
       });
     }
   }
 
-  // Merge all blocks and sort by original position
-  const allBlocks = [
-    ...blocks,
-    ...singleBlocks.map((b) => ({ ...b, comboType: undefined })),
-  ];
-
-  // Re-assign positions properly
-  const usedPositions = new Set<number>();
-
-  // Sort blocks by their actual start position in the word
-  const sortedBlocks = allBlocks.map((b) => {
-    let start = 0;
-    let found = false;
-    while (start <= lower.length - b.letters.length) {
-      if (lower.substring(start, start + b.letters.length) === b.letters) {
-        let available = true;
-        for (let p = start; p < start + b.letters.length; p++) {
-          if (usedPositions.has(p)) { available = false; break; }
-        }
-        if (available) {
-          for (let p = start; p < start + b.letters.length; p++) usedPositions.add(p);
-          found = true;
-          break;
-        }
-      }
-      start++;
-    }
-    return { ...b, sortPos: found ? start : Infinity };
-  });
-
-  sortedBlocks.sort((a, b) => a.sortPos - b.sortPos);
-
-  return sortedBlocks.map(({ id, letters, isCombo, comboType }) => ({
-    id, letters, isCombo, comboType,
-  }));
+  return blocks;
 }
 
 /**
  * Generate fill-in-the-blank pattern for "单词消消乐" mode
- * Shows first and last letters, hides middle letters or combinations
  */
 export function generateFillBlank(word: string): {
-  display: string;       // e.g. "h__p__"
-  answerPositions: number[]; // indices that need to be filled
-  hint: string;          // e.g. "首字母h，尾字母y"
+  display: string;
+  answerPositions: number[];
+  hint: string;
 } {
   const lower = word.toLowerCase();
   if (lower.length <= 3) {
@@ -350,7 +464,6 @@ export function generateFillBlank(word: string): {
     };
   }
 
-  // Show first and last letter, hide middle with focus on vowel combos
   const tags = detectPhonicsTags(word);
   const vowelComboPositions = new Set<number>();
 
@@ -362,25 +475,21 @@ export function generateFillBlank(word: string): {
     }
   }
 
-  // Decide what to show/hide
   const show: boolean[] = new Array(lower.length).fill(false);
-  show[0] = true; // Always show first letter
-  show[lower.length - 1] = true; // Always show last letter
+  show[0] = true;
+  show[lower.length - 1] = true;
 
-  // Hide vowel combos (these are the answer)
   const answerPositions: number[] = [];
   for (let i = 1; i < lower.length - 1; i++) {
     if (vowelComboPositions.has(i)) {
       answerPositions.push(i);
     } else if (!show[i]) {
-      // Some consonants might also be hidden for longer words
       if (lower.length > 6 && (i === 2 || i === lower.length - 2)) {
         answerPositions.push(i);
       }
     }
   }
 
-  // If no vowel combos found, hide middle 60%
   if (answerPositions.length === 0) {
     const hideStart = Math.floor(lower.length * 0.3);
     const hideEnd = Math.ceil(lower.length * 0.7);
@@ -389,7 +498,6 @@ export function generateFillBlank(word: string): {
     }
   }
 
-  // Build display string
   let display = "";
   for (let i = 0; i < lower.length; i++) {
     if (show[i]) {
@@ -432,19 +540,16 @@ export function analyzeSpellingErrors(
     };
   }
 
-  // Use simple diff-like comparison
   const result: Array<{ char: string; status: "correct" | "wrong" | "missing" | "extra" }> = [];
   const errorPositions: number[] = [];
 
   let ci = 0, ui = 0;
   while (ci < c.length || ui < u.length) {
     if (ci >= c.length) {
-      // Extra letters in user input
       result.push({ char: u[ui], status: "extra" });
       errorPositions.push(ci);
       ui++;
     } else if (ui >= u.length) {
-      // Missing letters
       result.push({ char: c[ci], status: "missing" });
       errorPositions.push(ci);
       ci++;
@@ -453,10 +558,8 @@ export function analyzeSpellingErrors(
       ci++;
       ui++;
     } else {
-      // Mismatch - try to detect transposition
       if (ci + 1 < c.length && ui + 1 < u.length &&
           c[ci] === u[ui + 1] && c[ci + 1] === u[ui]) {
-        // Wrong order (transposition)
         result.push({ char: u[ui], status: "wrong" });
         errorPositions.push(ci);
         ui++;
@@ -469,7 +572,6 @@ export function analyzeSpellingErrors(
     }
   }
 
-  // Determine error type
   let errorType: "wrong_letter" | "wrong_order" | "missing_letter" | "extra_letter" | "other" = "other";
   const hasMissing = result.some((r) => r.status === "missing");
   const hasExtra = result.some((r) => r.status === "extra");
@@ -477,8 +579,7 @@ export function analyzeSpellingErrors(
 
   if (hasMissing && !hasExtra && !hasWrong) errorType = "missing_letter";
   else if (hasExtra && !hasMissing && !hasWrong) errorType = "extra_letter";
-  else if (hasWrong && result.filter((r) => r.status === "wrong").length === 2 &&
-           c.length === u.length) errorType = "wrong_order";
+  else if (hasWrong && result.filter((r) => r.status === "wrong").length === 2 && c.length === u.length) errorType = "wrong_order";
   else if (hasWrong) errorType = "wrong_letter";
 
   return { isCorrect: false, errorType, errorPositions: [...new Set(errorPositions)], correctLetters: result };
@@ -488,30 +589,20 @@ export function analyzeSpellingErrors(
 // Ebbinghaus Review Algorithm
 // ============================================================
 
-// Review intervals in minutes for each level
 const REVIEW_INTERVALS: Record<number, number[]> = {
-  1: [5, 30, 12 * 60, 24 * 60],        // Lv.1陌生: 5min, 30min, 12h, 1d
-  2: [24 * 60, 2 * 24 * 60, 4 * 24 * 60, 7 * 24 * 60], // Lv.2熟悉: 1d, 2d, 4d, 7d
-  3: [7 * 24 * 60, 15 * 24 * 60, 30 * 24 * 60],       // Lv.3掌握: 7d, 15d, 30d
+  1: [5, 30, 12 * 60, 24 * 60],
+  2: [24 * 60, 2 * 24 * 60, 4 * 24 * 60, 7 * 24 * 60],
+  3: [7 * 24 * 60, 15 * 24 * 60, 30 * 24 * 60],
 };
 
-/**
- * Calculate next review time based on current level and streak
- */
 export function calculateNextReview(level: number, streak: number): Date {
   const intervals = REVIEW_INTERVALS[level] || REVIEW_INTERVALS[1];
   const intervalIndex = Math.min(streak, intervals.length - 1);
   const minutes = intervals[intervalIndex];
-
   const now = new Date();
   return new Date(now.getTime() + minutes * 60 * 1000);
 }
 
-/**
- * Update level based on correctness
- * - Correct: level + 1 (max 3), streak + 1
- * - Wrong: level reset to 1, streak reset to 0
- */
 export function updateLevel(currentLevel: number, isCorrect: boolean): {
   newLevel: number;
   newStreak: number;
@@ -519,25 +610,21 @@ export function updateLevel(currentLevel: number, isCorrect: boolean): {
   if (isCorrect) {
     return {
       newLevel: Math.min(currentLevel + 1, 3),
-      newStreak: currentLevel + 1 <= 3 ? 1 : 0, // Reset streak on level up
+      newStreak: currentLevel + 1 <= 3 ? 1 : 0,
     };
   } else {
-    return {
-      newLevel: 1,
-      newStreak: 0,
-    };
+    return { newLevel: 1, newStreak: 0 };
   }
 }
 
-/**
- * Get words due for review now
- */
-export function getDueWords(spellingData: Array<{
-  wordId: number;
-  level: number;
-  nextReviewAt: Date;
-  lastReviewAt: Date | null;
-}>): Array<{ wordId: number; level: number }> {
+export function getDueWords(
+  spellingData: Array<{
+    wordId: number;
+    level: number;
+    nextReviewAt: Date;
+    lastReviewAt: Date | null;
+  }>
+): Array<{ wordId: number; level: number }> {
   const now = new Date();
   return spellingData
     .filter((d) => d.nextReviewAt <= now)
