@@ -105,14 +105,64 @@ function isConsonant(ch: string): boolean {
 }
 
 /**
- * Find all vowel groups (single vowels or vowel combos) in a word
- * Returns array of {start, end, text} for each vowel sound unit
+ * Predict syllable split points using VCCV rule (for Bossy R validation)
+ * Returns array of positions where syllables should be split.
+ */
+function predictSplitPoints(word: string): number[] {
+  const lower = word.toLowerCase();
+  const splits: number[] = [];
+
+  // Find all vowel positions
+  const vowelPositions: number[] = [];
+  for (let i = 0; i < lower.length; i++) {
+    if (isVowelOrY(lower[i])) {
+      vowelPositions.push(i);
+    }
+  }
+
+  for (let i = 0; i < vowelPositions.length - 1; i++) {
+    const v1 = vowelPositions[i];
+    const v2 = vowelPositions[i + 1];
+    const consonants = lower.substring(v1 + 1, v2);
+
+    if (consonants.length === 1) {
+      // V-C-V: consonant goes to next syllable
+      splits.push(v1 + 1);
+    } else if (consonants.length === 2) {
+      if (CONSONANT_BLENDS.has(consonants)) {
+        // Blend goes to next syllable
+        splits.push(v1 + 1);
+      } else {
+        // Split in middle
+        splits.push(v1 + 2);
+      }
+    } else if (consonants.length >= 3) {
+      // 3+ consonants: split before last consonant/blend
+      if (CONSONANT_BLENDS.has(consonants.substring(1))) {
+        splits.push(v1 + 2);
+      } else if (CONSONANT_BLENDS.has(consonants.substring(0, 2))) {
+        splits.push(v1 + 3);
+      } else {
+        splits.push(v1 + 1 + Math.floor(consonants.length / 2));
+      }
+    }
+  }
+
+  return [...new Set(splits)].sort((a, b) => a - b);
+}
+
+/**
+ * Find all vowel groups with Bossy R co-syllable validation.
+ * R-controlled vowels (ar/er/ir/or/ur) are only valid when vowel and r are in the same syllable.
  */
 function findVowelGroups(word: string): Array<{ start: number; end: number; text: string }> {
   const groups: Array<{ start: number; end: number; text: string }> = [];
   const lower = word.toLowerCase();
-  let i = 0;
 
+  // Step 1: Predict split points for Bossy R validation
+  const splitPoints = predictSplitPoints(word);
+
+  let i = 0;
   while (i < lower.length) {
     // Check 3-letter vowel combos first (igh)
     if (i < lower.length - 2) {
@@ -127,10 +177,32 @@ function findVowelGroups(word: string): Array<{ start: number; end: number; text
     // Check 2-letter vowel combos
     if (i < lower.length - 1) {
       const bi = lower.substring(i, i + 2);
-      if (VOWEL_COMBOS.has(bi) || R_CONTROLLED.has(bi)) {
+
+      // Regular vowel combos (always valid)
+      if (VOWEL_COMBOS.has(bi)) {
         groups.push({ start: i, end: i + 2, text: bi });
         i += 2;
         continue;
+      }
+
+      // Bossy R: ONLY valid if vowel and r are in the same syllable
+      // (no split point between them)
+      if (R_CONTROLLED.has(bi)) {
+        const vowelEnd = i + 1; // position right after vowel, before 'r'
+        const isSplitBetween = splitPoints.some((p) => p === vowelEnd);
+
+        if (isSplitBetween) {
+          // Vowel and r are in different syllables → NOT a Bossy R
+          // Process vowel as single, r as consonant
+          groups.push({ start: i, end: i + 1, text: lower[i] });
+          i++;
+          continue;
+        } else {
+          // Same syllable → valid Bossy R
+          groups.push({ start: i, end: i + 2, text: bi });
+          i += 2;
+          continue;
+        }
       }
     }
 
@@ -138,7 +210,6 @@ function findVowelGroups(word: string): Array<{ start: number; end: number; text
     if (isVowelOrY(lower[i])) {
       // Silent e at end of word
       if (lower[i] === "e" && i === lower.length - 1 && groups.length > 0) {
-        // Skip silent e
         i++;
         continue;
       }
