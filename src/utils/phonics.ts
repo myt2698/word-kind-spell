@@ -496,6 +496,49 @@ export function generateLetterBlocks(word: string): Array<{
       }
     }
 
+    // Detect magic e pattern: vowel + single consonant + e at end of syllable
+    // Merge the trailing "consonant + e" into a magic_e block
+    if (sylLower.length >= 3) {
+      const lastIdx = sylLower.length - 1;
+      const penult = lastIdx - 1; // position of consonant before final e
+      if (
+        sylLower[lastIdx] === "e" &&
+        isConsonant(sylLower[penult]) &&
+        !covered.has(penult) // consonant must not already be part of a blend (e.g. ff in "raffe")
+      ) {
+        // Check that there is a vowel before the consonant
+        let hasVowelBefore = false;
+        for (let i = 0; i < penult; i++) {
+          if (!covered.has(i) && isVowelOrY(sylLower[i])) {
+            hasVowelBefore = true;
+            break;
+          }
+        }
+        // Also accept if a vowel combo was already found
+        if (!hasVowelBefore) {
+          hasVowelBefore = sylBlocks.some(
+            (b) => b.comboType === "vowel_combo" || b.comboType === "r_controlled",
+          );
+        }
+        if (hasVowelBefore) {
+          // Remove any single-letter entries for these positions
+          for (let i = sylBlocks.length - 1; i >= 0; i--) {
+            if (sylBlocks[i].start >= penult && sylBlocks[i].start <= lastIdx) {
+              sylBlocks.splice(i, 1);
+            }
+          }
+          covered.add(penult);
+          covered.add(lastIdx);
+          sylBlocks.push({
+            letters: sylLower.substring(penult),
+            isCombo: true,
+            comboType: "magic_e",
+            start: penult,
+          });
+        }
+      }
+    }
+
     // Fill in single letters for uncovered positions
     for (let i = 0; i < sylLower.length; i++) {
       if (!covered.has(i)) {

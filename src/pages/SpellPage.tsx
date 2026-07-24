@@ -39,6 +39,7 @@ import {
 import {
   generateLetterBlocks,
   generateFillBlank,
+  getPhonicsColor,
 } from "@/utils/phonics";
 import { useSearchParams } from "react-router";
 
@@ -713,7 +714,7 @@ function BlocksMode({ onBack, words }: { onBack: () => void; words: any[] }) {
 
   const [index, setIndex] = useState(0);
   const [slots, setSlots] = useState<Array<{ letter: string; poolId: string } | null>>([]);
-  const [pool, setPool] = useState<Array<{ id: string; letter: string; used: boolean }>>([]);
+  const [pool, setPool] = useState<Array<{ id: string; letter: string; comboType?: string; used: boolean }>>([]);
   const [result, setResult] = useState<"correct" | "wrong" | null>(null);
   const [score, setScore] = useState(0);
   const [showSummary, setShowSummary] = useState(false);
@@ -721,14 +722,14 @@ function BlocksMode({ onBack, words }: { onBack: () => void; words: any[] }) {
 
   const currentWord = words?.[index];
 
-  const [letterBlocks, setLetterBlocks] = useState<Array<{ id: string; letters: string }>>([]);
+  const [letterBlocks, setLetterBlocks] = useState<Array<{ id: string; letters: string; comboType?: string }>>([]);
 
   useEffect(() => {
     if (currentWord) {
       const blocks = generateLetterBlocks(currentWord.word);
       setLetterBlocks(blocks);
       // Scramble pool
-      const poolItems = blocks.map((b) => ({ id: b.id, letter: b.letters, used: false }));
+      const poolItems = blocks.map((b) => ({ id: b.id, letter: b.letters, comboType: b.comboType, used: false }));
       poolItems.sort(() => Math.random() - 0.5);
       setPool(poolItems);
       setSlots(new Array(blocks.length).fill(null));
@@ -845,42 +846,60 @@ function BlocksMode({ onBack, words }: { onBack: () => void; words: any[] }) {
 
       {/* Slots */}
       <div className="flex justify-center gap-2 mb-6 flex-wrap">
-        {slots.map((slot, i) => (
-          <button
-            key={i}
-            onClick={() => handleSlotClick(i)}
-            className={`w-12 h-14 rounded-xl border-2 flex items-center justify-center text-lg font-bold transition-all ${
-              slot
-                ? result
-                  ? letterBlocks[i] && slot.letter.toLowerCase() === letterBlocks[i].letters.toLowerCase()
-                    ? "border-green-400 bg-green-50 text-green-700"
-                    : "border-red-400 bg-red-50 text-red-700"
-                  : "border-indigo-300 bg-indigo-50 text-indigo-700"
-                : "border-dashed border-gray-300 bg-gray-50"
-            }`}
-          >
-            {slot?.letter ?? ""}
-          </button>
-        ))}
+        {slots.map((slot, i) => {
+          const expected = letterBlocks[i];
+          const isMultiLetter = expected && expected.letters.length > 1;
+          return (
+            <button
+              key={i}
+              onClick={() => handleSlotClick(i)}
+              className={`h-14 rounded-xl border-2 flex items-center justify-center text-lg font-bold transition-all ${
+                slot
+                  ? result
+                    ? letterBlocks[i] && slot.letter.toLowerCase() === letterBlocks[i].letters.toLowerCase()
+                      ? "border-green-400 bg-green-50 text-green-700"
+                      : "border-red-400 bg-red-50 text-red-700"
+                    : "border-indigo-300 bg-indigo-50 text-indigo-700"
+                  : "border-dashed border-gray-300 bg-gray-50"
+              }`}
+              style={isMultiLetter ? { minWidth: `${expected.letters.length * 40}px` } : { width: "48px" }}
+            >
+              {slot?.letter ?? ""}
+            </button>
+          );
+        })}
       </div>
 
       {/* Pool */}
       {!result && (
         <div className="flex justify-center gap-2 flex-wrap mb-6">
-          {pool.map((item, i) => (
-            <button
-              key={item.id}
-              onClick={() => handlePoolClick(i)}
-              disabled={item.used}
-              className={`w-12 h-14 rounded-xl border-2 flex items-center justify-center text-lg font-bold transition-all ${
-                item.used
-                  ? "border-gray-200 bg-gray-100 text-gray-300"
-                  : "border-gray-300 bg-white hover:border-indigo-300 hover:shadow-md text-gray-700 active:scale-95"
-              }`}
-            >
-              {item.letter}
-            </button>
-          ))}
+          {pool.map((item, i) => {
+            const phonicsColor = item.comboType ? getPhonicsColor(item.comboType as any) : undefined;
+            return (
+              <button
+                key={item.id}
+                onClick={() => handlePoolClick(i)}
+                disabled={item.used}
+                className={`h-14 rounded-xl border-2 flex items-center justify-center text-lg font-bold transition-all ${
+                  item.used
+                    ? "border-gray-200 bg-gray-100 text-gray-300 w-12"
+                    : "bg-white hover:shadow-md text-gray-700 active:scale-95"
+                }`}
+                style={
+                  !item.used
+                    ? {
+                        minWidth: item.letter.length > 1 ? `${item.letter.length * 40}px` : "48px",
+                        borderColor: phonicsColor ?? "#d1d5db",
+                        color: phonicsColor ?? "#374151",
+                        backgroundColor: phonicsColor ? `${phonicsColor}15` : undefined,
+                      }
+                    : undefined
+                }
+              >
+                {item.letter}
+              </button>
+            );
+          })}
         </div>
       )}
 
