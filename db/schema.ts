@@ -243,6 +243,22 @@ export const spellingSessions = mysqlTable("spelling_sessions", {
 export type SpellingSession = typeof spellingSessions.$inferSelect;
 export type InsertSpellingSession = typeof spellingSessions.$inferInsert;
 
+// ========== 今日选词表（跨设备同步） ==========
+export const todayWordSelections = mysqlTable("today_word_selections", {
+  id: serial("id").primaryKey(),
+  userId: bigint("userId", { mode: "number", unsigned: true })
+    .notNull(),
+  wordId: bigint("wordId", { mode: "number", unsigned: true })
+    .notNull()
+    .references(() => words.id, { onDelete: "cascade" }),
+  // 日期 YYYY-MM-DD
+  date: varchar("date", { length: 10 }).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type TodayWordSelection = typeof todayWordSelections.$inferSelect;
+export type InsertTodayWordSelection = typeof todayWordSelections.$inferInsert;
+
 // ========== 音频存储表 ==========
 
 // 单词发音音频（从有道API下载，base64编码存储）

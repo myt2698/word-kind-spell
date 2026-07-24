@@ -46,10 +46,10 @@ import { speakWord, preloadAudio } from "@/utils/speech";
 import DictationMode from "@/components/DictationMode";
 
 // ============================================================
-// Today Words Context - Manage selected words for today's practice
+// Today Words Context - Server-synced selected words
 // ============================================================
-const TODAY_WORDS_KEY = "wordmind_today_words";
-const TODAY_DATE_KEY = "wordmind_today_date";
+const LS_TODAY_KEY = "wordmind_today_words";
+const LS_DATE_KEY = "wordmind_today_date";
 
 interface TodayWordsContextType {
   selectedIds: number[];
@@ -74,40 +74,63 @@ function useTodayWords() {
 }
 
 function TodayWordsProvider({ children, allWords }: { children: React.ReactNode; allWords: any[] }) {
-  const [selectedIds, setSelectedIds] = useState<number[]>(() => {
-    try {
-      const saved = localStorage.getItem(TODAY_WORDS_KEY);
-      const savedDate = localStorage.getItem(TODAY_DATE_KEY);
-      const today = new Date().toISOString().split("T")[0];
-      if (saved && savedDate === today) {
-        return JSON.parse(saved);
+  const utils = trpc.useUtils();
+
+  // 1. Load from server
+  const { data: serverIds } = trpc.spelling.getTodaySelections.useQuery();
+
+  // 2. Local state (optimistic)
+  const [selectedIds, setSelectedIds] = useState<number[]>([]);
+
+  // Sync server data → local state
+  useEffect(() => {
+    if (serverIds !== undefined) {
+      if (serverIds.length > 0) {
+        setSelectedIds(serverIds);
+      } else {
+        // Server empty: try migrate from localStorage (one-time)
+        try {
+          const saved = localStorage.getItem(LS_TODAY_KEY);
+          const savedDate = localStorage.getItem(LS_DATE_KEY);
+          const today = new Date().toISOString().split("T")[0];
+          if (saved && savedDate === today) {
+            const ids = JSON.parse(saved) as number[];
+            if (ids.length > 0) {
+              setSelectedIds(ids);
+              // Sync to server
+              syncToServer.mutate({ wordIds: ids });
+            }
+          }
+        } catch { /* ignore */ }
       }
-    } catch { /* ignore */ }
-    return [];
+    }
+  }, [serverIds]);
+
+  // Mutations
+  const syncToServer = trpc.spelling.setTodaySelections.useMutation({
+    onSuccess: () => utils.spelling.getTodaySelections.invalidate(),
   });
 
-  // Save to localStorage whenever selectedIds changes
-  useEffect(() => {
-    try {
-      const today = new Date().toISOString().split("T")[0];
-      localStorage.setItem(TODAY_WORDS_KEY, JSON.stringify(selectedIds));
-      localStorage.setItem(TODAY_DATE_KEY, today);
-    } catch { /* ignore */ }
-  }, [selectedIds]);
+  const toggleServer = trpc.spelling.toggleTodaySelection.useMutation({
+    onSuccess: () => utils.spelling.getTodaySelections.invalidate(),
+  });
 
   const toggleWord = useCallback((id: number) => {
     setSelectedIds((prev) =>
       prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
     );
-  }, []);
+    toggleServer.mutate({ wordId: id });
+  }, [toggleServer]);
 
   const selectAll = useCallback((ids: number[]) => {
     setSelectedIds(ids);
-  }, []);
+    syncToServer.mutate({ wordIds: ids });
+  }, [syncToServer]);
 
   const clearAll = useCallback(() => {
     setSelectedIds([]);
-  }, []);
+    syncToServer.mutate({ wordIds: [] });
+  }, [syncToServer]);
 
   const isSelected = useCallback(
     (id: number) => selectedIds.includes(id),

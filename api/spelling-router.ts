@@ -10,7 +10,7 @@
 import { z } from "zod";
 import { createRouter, authedQuery } from "./middleware";
 import { getDb } from "./queries/connection";
-import { words, wordSpellings, spellingErrors, spellingSessions } from "@db/schema";
+import { words, wordSpellings, spellingErrors, spellingSessions, todayWordSelections } from "@db/schema";
 import { eq, and, gte, lte, desc, count, inArray } from "drizzle-orm";
 
 // Review intervals in minutes for each level
@@ -724,5 +724,96 @@ export const spellingRouter = createRouter({
         wordIds: input.wordIds ? JSON.stringify(input.wordIds) : null,
       });
       return { success: true };
+    }),
+
+  // ========== Today Word Selections (cross-device sync) ==========
+
+  /** Get today's selected word IDs */
+  getTodaySelections: authedQuery.query(async ({ ctx }) => {
+    const db = getDb();
+    const today = new Date().toISOString().split("T")[0];
+    const rows = await db
+      .select({ wordId: todayWordSelections.wordId })
+      .from(todayWordSelections)
+      .where(
+        and(
+          eq(todayWordSelections.userId, ctx.user.id),
+          eq(todayWordSelections.date, today)
+        )
+      );
+    return rows.map((r) => r.wordId);
+  }),
+
+  /** Replace today's selections */
+  setTodaySelections: authedQuery
+    .input(z.object({ wordIds: z.array(z.number()) }))
+    .mutation(async ({ ctx, input }) => {
+      const db = getDb();
+      const today = new Date().toISOString().split("T")[0];
+
+      // Delete existing selections for today
+      await db
+        .delete(todayWordSelections)
+        .where(
+          and(
+            eq(todayWordSelections.userId, ctx.user.id),
+            eq(todayWordSelections.date, today)
+          )
+        );
+
+      // Insert new selections
+      if (input.wordIds.length > 0) {
+        await db.insert(todayWordSelections).values(
+          input.wordIds.map((wordId) => ({
+            userId: ctx.user.id,
+            wordId,
+            date: today,
+          }))
+        );
+      }
+
+      return { success: true };
+    }),
+
+  /** Toggle a single word in today's selections */
+  toggleTodaySelection: authedQuery
+    .input(z.object({ wordId: z.number() }))
+    .mutation(async ({ ctx, input }) => {
+      const db = getDb();
+      const today = new Date().toISOString().split("T")[0];
+
+      const existing = await db
+        .select({ id: todayWordSelections.id })
+        .from(todayWordSelections)
+        .where(
+          and(
+            eq(todayWordSelections.userId, ctx.user.id),
+            eq(todayWordSelections.wordId, input.wordId),
+            eq(todayWordSelections.date, today)
+          )
+        )
+        .limit(1);
+
+      if (existing.length > 0) {
+        // Remove
+        await db
+          .delete(todayWordSelections)
+          .where(
+            and(
+              eq(todayWordSelections.userId, ctx.user.id),
+              eq(todayWordSelections.wordId, input.wordId),
+              eq(todayWordSelections.date, today)
+            )
+          );
+        return { selected: false };
+      } else {
+        // Add
+        await db.insert(todayWordSelections).values({
+          userId: ctx.user.id,
+          wordId: input.wordId,
+          date: today,
+        });
+        return { selected: true };
+      }
     }),
 });

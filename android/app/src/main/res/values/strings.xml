@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">WordMind</string>
+    <string name="title_activity_main">WordMind</string>
+    <string name="package_name">com.wordmind.app</string>
+    <string name="custom_url_scheme">com.wordmind.app</string>
+</resources>
