@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useAuth } from "@/hooks/useAuth";
+import { useNavigate } from "react-router";
 import { trpc } from "@/providers/trpc";
 import AppHeader from "@/components/AppHeader";
 import MobileNav from "@/components/MobileNav";
@@ -19,12 +20,14 @@ import {
   Award,
   GraduationCap,
   Pause,
+  Shield,
 } from "lucide-react";
 
 type ProfileTab = "stats" | "errors" | "settings";
 
 export default function ProfilePage() {
   const { user, logout } = useAuth();
+  const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<ProfileTab>("stats");
 
   const { data: stats, isLoading: statsLoading } = trpc.spelling.getStats.useQuery();
@@ -48,6 +51,18 @@ export default function ProfilePage() {
               <p className="text-base font-semibold text-gray-900 truncate">{user.name || "用户"}</p>
               <p className="text-xs text-gray-500">{user.phone}</p>
             </div>
+            {/* Admin entry - only for admin users */}
+            {user.role === "admin" && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-1.5 text-indigo-600 border-indigo-200 hover:bg-indigo-50"
+                onClick={() => navigate("/admin")}
+              >
+                <Shield className="w-3.5 h-3.5" />
+                管理后台
+              </Button>
+            )}
           </div>
         </div>
 

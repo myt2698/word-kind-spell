@@ -120,16 +120,8 @@ export default function AppSidebar({
 
         {/* Tags */}
         <div>
-          <div className="flex items-center justify-between px-3 mb-1.5">
+          <div className="px-3 mb-1.5">
             <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider">标签</h3>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-6 w-6 text-gray-400 hover:text-emerald-600"
-              onClick={() => navigate("/tags")}
-            >
-              <Settings className="w-3.5 h-3.5" />
-            </Button>
           </div>
           <div className="flex flex-wrap gap-1.5 px-3">
             {tags?.map((tag) => (
