@@ -63,6 +63,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.wordmind.app.data.PracticeWord
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlin.math.ceil
 import kotlin.math.floor
 
@@ -78,6 +79,18 @@ private data class LetterToken(
     val id: Int,
     val letter: Char,
 )
+
+private fun practiceSpeechRepeatDelay(word: String): Long =
+    (1_100L + word.trim().length * 70L).coerceAtMost(2_200L)
+
+private suspend fun autoSpeakPracticeWordTwice(
+    word: String,
+    speak: (String) -> Unit,
+) {
+    speak(word)
+    delay(practiceSpeechRepeatDelay(word))
+    speak(word)
+}
 
 internal data class SessionWordResult(
     val word: String,
@@ -112,6 +125,7 @@ internal fun BlocksPracticeMode(
             slots = List(target.length) { null }
             result = null
             startedAt = System.currentTimeMillis()
+            autoSpeakPracticeWordTwice(current.word, speak)
         }
     }
 
@@ -303,6 +317,7 @@ internal fun FillBlankPracticeMode(
             activeBlankIndex = 0
             result = null
             startedAt = System.currentTimeMillis()
+            autoSpeakPracticeWordTwice(current.word, speak)
         }
     }
 
@@ -513,7 +528,9 @@ internal fun FlashPracticeMode(
             startedAt = System.currentTimeMillis()
             input = ""
             timeLeft = 3
-            speak(current.word)
+            launch {
+                autoSpeakPracticeWordTwice(current.word, speak)
+            }
             repeat(3) {
                 delay(1_000)
                 timeLeft = (timeLeft - 1).coerceAtLeast(0)

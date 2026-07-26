@@ -7,7 +7,7 @@ import { createContext } from "./context";
 import { env } from "./lib/env";
 
 // DEBUG: Print env info BEFORE any validation
-console.log("[BOOT] ========== Starting WordMind ==========");
+console.log("[BOOT] ========== Starting 词音岛 ==========");
 console.log("[BOOT] NODE_ENV:", process.env.NODE_ENV);
 console.log("[BOOT] Env var count:", Object.keys(process.env).length);
 console.log("[BOOT] Env keys:", Object.keys(process.env).sort().filter(k => !k.includes("SECRET") && !k.includes("PASS") && !k.includes("KEY")).join(", "));

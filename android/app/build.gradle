@@ -12,8 +12,8 @@ android {
         applicationId "com.wordmind.app"
         minSdk 23
         targetSdk 35
-        versionCode 9
-        versionName "1.0.8-native"
+        versionCode 10
+        versionName "1.0.9-native"
 
         buildConfigField "String", "API_BASE_URL", '"https://word-kind-spell-production.up.railway.app"'
     }

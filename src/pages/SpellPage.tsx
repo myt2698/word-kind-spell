@@ -46,6 +46,38 @@ import { useSearchParams } from "react-router";
 import { speakWord, preloadAudio } from "@/utils/speech";
 import DictationMode from "@/components/DictationMode";
 
+const AUTO_SPEAK_BASE_DELAY_MS = 1100;
+
+function autoSpeakDelay(word: string) {
+  return Math.min(2200, AUTO_SPEAK_BASE_DELAY_MS + word.trim().length * 70);
+}
+
+function useAutoSpeakTwice(
+  word?: { id: number; word: string },
+  retryToken = 0,
+) {
+  const wordId = word?.id;
+  const wordText = word?.word;
+
+  useEffect(() => {
+    if (!wordId || !wordText) return;
+
+    // Scheduling the first read avoids React StrictMode playing it an extra
+    // time during its development-only effect mount check.
+    const firstReadTimer = window.setTimeout(() => {
+      speakWord(wordText, wordId);
+    }, 0);
+    const secondReadTimer = window.setTimeout(() => {
+      speakWord(wordText, wordId);
+    }, autoSpeakDelay(wordText));
+
+    return () => {
+      window.clearTimeout(firstReadTimer);
+      window.clearTimeout(secondReadTimer);
+    };
+  }, [wordId, wordText, retryToken]);
+}
+
 // ============================================================
 // Today Words Context - Server-synced selected words
 // ============================================================
@@ -719,8 +751,10 @@ function BlocksMode({ onBack, words }: { onBack: () => void; words: any[] }) {
   const [score, setScore] = useState(0);
   const [showSummary, setShowSummary] = useState(false);
   const [sessionResults, setSessionResults] = useState<Array<{ word: string; correct: boolean }>>([]);
+  const [retryToken, setRetryToken] = useState(0);
 
   const currentWord = words?.[index];
+  useAutoSpeakTwice(currentWord, retryToken);
 
   const [letterBlocks, setLetterBlocks] = useState<Array<{ id: string; letters: string; comboType?: string }>>([]);
 
@@ -735,7 +769,7 @@ function BlocksMode({ onBack, words }: { onBack: () => void; words: any[] }) {
       setSlots(new Array(blocks.length).fill(null));
       setResult(null);
     }
-  }, [currentWord]);
+  }, [currentWord?.id, retryToken]);
 
   const handleSlotClick = (slotIdx: number) => {
     if (!slots[slotIdx] || result) return;
@@ -778,7 +812,7 @@ function BlocksMode({ onBack, words }: { onBack: () => void; words: any[] }) {
     }
   };
 
-  if (showSummary) return <SessionSummary results={sessionResults} score={score} total={words?.length ?? 0} onBack={onBack} onRetry={() => { setIndex(0); setScore(0); setSessionResults([]); setShowSummary(false); }} />;
+  if (showSummary) return <SessionSummary results={sessionResults} score={score} total={words?.length ?? 0} onBack={onBack} onRetry={() => { setIndex(0); setScore(0); setSessionResults([]); setShowSummary(false); setRetryToken((token) => token + 1); }} />;
   if (!currentWord) return <div className="min-h-screen flex items-center justify-center"><p className="text-gray-500">暂无单词可练习</p></div>;
 
   const allFilled = slots.every((s) => s !== null);
@@ -943,8 +977,10 @@ function FillBlankMode({ onBack, words }: { onBack: () => void; words: any[] }) 
   const [score, setScore] = useState(0);
   const [showSummary, setShowSummary] = useState(false);
   const [sessionResults, setSessionResults] = useState<Array<{ word: string; correct: boolean }>>([]);
+  const [retryToken, setRetryToken] = useState(0);
 
   const currentWord = words?.[index];
+  useAutoSpeakTwice(currentWord, retryToken);
   const blankPattern = currentWord ? generateFillBlank(currentWord.word) : null;
   // Positions that are blanks (indices in the display string)
   const blankPositions = blankPattern
@@ -956,7 +992,7 @@ function FillBlankMode({ onBack, words }: { onBack: () => void; words: any[] }) 
     setAnswers(new Array(blankCount).fill(""));
     setActiveBlankIdx(0);
     setResult(null);
-  }, [index, blankCount]);
+  }, [index, blankCount, retryToken]);
 
   const handleLetterPress = (letter: string) => {
     if (result) return;
@@ -1023,7 +1059,7 @@ function FillBlankMode({ onBack, words }: { onBack: () => void; words: any[] }) 
     }
   };
 
-  if (showSummary) return <SessionSummary results={sessionResults} score={score} total={words?.length ?? 0} onBack={onBack} onRetry={() => { setIndex(0); setScore(0); setSessionResults([]); setShowSummary(false); }} />;
+  if (showSummary) return <SessionSummary results={sessionResults} score={score} total={words?.length ?? 0} onBack={onBack} onRetry={() => { setIndex(0); setScore(0); setSessionResults([]); setShowSummary(false); setRetryToken((token) => token + 1); }} />;
   if (!currentWord) return <div className="min-h-screen flex items-center justify-center"><p className="text-gray-500">暂无单词可练习</p></div>;
 
   const allFilled = answers.every(a => a.length > 0);
@@ -1227,15 +1263,14 @@ function FlashMode({ onBack, words }: { onBack: () => void; words: any[] }) {
   const [score, setScore] = useState(0);
   const [showSummary, setShowSummary] = useState(false);
   const [sessionResults, setSessionResults] = useState<Array<{ word: string; correct: boolean }>>([]);
+  const [retryToken, setRetryToken] = useState(0);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const currentWord = words?.[index];
+  useAutoSpeakTwice(currentWord, retryToken);
 
   useEffect(() => {
     if (phase === "show" && currentWord) {
-      // Speak the word
-      speakWord(currentWord.word, currentWord.id);
-
       setTimeLeft(3);
       const timer = setInterval(() => {
         setTimeLeft((t) => {
@@ -1277,7 +1312,7 @@ function FlashMode({ onBack, words }: { onBack: () => void; words: any[] }) {
     }
   };
 
-  if (showSummary) return <SessionSummary results={sessionResults} score={score} total={words?.length ?? 0} onBack={onBack} onRetry={() => { setIndex(0); setScore(0); setSessionResults([]); setShowSummary(false); setPhase("show"); setInput(""); }} />;
+  if (showSummary) return <SessionSummary results={sessionResults} score={score} total={words?.length ?? 0} onBack={onBack} onRetry={() => { setIndex(0); setScore(0); setSessionResults([]); setShowSummary(false); setPhase("show"); setInput(""); setRetryToken((token) => token + 1); }} />;
   if (!currentWord) return <div className="min-h-screen flex items-center justify-center"><p className="text-gray-500">暂无单词可练习</p></div>;
 
   return (

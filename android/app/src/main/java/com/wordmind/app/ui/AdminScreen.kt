@@ -267,6 +267,7 @@ internal fun AdminScreen(
                             deleteTarget = null
                             onChanged()
                         } catch (error: Exception) {
+                            error.rethrowIfCancellation()
                             onMessage(error.message ?: "删除失败")
                         } finally {
                             deleting = false
@@ -455,6 +456,7 @@ private fun NameDescriptionDialog(
                             onSave(name, description)
                             onSaved()
                         } catch (error: Exception) {
+                            error.rethrowIfCancellation()
                             onMessage(error.message ?: "保存失败")
                             saving = false
                         }

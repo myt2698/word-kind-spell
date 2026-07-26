@@ -32,6 +32,13 @@ data class Tag(
     val wordCount: Int = 0,
 )
 
+data class WordGroupMembership(
+    val groupId: Int,
+    val groupName: String,
+    val textbookId: Int,
+    val textbookName: String,
+)
+
 data class Word(
     val id: Int,
     val word: String,
@@ -44,6 +51,7 @@ data class Word(
     val textbookId: Int?,
     val textbookName: String,
     val groupName: String?,
+    val groups: List<WordGroupMembership>,
     val tags: List<Tag>,
 )
 
@@ -140,6 +148,20 @@ internal fun JSONArray.toWords(): List<Word> = buildList {
                 )
             }
         }
+        val groupsJson = item.optJSONArray("groups") ?: JSONArray()
+        val groups = buildList {
+            for (groupIndex in 0 until groupsJson.length()) {
+                val group = groupsJson.getJSONObject(groupIndex)
+                add(
+                    WordGroupMembership(
+                        groupId = group.getInt("groupId"),
+                        groupName = group.optString("groupName", "Unit"),
+                        textbookId = group.getInt("textbookId"),
+                        textbookName = group.optString("textbookName", "课本"),
+                    )
+                )
+            }
+        }
         add(
             Word(
                 id = item.getInt("id"),
@@ -153,6 +175,7 @@ internal fun JSONArray.toWords(): List<Word> = buildList {
                 textbookId = if (item.isNull("textbookId")) null else item.optInt("textbookId"),
                 textbookName = item.optString("textbookName", "扩展词汇"),
                 groupName = item.nullableString("groupName"),
+                groups = groups,
                 tags = tags,
             )
         )

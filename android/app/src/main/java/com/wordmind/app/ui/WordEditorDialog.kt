@@ -88,6 +88,7 @@ internal fun WordEditorDialog(
                 )
                 onSaved()
             } catch (error: Exception) {
+                error.rethrowIfCancellation()
                 onMessage(error.message ?: "保存单词失败")
                 saving = false
             }

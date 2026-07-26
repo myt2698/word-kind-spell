@@ -130,6 +130,7 @@ internal fun PracticeScreen(
             val activeIds = result.learning.mapTo(mutableSetOf()) { it.id }
             selectedIds = result.selectedIds.intersect(activeIds)
         } catch (error: Exception) {
+            error.rethrowIfCancellation()
             onMessage(error.message ?: "拼写数据加载失败")
         } finally {
             loading = false
@@ -162,6 +163,7 @@ internal fun PracticeScreen(
             try {
                 api.setTodaySelections(ids.toList())
             } catch (error: Exception) {
+                error.rethrowIfCancellation()
                 selectedIds = previous
                 onMessage(error.message ?: "今日练习单词保存失败")
             } finally {
@@ -188,6 +190,7 @@ internal fun PracticeScreen(
                 )
                 onLearningChanged()
             } catch (error: Exception) {
+                error.rethrowIfCancellation()
                 onMessage(error.message ?: "提交练习结果失败")
             }
         }
@@ -269,6 +272,7 @@ internal fun PracticeScreen(
                         api.clearSpellingErrors(word.id)
                         loadPractice(showLoading = false)
                     } catch (error: Exception) {
+                        error.rethrowIfCancellation()
                         onMessage(error.message ?: "移除错题失败")
                     }
                 }

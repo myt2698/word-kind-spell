@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * WordMind 数据迁移脚本
+ * 词音岛数据迁移脚本
  * 把旧站导出的数据导入到新站 Railway 数据库
  * 
  * 使用方法：
@@ -27,7 +27,7 @@ if (!fs.existsSync(backupFile)) {
 }
 
 async function main() {
-  console.log("📦 WordMind 数据迁移工具\n");
+  console.log("📦 词音岛数据迁移工具\n");
 
   // 读取备份数据
   const backup = JSON.parse(fs.readFileSync(backupFile, "utf-8"));

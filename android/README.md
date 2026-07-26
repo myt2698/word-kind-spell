@@ -1,13 +1,13 @@
-# WordMind Android
+# 词音岛 Android
 
-This directory contains the native WordMind Android client.
+This directory contains the native 词音岛 Android client.
 
 - UI: Kotlin + Jetpack Compose
 - Network: Android `HttpURLConnection`
 - Speech: Android `TextToSpeech`
 - Backend: `https://word-kind-spell-production.up.railway.app`
 - Package: `com.wordmind.app`
-- Version: `1.0.8-native` (`versionCode` 9)
+- Version: `1.0.9-native` (`versionCode` 10)
 - Minimum Android version: Android 6.0 (API 23)
 
 The app does not use Capacitor, Cordova, WebView, Chrome, or another browser

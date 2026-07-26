@@ -1,4 +1,4 @@
-# WordMind APK 打包指南
+# 词音岛 APK 打包指南
 
 ## 方案一：PWA Builder（推荐，最简单）
 
@@ -106,8 +106,8 @@ Bubblewrap 是 Google 官方推荐的 TWA（Trusted Web Activity）打包工具�
        }
    }]
    </string>
-   <string name="app_name">WordMind</string>
-   <string name="short_name">WordMind</string>
+   <string name="app_name">词音岛</string>
+   <string name="short_name">词音岛</string>
    <string name="launchUrl">https://myapp-hono2.pages.dev/</string>
    ```
 
@@ -128,7 +128,7 @@ Bubblewrap 是 Google 官方推荐的 TWA（Trusted Web Activity）打包工具�
 3. **点击 APK 文件安装**
 
 4. **打开应用**
-   - 桌面上会出现 WordMind 图标
+   - 桌面上会出现词音岛图标
    - 首次打开需要联网加载
 
 ---

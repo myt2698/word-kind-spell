@@ -14,16 +14,47 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ArrowLeft, Plus, Search, X } from "lucide-react";
 
+const WORD_FILTERS_STORAGE_KEY = "ciyindao:wordFilters:v1";
+
+function loadWordFilters(): {
+  textbookId: number | null;
+  unitId: number | null;
+  sortBy: SortBy;
+} {
+  try {
+    const saved = JSON.parse(localStorage.getItem(WORD_FILTERS_STORAGE_KEY) || "{}");
+    const sortBy: SortBy = ["newest", "oldest", "alphabetical"].includes(saved.sortBy)
+      ? saved.sortBy
+      : "newest";
+    return {
+      textbookId: Number.isInteger(saved.textbookId) && saved.textbookId > 0
+        ? saved.textbookId
+        : null,
+      unitId: Number.isInteger(saved.unitId) && saved.unitId > 0
+        ? saved.unitId
+        : null,
+      sortBy,
+    };
+  } catch {
+    return { textbookId: null, unitId: null, sortBy: "newest" };
+  }
+}
+
 export default function Home({ searchMode = false }: { searchMode?: boolean }) {
   const { user, isLoading: authLoading } = useAuth({ redirectOnUnauthenticated: true });
   const utils = trpc.useUtils();
   const navigate = useNavigate();
+  const [initialFilters] = useState(loadWordFilters);
 
   // Filter state
   const [searchQuery, setSearchQuery] = useState("");
-  const [sortBy, setSortBy] = useState<SortBy>("newest");
-  const [selectedTextbookId, setSelectedTextbookId] = useState<number | null>(null);
-  const [selectedUnitId, setSelectedUnitId] = useState<number | null>(null);
+  const [sortBy, setSortBy] = useState<SortBy>(initialFilters.sortBy);
+  const [selectedTextbookId, setSelectedTextbookId] = useState<number | null>(
+    initialFilters.textbookId,
+  );
+  const [selectedUnitId, setSelectedUnitId] = useState<number | null>(
+    initialFilters.unitId,
+  );
 
   // Dialog state
   const [showWordForm, setShowWordForm] = useState(false);
@@ -47,6 +78,38 @@ export default function Home({ searchMode = false }: { searchMode?: boolean }) {
     selectedTextbookId ? { textbookId: selectedTextbookId } : undefined,
     { enabled: !!selectedTextbookId }
   );
+
+  useEffect(() => {
+    localStorage.setItem(
+      WORD_FILTERS_STORAGE_KEY,
+      JSON.stringify({
+        textbookId: selectedTextbookId,
+        unitId: selectedUnitId,
+        sortBy,
+      }),
+    );
+  }, [selectedTextbookId, selectedUnitId, sortBy]);
+
+  useEffect(() => {
+    if (
+      textbooks &&
+      selectedTextbookId &&
+      !textbooks.some((textbook) => textbook.id === selectedTextbookId)
+    ) {
+      setSelectedTextbookId(null);
+      setSelectedUnitId(null);
+    }
+  }, [textbooks, selectedTextbookId]);
+
+  useEffect(() => {
+    if (
+      units &&
+      selectedUnitId &&
+      !units.some((unit) => unit.id === selectedUnitId)
+    ) {
+      setSelectedUnitId(null);
+    }
+  }, [units, selectedUnitId]);
 
   // Preload audio for all visible words
   useEffect(() => {

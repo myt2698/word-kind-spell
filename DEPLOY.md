@@ -1,8 +1,8 @@
-# WordMind 全栈应用部署指南
+# 词音岛全栈应用部署指南
 
 ## 架构说明
 
-WordMind 是一个全栈应用，包含：
+词音岛是一个全栈应用，包含：
 - **前端**：React 19 + TypeScript + Vite（构建产物在 `dist/public/`）
 - **后端**：Node.js + Hono + tRPC（入口 `dist/boot.js`）
 - **数据库**：MySQL（通过 Drizzle ORM 连接）
@@ -26,7 +26,7 @@ Railway 支持 Docker 部署，且自带 MySQL 插件。
 2. **在 Railway 创建项目**
    - 访问 https://railway.app
    - 点击 "New Project" → "Deploy from GitHub repo"
-   - 选择你的 WordMind 仓库
+   - 选择你的词音岛仓库
    - Railway 会自动识别 `railway.toml` 和 `Dockerfile`
 
 3. **添加 MySQL 数据库**

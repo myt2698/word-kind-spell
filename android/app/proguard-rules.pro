@@ -1,1 +1,1 @@
-# WordMind currently relies on the default optimized Android rules.
+# 词音岛 currently relies on the default optimized Android rules.

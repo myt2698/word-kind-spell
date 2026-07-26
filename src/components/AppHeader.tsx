@@ -11,7 +11,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
-  BookOpen,
   LogOut,
   User,
   KeyRound,
@@ -186,10 +185,12 @@ export default function AppHeader({ searchComponent }: AppHeaderProps) {
           {/* Left section */}
           <div className="flex items-center gap-3 shrink-0">
             <div className="flex items-center gap-2">
-              <div className="w-8 h-8 bg-gradient-to-br from-indigo-500 to-blue-600 rounded-lg flex items-center justify-center shadow-md">
-                <BookOpen className="w-4 h-4 text-white" />
-              </div>
-              <span className="font-bold text-lg text-gray-900 hidden sm:block">WordMind</span>
+              <img
+                src="/icon-192.png"
+                alt="词音岛"
+                className="h-8 w-8 rounded-lg shadow-md"
+              />
+              <span className="font-bold text-lg text-gray-900 hidden sm:block">词音岛</span>
             </div>
           </div>
 

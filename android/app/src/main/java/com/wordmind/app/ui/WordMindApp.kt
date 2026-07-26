@@ -1,7 +1,10 @@
 package com.wordmind.app.ui
 
+import android.content.Context
+import android.content.res.Configuration
 import android.speech.tts.TextToSpeech
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -90,7 +93,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -103,6 +109,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.wordmind.app.R
 import com.wordmind.app.data.Tag
 import com.wordmind.app.data.Textbook
 import com.wordmind.app.data.User
@@ -118,6 +125,10 @@ private val Border = Color(0xFFE2E8F0)
 private val Muted = Color(0xFF64748B)
 private val Success = Color(0xFF059669)
 private val Danger = Color(0xFFDC2626)
+private const val WordFilterPreferences = "ciyindao_word_filters"
+private const val TextbookFilterKey = "textbook_id"
+private const val UnitFilterKey = "unit_id"
+private const val WordSortKey = "sort"
 
 private val WordMindColors = lightColorScheme(
     primary = Indigo,
@@ -144,6 +155,78 @@ private enum class WordSort(val label: String) {
 }
 
 @Composable
+private fun AppNavigationBar(
+    destinations: List<Destination>,
+    selectedIndex: Int,
+    onSelect: (Int) -> Unit,
+) {
+    val configuration = LocalConfiguration.current
+    val isTabletLandscape =
+        configuration.smallestScreenWidthDp >= 600 &&
+            configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
+
+    if (!isTabletLandscape) {
+        NavigationBar(containerColor = Color.White) {
+            destinations.forEachIndexed { index, item ->
+                NavigationBarItem(
+                    selected = selectedIndex == index,
+                    onClick = { onSelect(index) },
+                    icon = { Icon(item.icon, contentDescription = item.label) },
+                    label = { Text(item.label) },
+                )
+            }
+        }
+        return
+    }
+
+    NavigationBar(containerColor = Color.White, tonalElevation = 3.dp) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(72.dp)
+                .padding(vertical = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(
+                space = 18.dp,
+                alignment = Alignment.CenterHorizontally,
+            ),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            destinations.forEachIndexed { index, item ->
+                val selected = selectedIndex == index
+                Surface(
+                    onClick = { onSelect(index) },
+                    modifier = Modifier
+                        .width(84.dp)
+                        .height(56.dp),
+                    shape = RoundedCornerShape(18.dp),
+                    color = if (selected) Color(0xFFEDE9FE) else Color.Transparent,
+                ) {
+                    Column(
+                        modifier = Modifier.fillMaxSize(),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center,
+                    ) {
+                        Icon(
+                            item.icon,
+                            contentDescription = item.label,
+                            tint = if (selected) Indigo else Color(0xFF575260),
+                            modifier = Modifier.size(23.dp),
+                        )
+                        Spacer(Modifier.height(2.dp))
+                        Text(
+                            item.label,
+                            color = if (selected) Indigo else Color(0xFF575260),
+                            fontSize = 11.sp,
+                            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
 fun WordMindApp(api: WordMindApi) {
     MaterialTheme(colorScheme = WordMindColors) {
         Surface(modifier = Modifier.fillMaxSize(), color = PageBackground) {
@@ -165,6 +248,7 @@ fun WordMindApp(api: WordMindApi) {
                     tags = result.tags
                     message = null
                 } catch (error: Exception) {
+                    error.rethrowIfCancellation()
                     message = error.message ?: "数据加载失败"
                 } finally {
                     loadingCatalog = false
@@ -176,6 +260,7 @@ fun WordMindApp(api: WordMindApi) {
                     user = api.restoreUser()
                     if (user != null) refreshCatalog()
                 } catch (error: Exception) {
+                    error.rethrowIfCancellation()
                     message = error.message ?: "无法连接服务器"
                 } finally {
                     booting = false
@@ -199,6 +284,7 @@ fun WordMindApp(api: WordMindApi) {
                                 refreshCatalog()
                                 finished(null)
                             } catch (error: Exception) {
+                                error.rethrowIfCancellation()
                                 finished(error.message ?: if (register) "注册失败" else "登录失败")
                             }
                         }
@@ -228,6 +314,7 @@ fun WordMindApp(api: WordMindApi) {
                                     }
                                 }
                             } catch (error: Exception) {
+                                error.rethrowIfCancellation()
                                 message = error.message ?: "学习状态更新失败"
                             }
                         }
@@ -318,14 +405,17 @@ private fun LoginScreen(
                 color = Indigo,
                 shadowElevation = 12.dp,
             ) {
-                Box(contentAlignment = Alignment.Center) {
-                    Text("W", color = Color.White, fontSize = 36.sp, fontWeight = FontWeight.Black)
-                }
+                Image(
+                    painter = painterResource(R.mipmap.ic_launcher),
+                    contentDescription = "词音岛",
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = ContentScale.Crop,
+                )
             }
             Spacer(Modifier.height(24.dp))
-            Text("欢迎使用 WordMind", fontSize = 27.sp, fontWeight = FontWeight.Bold)
+            Text("欢迎来到词音岛", fontSize = 27.sp, fontWeight = FontWeight.Bold)
             Spacer(Modifier.height(8.dp))
-            Text("原生 Android 单词学习客户端", color = Muted, fontSize = 14.sp)
+            Text("课本同步 · 自然拼读 · 拼写练习", color = Muted, fontSize = 14.sp)
             Spacer(Modifier.height(34.dp))
 
             if (!error.isNullOrBlank()) {
@@ -431,16 +521,11 @@ private fun MainScreen(
     Scaffold(
         containerColor = PageBackground,
         bottomBar = {
-            NavigationBar(containerColor = Color.White) {
-                destinations.forEachIndexed { index, item ->
-                    NavigationBarItem(
-                        selected = destination == index,
-                        onClick = { destination = index },
-                        icon = { Icon(item.icon, contentDescription = item.label) },
-                        label = { Text(item.label) },
-                    )
-                }
-            }
+            AppNavigationBar(
+                destinations = destinations,
+                selectedIndex = destination,
+                onSelect = { destination = it },
+            )
         },
     ) { padding ->
         PullToRefreshBox(
@@ -539,6 +624,7 @@ private fun MainScreen(
                             deletingWord = null
                             onRefresh()
                         } catch (error: Exception) {
+                            error.rethrowIfCancellation()
                             onMessage(error.message ?: "删除单词失败")
                         } finally {
                             deleteBusy = false
@@ -563,11 +649,32 @@ private fun WordsScreen(
     onEditWord: (Word) -> Unit,
     onDeleteWord: (Word) -> Unit,
 ) {
+    val context = LocalContext.current
+    val filterPreferences = remember(context) {
+        context.getSharedPreferences(WordFilterPreferences, Context.MODE_PRIVATE)
+    }
     var query by rememberSaveable { mutableStateOf("") }
     var searchOpen by rememberSaveable { mutableStateOf(false) }
-    var textbookId by rememberSaveable { mutableStateOf<Int?>(null) }
-    var unitId by rememberSaveable { mutableStateOf<Int?>(null) }
-    var sort by rememberSaveable { mutableStateOf(WordSort.Newest) }
+    var textbookId by rememberSaveable {
+        mutableStateOf(
+            filterPreferences.getInt(TextbookFilterKey, -1).takeIf { it > 0 },
+        )
+    }
+    var unitId by rememberSaveable {
+        mutableStateOf(
+            filterPreferences.getInt(UnitFilterKey, -1).takeIf { it > 0 },
+        )
+    }
+    var sort by rememberSaveable {
+        mutableStateOf(
+            runCatching {
+                WordSort.valueOf(
+                    filterPreferences.getString(WordSortKey, null)
+                        ?: WordSort.Newest.name,
+                )
+            }.getOrDefault(WordSort.Newest),
+        )
+    }
     var detailTagId by rememberSaveable { mutableStateOf<Int?>(null) }
 
     val units = remember(textbooks, textbookId) {
@@ -579,10 +686,42 @@ private fun WordsScreen(
     val unitOptions = remember(units) {
         units.map { it.id to it.name }
     }
+    LaunchedEffect(textbookId, unitId, sort) {
+        filterPreferences.edit()
+            .putInt(TextbookFilterKey, textbookId ?: -1)
+            .putInt(UnitFilterKey, unitId ?: -1)
+            .putString(WordSortKey, sort.name)
+            .apply()
+    }
+    LaunchedEffect(textbooks, textbookId) {
+        if (
+            textbooks.isNotEmpty() &&
+            textbookId != null &&
+            textbooks.none { it.id == textbookId }
+        ) {
+            textbookId = null
+            unitId = null
+        }
+    }
+    LaunchedEffect(units, unitId) {
+        if (
+            textbooks.isNotEmpty() &&
+            textbookId != null &&
+            unitId != null &&
+            units.none { it.id == unitId }
+        ) {
+            unitId = null
+        }
+    }
     val filtered = remember(words, textbookId, unitId, sort) {
         val matches = words.filter { word ->
-            (textbookId == null || word.textbookId == textbookId) &&
-                (unitId == null || word.groupId == unitId)
+            val matchesTextbook = textbookId == null ||
+                word.textbookId == textbookId ||
+                word.groups.any { it.textbookId == textbookId }
+            val matchesUnit = unitId == null ||
+                word.groupId == unitId ||
+                word.groups.any { it.groupId == unitId }
+            matchesTextbook && matchesUnit
         }
         when (sort) {
             WordSort.Newest -> matches

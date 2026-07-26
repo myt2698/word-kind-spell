@@ -1,5 +1,5 @@
 #!/bin/bash
-# WordMind APK 打包脚本
+# 词音岛 APK 打包脚本
 # 使用方法：
 # 1. 确保已安装 Node.js 16+ 和 Java 17+
 # 2. chmod +x build-apk.sh
@@ -12,7 +12,7 @@ MANIFEST="${URL}/manifest.webmanifest"
 BUILD_DIR="./apk-output"
 
 echo "=========================================="
-echo "  WordMind APK Builder"
+echo "  词音岛 APK Builder"
 echo "  Source: ${URL}"
 echo "=========================================="
 

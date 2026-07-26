@@ -2,7 +2,7 @@ import type { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
   appId: 'com.wordmind.app',
-  appName: 'WordMind',
+  appName: '词音岛',
   webDir: 'dist/public',
   // 指向 Railway 公网地址，APK 才能访问后端 API
   server: {

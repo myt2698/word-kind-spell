@@ -1,5 +1,5 @@
 <?xml version='1.0' encoding='utf-8'?>
 <resources>
-    <string name="app_name">WordMind</string>
-    <string name="title_activity_main">WordMind</string>
+    <string name="app_name">词音岛</string>
+    <string name="title_activity_main">词音岛</string>
 </resources>

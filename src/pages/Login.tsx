@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { trpc } from "@/providers/trpc";
-import { BookOpen, User, Lock, Loader2, Eye, EyeOff } from "lucide-react";
+import { User, Lock, Loader2, Eye, EyeOff } from "lucide-react";
 
 type Mode = "login" | "register";
 
@@ -84,17 +84,19 @@ export default function Login() {
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-indigo-50 via-white to-blue-50 p-4">
       <Card className="w-full max-w-sm shadow-xl border-0">
         <CardHeader className="text-center space-y-4 pb-6">
-          <div className="mx-auto w-16 h-16 bg-gradient-to-br from-indigo-500 to-blue-600 rounded-2xl flex items-center justify-center shadow-lg">
-            <BookOpen className="w-8 h-8 text-white" />
-          </div>
+          <img
+            src="/icon-192.png"
+            alt="词音岛"
+            className="mx-auto h-16 w-16 rounded-2xl shadow-lg"
+          />
           <div>
             <CardTitle className="text-2xl font-bold text-gray-900">
-              {mode === "login" ? "欢迎使用 WordMind" : "注册新账号"}
+              {mode === "login" ? "欢迎来到词音岛" : "注册新账号"}
             </CardTitle>
             <CardDescription className="text-gray-500 mt-1">
               {mode === "login"
-                ? "登录后可跨设备同步单词数据"
-                : "注册后即可开始记录单词"}
+                ? "听音、拼读、拼写，把课本单词真正学会"
+                : "注册后即可同步课本和学习记录"}
             </CardDescription>
           </div>
         </CardHeader>
