@@ -768,28 +768,28 @@ function TodayStudyMode({ words, onBack }: { words: any[]; onBack: () => void })
         </div>
       </div>
 
-      <section className="rounded-3xl bg-gradient-to-br from-indigo-600 to-blue-600 text-white p-5 text-center shadow-lg mb-4">
-        <div className="flex items-center justify-center gap-2">
-          <h1 className="text-3xl font-bold tracking-tight">{currentWord.word}</h1>
+      <section className="rounded-3xl bg-gradient-to-br from-indigo-600 to-blue-600 text-white p-4 sm:p-5 text-center shadow-lg mb-4">
+        <div className="flex items-center justify-center gap-2.5 min-w-0 overflow-x-auto">
+          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight whitespace-nowrap">{currentWord.word}</h1>
+          {currentWord.phonetic && (
+            <span className="text-sm text-indigo-100 font-mono whitespace-nowrap">{currentWord.phonetic}</span>
+          )}
           <button
             onClick={() => speakWord(currentWord.word, currentWord.id)}
-            className="w-10 h-10 rounded-full bg-white/15 flex items-center justify-center hover:bg-white/25"
+            className="w-9 h-9 shrink-0 rounded-full bg-white/15 flex items-center justify-center hover:bg-white/25"
             aria-label={`朗读 ${currentWord.word}`}
           >
             <Volume2 className="w-5 h-5" />
           </button>
         </div>
-        {currentWord.phonetic && (
-          <p className="text-sm text-indigo-100 font-mono mt-1">{currentWord.phonetic}</p>
-        )}
-        <p className="text-base mt-3 leading-relaxed whitespace-pre-line">{currentWord.definition}</p>
+        <p className="text-sm sm:text-base mt-2 leading-relaxed whitespace-pre-line">{currentWord.definition}</p>
         {currentWord.example && (
-          <div className="mt-3 rounded-xl bg-white/10 p-3 text-left">
-            <div className="flex items-center justify-between mb-2">
+          <div className="mt-2.5 rounded-xl bg-white/10 px-3 py-2.5 text-left">
+            <div className="flex items-center justify-between mb-1">
               <span className="text-xs font-medium text-indigo-100">课本例句</span>
               <button
                 onClick={() => speakWord(currentWord.example)}
-                className="inline-flex items-center gap-1.5 text-xs text-white bg-white/15 rounded-lg px-2.5 py-1.5 hover:bg-white/25"
+                className="inline-flex items-center gap-1 text-xs text-white bg-white/15 rounded-lg px-2 py-1 hover:bg-white/25"
               >
                 <Volume2 className="w-3.5 h-3.5" />
                 朗读
@@ -803,48 +803,49 @@ function TodayStudyMode({ words, onBack }: { words: any[]; onBack: () => void })
           </div>
         )}
         {currentWord.tags?.length > 0 && (
-          <div className="mt-3">
-            <div className="flex flex-wrap justify-center gap-2">
-              {currentWord.tags.map((tag: any) => (
-                <button
-                  type="button"
-                  key={tag.id}
-                  title={tag.description || tag.name}
-                  onClick={() => setSelectedTagId(tag.id)}
-                  className="inline-flex items-center rounded-full bg-white/15 border border-white/20 px-3 py-1 text-xs font-medium text-white hover:bg-white/25 active:scale-95 transition-all"
-                >
-                  <Tag className="w-3 h-3 mr-1" />
-                  {tag.name}
-                </button>
-              ))}
+          <div className="mt-2.5 text-left">
+            <p className="text-[11px] font-medium text-indigo-100 mb-1.5">单词标签</p>
+            <div className="overflow-x-auto">
+              <div className="flex flex-nowrap justify-start gap-2 min-w-max">
+                {currentWord.tags.map((tag: any) => (
+                  <button
+                    type="button"
+                    key={tag.id}
+                    title={tag.description || tag.name}
+                    onClick={() => setSelectedTagId(tag.id)}
+                    className="inline-flex items-center rounded-full bg-white/25 border border-white/45 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-white/35 active:scale-95 transition-all"
+                  >
+                    <Tag className="w-3.5 h-3.5 mr-1.5" />
+                    {tag.name}
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
         )}
       </section>
 
-      <section className="rounded-2xl bg-white border border-gray-100 p-5 mb-4">
-        <h2 className="text-sm font-semibold text-gray-800 flex items-center gap-2 mb-1">
-          <Layers3 className="w-4 h-4 text-amber-500" />
-          自然拼读拆分
-        </h2>
-        <p className="text-xs text-gray-400 mb-4">先看音节，再把常见字母组合当作一个发音单位拼读。</p>
+      <section className="rounded-2xl bg-white border border-gray-100 p-4 mb-4">
+        <div className="flex items-center gap-2 mb-1">
+          <Layers3 className="w-4 h-4 text-amber-500 shrink-0" />
+          <h2 className="text-sm font-semibold text-gray-800">自然拼读拆分</h2>
+          <span className="hidden sm:inline text-xs text-gray-400">先看音节，再按字母块合并拼读</span>
+        </div>
 
-        {phonics.syllables?.length > 0 && (
-          <div className="mb-4">
-            <p className="text-[11px] text-gray-400 mb-2">音节</p>
-            <div className="flex flex-wrap gap-2">
+        <div className="overflow-x-auto py-2">
+          <div className="flex items-center gap-1.5 min-w-max">
+            {phonics.syllables?.length > 0 && (
+              <>
+                <span className="text-[10px] text-gray-400 mr-0.5">音节</span>
               {phonics.syllables.map((syllable: string, syllableIndex: number) => (
-                <span key={`${syllable}-${syllableIndex}`} className="px-3 py-1.5 rounded-lg bg-slate-100 text-slate-700 font-semibold">
+                <span key={`${syllable}-${syllableIndex}`} className="px-2.5 py-1 rounded-lg bg-slate-100 text-slate-700 text-sm font-semibold">
                   {syllable}
                 </span>
               ))}
-            </div>
-          </div>
-        )}
-
-        <div className="mb-4">
-          <p className="text-[11px] text-gray-400 mb-2">字母块</p>
-          <div className="flex flex-wrap items-center gap-1.5">
+                <span className="w-px h-7 bg-gray-200 mx-1" />
+              </>
+            )}
+            <span className="text-[10px] text-gray-400 mr-0.5">字母块</span>
             {phonics.blocks.map((block: any, blockIndex: number) => {
               const color = block.comboType === "vowel_combo"
                 ? "bg-amber-100 text-amber-700 border-amber-200"
@@ -856,7 +857,7 @@ function TodayStudyMode({ words, onBack }: { words: any[]; onBack: () => void })
                       ? "border-transparent text-gray-300"
                       : "bg-slate-50 text-slate-700 border-slate-200";
               return (
-                <span key={`${block.letters}-${blockIndex}`} className={`px-3 py-2 rounded-xl border text-lg font-bold ${color}`}>
+                <span key={`${block.letters}-${blockIndex}`} className={`px-2.5 py-1.5 rounded-lg border text-base font-bold ${color}`}>
                   {block.letters === " " ? "·" : block.letters}
                 </span>
               );
@@ -865,11 +866,11 @@ function TodayStudyMode({ words, onBack }: { words: any[]; onBack: () => void })
         </div>
 
         {phonics.patterns?.length > 0 ? (
-          <div className="space-y-2">
+          <div className="space-y-1.5 mt-1">
             {phonics.patterns.map((pattern: any, patternIndex: number) => (
-              <div key={`${pattern.type}-${pattern.text}-${patternIndex}`} className="rounded-xl bg-amber-50/70 border border-amber-100 p-3">
-                <p className="text-sm font-semibold text-amber-800">{pattern.text}</p>
-                <p className="text-xs text-amber-700/80 mt-1 leading-relaxed">{pattern.explanation}</p>
+              <div key={`${pattern.type}-${pattern.text}-${patternIndex}`} className="flex items-start gap-2 rounded-lg bg-amber-50/70 border border-amber-100 px-2.5 py-2">
+                <span className="text-sm font-semibold text-amber-800 shrink-0">{pattern.text}</span>
+                <p className="text-xs text-amber-700/80 leading-relaxed">{pattern.explanation}</p>
               </div>
             ))}
           </div>

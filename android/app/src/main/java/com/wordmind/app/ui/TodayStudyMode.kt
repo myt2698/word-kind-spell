@@ -1,10 +1,9 @@
 package com.wordmind.app.ui
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -60,7 +59,6 @@ import com.wordmind.app.data.StudyPhonicsPattern
 import com.wordmind.app.data.Tag
 import com.wordmind.app.data.Word
 
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun TodayStudyMode(
     words: List<PracticeWord>,
@@ -138,17 +136,32 @@ internal fun TodayStudyMode(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 17.dp, vertical = 17.dp),
+                    .padding(horizontal = 15.dp, vertical = 14.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
                     Text(
                         current.word,
                         color = Color.White,
-                        fontSize = 30.sp,
+                        fontSize = 27.sp,
                         fontWeight = FontWeight.Bold,
                     )
-                    Spacer(Modifier.width(8.dp))
+                    current.phonetic?.takeIf { it.isNotBlank() }?.let { phonetic ->
+                        Spacer(Modifier.width(9.dp))
+                        Text(
+                            phonetic,
+                            color = Color(0xFFE0E7FF),
+                            fontFamily = FontFamily.Monospace,
+                            fontSize = 13.sp,
+                        )
+                    }
+                    Spacer(Modifier.width(7.dp))
                     Surface(
                         onClick = { speak(current.word) },
                         color = Color.White.copy(alpha = 0.14f),
@@ -159,21 +172,12 @@ internal fun TodayStudyMode(
                             contentDescription = "朗读 ${current.word}",
                             tint = Color.White,
                             modifier = Modifier
-                                .padding(10.dp)
-                                .size(21.dp),
+                                .padding(8.dp)
+                                .size(20.dp),
                         )
                     }
                 }
-                current.phonetic?.takeIf { it.isNotBlank() }?.let { phonetic ->
-                    Spacer(Modifier.height(3.dp))
-                    Text(
-                        phonetic,
-                        color = Color(0xFFE0E7FF),
-                        fontFamily = FontFamily.Monospace,
-                        fontSize = 13.sp,
-                    )
-                }
-                Spacer(Modifier.height(9.dp))
+                Spacer(Modifier.height(7.dp))
                 Text(
                     current.definition,
                     color = Color.White,
@@ -181,13 +185,13 @@ internal fun TodayStudyMode(
                     fontWeight = FontWeight.Medium,
                 )
                 current.example?.takeIf { it.isNotBlank() }?.let { example ->
-                    Spacer(Modifier.height(11.dp))
+                    Spacer(Modifier.height(8.dp))
                     Surface(
                         modifier = Modifier.fillMaxWidth(),
                         color = Color.White.copy(alpha = 0.10f),
                         shape = RoundedCornerShape(11.dp),
                     ) {
-                        Column(Modifier.padding(horizontal = 11.dp, vertical = 9.dp)) {
+                        Column(Modifier.padding(horizontal = 10.dp, vertical = 8.dp)) {
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 verticalAlignment = Alignment.CenterVertically,
@@ -205,7 +209,7 @@ internal fun TodayStudyMode(
                                     shape = RoundedCornerShape(7.dp),
                                 ) {
                                     Row(
-                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp),
+                                        modifier = Modifier.padding(horizontal = 7.dp, vertical = 4.dp),
                                         verticalAlignment = Alignment.CenterVertically,
                                     ) {
                                         Icon(
@@ -219,7 +223,7 @@ internal fun TodayStudyMode(
                                     }
                                 }
                             }
-                            Spacer(Modifier.height(6.dp))
+                            Spacer(Modifier.height(4.dp))
                             Text(
                                 highlightStudyWord(
                                     example = example,
@@ -235,38 +239,45 @@ internal fun TodayStudyMode(
                     }
                 }
                 if (current.tags.isNotEmpty()) {
-                    Spacer(Modifier.height(10.dp))
-                    FlowRow(
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        "单词标签",
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(
-                            6.dp,
-                            alignment = Alignment.CenterHorizontally,
-                        ),
-                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                        color = Color(0xFFE0E7FF),
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                    Spacer(Modifier.height(5.dp))
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(7.dp),
                     ) {
                         current.tags.forEach { tag ->
                             Surface(
                                 onClick = { selectedTag = tag },
-                                color = Color.White.copy(alpha = 0.14f),
-                                border = BorderStroke(1.dp, Color.White.copy(alpha = 0.22f)),
+                                color = Color.White.copy(alpha = 0.24f),
+                                border = BorderStroke(1.dp, Color.White.copy(alpha = 0.46f)),
                                 shape = RoundedCornerShape(100.dp),
+                                shadowElevation = 1.dp,
                             ) {
                                 Row(
-                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+                                    modifier = Modifier.padding(horizontal = 11.dp, vertical = 6.dp),
                                     verticalAlignment = Alignment.CenterVertically,
                                 ) {
                                     Icon(
                                         Icons.Default.LocalOffer,
                                         contentDescription = null,
                                         tint = Color.White,
-                                        modifier = Modifier.size(12.dp),
+                                        modifier = Modifier.size(14.dp),
                                     )
-                                    Spacer(Modifier.width(4.dp))
+                                    Spacer(Modifier.width(5.dp))
                                     Text(
                                         tag.name,
                                         color = Color.White,
-                                        fontSize = 11.sp,
-                                        fontWeight = FontWeight.SemiBold,
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Bold,
                                     )
                                 }
                             }
@@ -289,48 +300,48 @@ internal fun TodayStudyMode(
             },
         ) {
             Text(
-                "先看音节，再把常见字母组合当作一个发音单位，由慢到快合并拼读。",
+                "先看音节，再按字母块由慢到快合并拼读。",
                 color = Color(0xFF94A3B8),
                 fontSize = 11.sp,
             )
-            Spacer(Modifier.height(13.dp))
+            Spacer(Modifier.height(9.dp))
 
-            if (phonics.syllables.isNotEmpty()) {
-                Text("音节", color = Color(0xFF94A3B8), fontSize = 10.sp)
-                Spacer(Modifier.height(6.dp))
-                FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(7.dp),
-                    verticalArrangement = Arrangement.spacedBy(7.dp),
-                ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                if (phonics.syllables.isNotEmpty()) {
+                    Text("音节", color = Color(0xFF94A3B8), fontSize = 10.sp)
                     phonics.syllables.forEach { syllable ->
                         Surface(
                             color = Color(0xFFF1F5F9),
-                            shape = RoundedCornerShape(9.dp),
+                            shape = RoundedCornerShape(8.dp),
                         ) {
                             Text(
                                 syllable,
-                                modifier = Modifier.padding(horizontal = 11.dp, vertical = 6.dp),
+                                modifier = Modifier.padding(horizontal = 9.dp, vertical = 5.dp),
                                 color = Color(0xFF334155),
-                                fontSize = 14.sp,
+                                fontSize = 13.sp,
                                 fontWeight = FontWeight.Bold,
                             )
                         }
                     }
+                    Surface(
+                        modifier = Modifier
+                            .width(1.dp)
+                            .height(27.dp),
+                        color = Color(0xFFE2E8F0),
+                    ) {}
                 }
-                Spacer(Modifier.height(13.dp))
-            }
-
-            Text("字母块", color = Color(0xFF94A3B8), fontSize = 10.sp)
-            Spacer(Modifier.height(6.dp))
-            FlowRow(
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                verticalArrangement = Arrangement.spacedBy(7.dp),
-            ) {
+                Text("字母块", color = Color(0xFF94A3B8), fontSize = 10.sp)
                 phonics.blocks.forEach { block ->
                     PhonicsBlock(block)
                 }
             }
-            Spacer(Modifier.height(13.dp))
+            Spacer(Modifier.height(10.dp))
 
             if (phonics.patterns.isEmpty()) {
                 Text(
@@ -344,18 +355,22 @@ internal fun TodayStudyMode(
                         Surface(
                             color = Color(0xFFFFFBEB),
                             border = BorderStroke(1.dp, Color(0xFFFDE68A)),
-                            shape = RoundedCornerShape(12.dp),
+                            shape = RoundedCornerShape(10.dp),
                         ) {
-                            Column(Modifier.padding(11.dp)) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+                                verticalAlignment = Alignment.Top,
+                            ) {
                                 Text(
                                     pattern.text,
                                     color = Color(0xFF92400E),
                                     fontSize = 13.sp,
                                     fontWeight = FontWeight.Bold,
                                 )
-                                Spacer(Modifier.height(3.dp))
+                                Spacer(Modifier.width(8.dp))
                                 Text(
                                     pattern.explanation,
+                                    modifier = Modifier.weight(1f),
                                     color = Color(0xFFB45309),
                                     fontSize = 11.sp,
                                 )
@@ -364,7 +379,7 @@ internal fun TodayStudyMode(
                     }
                 }
             }
-            Spacer(Modifier.height(10.dp))
+            Spacer(Modifier.height(8.dp))
             Text(
                 "自然拼读是常见规律；遇到不规则单词时，请以音标和实际发音为准。",
                 color = Color(0xFF94A3B8),
@@ -436,7 +451,7 @@ private fun StudySection(
         border = BorderStroke(1.dp, Color(0xFFE2E8F0)),
         shape = RoundedCornerShape(16.dp),
     ) {
-        Column(Modifier.padding(16.dp)) {
+        Column(Modifier.padding(14.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 icon?.invoke()
                 if (icon != null) Spacer(Modifier.width(7.dp))
@@ -447,7 +462,7 @@ private fun StudySection(
                     fontWeight = FontWeight.Bold,
                 )
             }
-            Spacer(Modifier.height(11.dp))
+            Spacer(Modifier.height(8.dp))
             content()
         }
     }
@@ -473,9 +488,9 @@ private fun PhonicsBlock(block: StudyPhonicsBlock) {
     ) {
         Text(
             if (block.letters == " ") "·" else block.letters,
-            modifier = Modifier.padding(horizontal = 11.dp, vertical = 7.dp),
+            modifier = Modifier.padding(horizontal = 9.dp, vertical = 5.dp),
             color = colors.second,
-            fontSize = 17.sp,
+            fontSize = 15.sp,
             fontWeight = FontWeight.Bold,
         )
     }
