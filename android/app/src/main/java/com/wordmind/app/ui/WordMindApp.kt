@@ -119,6 +119,12 @@ private enum class Destination(val label: String, val icon: ImageVector) {
     Profile("我的", Icons.Default.Person),
 }
 
+private enum class WordSort(val label: String) {
+    Newest("最新"),
+    Oldest("最早"),
+    Alphabetical("字母"),
+}
+
 @Composable
 fun WordMindApp(api: WordMindApi) {
     MaterialTheme(colorScheme = WordMindColors) {
@@ -470,6 +476,7 @@ private fun MainScreen(
                 Destination.Words -> WordsScreen(
                     words = words,
                     textbooks = textbooks,
+                    tags = tags,
                     speak = speak,
                     onLearningChange = onLearningChange,
                     canManage = user.role == "admin",
@@ -547,6 +554,7 @@ private fun MainScreen(
 private fun WordsScreen(
     words: List<Word>,
     textbooks: List<Textbook>,
+    tags: List<Tag>,
     speak: (String) -> Unit,
     onLearningChange: (Word, Boolean) -> Unit,
     canManage: Boolean,
@@ -556,16 +564,36 @@ private fun WordsScreen(
 ) {
     var query by rememberSaveable { mutableStateOf("") }
     var textbookId by rememberSaveable { mutableStateOf<Int?>(null) }
-    val filtered = remember(words, query, textbookId) {
+    var unitId by rememberSaveable { mutableStateOf<Int?>(null) }
+    var tagId by rememberSaveable { mutableStateOf<Int?>(null) }
+    var sort by rememberSaveable { mutableStateOf(WordSort.Newest) }
+
+    val units = remember(textbooks, textbookId) {
+        textbooks.firstOrNull { it.id == textbookId }?.groups.orEmpty()
+    }
+    val filtered = remember(words, query, textbookId, unitId, tagId, sort) {
         val needle = query.trim().lowercase()
-        words.filter { word ->
+        val matches = words.filter { word ->
             (textbookId == null || word.textbookId == textbookId) &&
+                (unitId == null || word.groupId == unitId) &&
+                (tagId == null || word.tags.any { it.id == tagId }) &&
                 (needle.isBlank() ||
                     word.word.lowercase().contains(needle) ||
                     word.definition.lowercase().contains(needle) ||
                     word.notes.orEmpty().lowercase().contains(needle))
         }
+        when (sort) {
+            WordSort.Newest -> matches
+            WordSort.Oldest -> matches.asReversed()
+            WordSort.Alphabetical -> matches.sortedWith(
+                compareBy(String.CASE_INSENSITIVE_ORDER) { it.word }
+            )
+        }
     }
+    val hasFilters = query.isNotBlank() ||
+        textbookId != null ||
+        unitId != null ||
+        tagId != null
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -584,22 +612,113 @@ private fun WordsScreen(
             )
         }
         item {
-            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                item {
-                    FilterChip(
-                        selected = textbookId == null,
-                        onClick = { textbookId = null },
-                        label = { Text("全部课本") },
-                    )
+            Column {
+                Text("课本", color = Muted, fontSize = 12.sp)
+                Spacer(Modifier.height(4.dp))
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    item {
+                        FilterChip(
+                            selected = textbookId == null,
+                            onClick = {
+                                textbookId = null
+                                unitId = null
+                            },
+                            label = { Text("全部课本") },
+                        )
+                    }
+                    items(textbooks, key = { it.id }) { textbook ->
+                        FilterChip(
+                            selected = textbookId == textbook.id,
+                            onClick = {
+                                textbookId = textbook.id
+                                unitId = null
+                            },
+                            label = { Text(textbook.name, maxLines = 1) },
+                        )
+                    }
                 }
-                items(textbooks, key = { it.id }) { textbook ->
-                    FilterChip(
-                        selected = textbookId == textbook.id,
+            }
+        }
+        if (textbookId != null) {
+            item {
+                Column {
+                    Text("单元", color = Muted, fontSize = 12.sp)
+                    Spacer(Modifier.height(4.dp))
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        item {
+                            FilterChip(
+                                selected = unitId == null,
+                                onClick = { unitId = null },
+                                label = { Text("全部单元") },
+                            )
+                        }
+                        items(units, key = { it.id }) { unit ->
+                            FilterChip(
+                                selected = unitId == unit.id,
+                                onClick = { unitId = unit.id },
+                                label = { Text(unit.name, maxLines = 1) },
+                            )
+                        }
+                    }
+                }
+            }
+        }
+        item {
+            Column {
+                Text("标签", color = Muted, fontSize = 12.sp)
+                Spacer(Modifier.height(4.dp))
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    item {
+                        FilterChip(
+                            selected = tagId == null,
+                            onClick = { tagId = null },
+                            label = { Text("全部标签") },
+                        )
+                    }
+                    items(tags, key = { it.id }) { tag ->
+                        FilterChip(
+                            selected = tagId == tag.id,
+                            onClick = { tagId = tag.id },
+                            label = { Text(tag.name, maxLines = 1) },
+                        )
+                    }
+                }
+            }
+        }
+        item {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text("排序", color = Muted, fontSize = 12.sp)
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    WordSort.entries.forEach { option ->
+                        FilterChip(
+                            selected = sort == option,
+                            onClick = { sort = option },
+                            label = { Text(option.label) },
+                        )
+                    }
+                }
+            }
+        }
+        if (hasFilters) {
+            item {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End,
+                ) {
+                    TextButton(
                         onClick = {
-                            textbookId = if (textbookId == textbook.id) null else textbook.id
+                            query = ""
+                            textbookId = null
+                            unitId = null
+                            tagId = null
                         },
-                        label = { Text(textbook.name, maxLines = 1) },
-                    )
+                    ) {
+                        Text("清除全部筛选", fontSize = 12.sp)
+                    }
                 }
             }
         }
