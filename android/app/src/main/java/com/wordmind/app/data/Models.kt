@@ -77,11 +77,33 @@ data class PracticeWord(
     val phonetic: String?,
     val definition: String,
     val example: String?,
+    val notes: String?,
     val level: Int,
     val streak: Int,
     val errorCount: Int,
     val totalAttempts: Int,
+    val totalCorrect: Int,
     val source: String,
+    val tags: List<Tag>,
+    val phonics: StudyPhonicsAnalysis,
+)
+
+data class StudyPhonicsAnalysis(
+    val syllables: List<String>,
+    val blocks: List<StudyPhonicsBlock>,
+    val patterns: List<StudyPhonicsPattern>,
+)
+
+data class StudyPhonicsBlock(
+    val letters: String,
+    val comboType: String?,
+    val isCombo: Boolean,
+)
+
+data class StudyPhonicsPattern(
+    val type: String,
+    val text: String,
+    val explanation: String,
 )
 
 data class SpellingStats(
@@ -199,6 +221,53 @@ internal fun JSONArray.toTags(): List<Tag> = buildList {
 internal fun JSONArray.toPracticeWords(): List<PracticeWord> = buildList {
     for (index in 0 until length()) {
         val item = getJSONObject(index)
+        val tagsJson = item.optJSONArray("tags") ?: JSONArray()
+        val wordTags = buildList {
+            for (tagIndex in 0 until tagsJson.length()) {
+                val tag = tagsJson.getJSONObject(tagIndex)
+                add(
+                    Tag(
+                        id = tag.getInt("id"),
+                        name = tag.optString("name"),
+                        description = tag.nullableString("description"),
+                        wordCount = tag.optInt("wordCount"),
+                    )
+                )
+            }
+        }
+        val phonicsJson = item.optJSONObject("phonics")
+        val syllablesJson = phonicsJson?.optJSONArray("syllables") ?: JSONArray()
+        val syllables = buildList {
+            for (syllableIndex in 0 until syllablesJson.length()) {
+                add(syllablesJson.optString(syllableIndex))
+            }
+        }
+        val blocksJson = phonicsJson?.optJSONArray("blocks") ?: JSONArray()
+        val blocks = buildList {
+            for (blockIndex in 0 until blocksJson.length()) {
+                val block = blocksJson.getJSONObject(blockIndex)
+                add(
+                    StudyPhonicsBlock(
+                        letters = block.optString("letters"),
+                        comboType = block.nullableString("comboType"),
+                        isCombo = block.optBoolean("isCombo"),
+                    )
+                )
+            }
+        }
+        val patternsJson = phonicsJson?.optJSONArray("patterns") ?: JSONArray()
+        val patterns = buildList {
+            for (patternIndex in 0 until patternsJson.length()) {
+                val pattern = patternsJson.getJSONObject(patternIndex)
+                add(
+                    StudyPhonicsPattern(
+                        type = pattern.optString("type"),
+                        text = pattern.optString("text"),
+                        explanation = pattern.optString("explanation"),
+                    )
+                )
+            }
+        }
         add(
             PracticeWord(
                 id = item.getInt("id"),
@@ -206,11 +275,19 @@ internal fun JSONArray.toPracticeWords(): List<PracticeWord> = buildList {
                 phonetic = item.nullableString("phonetic"),
                 definition = item.optString("definition"),
                 example = item.nullableString("example"),
+                notes = item.nullableString("notes"),
                 level = item.optInt("level", 1),
                 streak = item.optInt("streak"),
                 errorCount = item.optInt("errorCount"),
                 totalAttempts = item.optInt("totalAttempts"),
+                totalCorrect = item.optInt("totalCorrect"),
                 source = item.optString("source", "auto"),
+                tags = wordTags,
+                phonics = StudyPhonicsAnalysis(
+                    syllables = syllables,
+                    blocks = blocks,
+                    patterns = patterns,
+                ),
             )
         )
     }

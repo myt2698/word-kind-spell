@@ -21,9 +21,11 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.MenuBook
 import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.CheckBox
+import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Extension
 import androidx.compose.material.icons.filled.Headphones
 import androidx.compose.material.icons.filled.Keyboard
@@ -60,6 +62,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import com.wordmind.app.data.PracticeWord
 import com.wordmind.app.data.SpellingStats
+import com.wordmind.app.data.Word
 import com.wordmind.app.data.WordMindApi
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
@@ -74,6 +77,7 @@ internal val PracticePurple = Color(0xFF9333EA)
 
 internal enum class PracticeView {
     Home,
+    Study,
     Blocks,
     FillBlank,
     Flash,
@@ -90,6 +94,7 @@ private enum class StatDialogType {
 @Composable
 internal fun PracticeScreen(
     api: WordMindApi,
+    catalogWords: List<Word>,
     speak: (String) -> Unit,
     onMessage: (String) -> Unit,
     onLearningChanged: () -> Unit,
@@ -123,9 +128,10 @@ internal fun PracticeScreen(
                     selectedIds = todaySelections.await().toSet(),
                 )
             }
-            learningWords = result.learning
-            reviewWords = result.review
-            errorWords = result.errors
+            val catalogById = catalogWords.associateBy { it.id }
+            learningWords = result.learning.map { it.withCatalogDetails(catalogById[it.id]) }
+            reviewWords = result.review.map { it.withCatalogDetails(catalogById[it.id]) }
+            errorWords = result.errors.map { it.withCatalogDetails(catalogById[it.id]) }
             stats = result.stats
             val activeIds = result.learning.mapTo(mutableSetOf()) { it.id }
             selectedIds = result.selectedIds.intersect(activeIds)
@@ -139,6 +145,15 @@ internal fun PracticeScreen(
 
     LaunchedEffect(Unit) {
         loadPractice()
+    }
+
+    LaunchedEffect(catalogWords) {
+        if (catalogWords.isNotEmpty()) {
+            val catalogById = catalogWords.associateBy { it.id }
+            learningWords = learningWords.map { it.withCatalogDetails(catalogById[it.id]) }
+            reviewWords = reviewWords.map { it.withCatalogDetails(catalogById[it.id]) }
+            errorWords = errorWords.map { it.withCatalogDetails(catalogById[it.id]) }
+        }
     }
 
     val selectedWords = remember(learningWords, selectedIds) {
@@ -212,6 +227,12 @@ internal fun PracticeScreen(
             onSelectWords = { selectionOpen = true },
             onMode = ::openMode,
             onStat = { statDialog = it },
+        )
+        PracticeView.Study -> TodayStudyMode(
+            words = selectedWords,
+            catalogWords = catalogWords,
+            speak = speak,
+            onBack = ::returnHome,
         )
         PracticeView.Blocks -> BlocksPracticeMode(
             words = selectedWords,
@@ -289,6 +310,17 @@ private data class PracticeLoadResult(
     val stats: SpellingStats,
     val selectedIds: Set<Int>,
 )
+
+private fun PracticeWord.withCatalogDetails(catalogWord: Word?): PracticeWord {
+    if (catalogWord == null) return this
+    return copy(
+        phonetic = catalogWord.phonetic ?: phonetic,
+        definition = catalogWord.definition.ifBlank { definition },
+        example = catalogWord.example ?: example,
+        notes = catalogWord.notes ?: notes,
+        tags = catalogWord.tags.ifEmpty { tags },
+    )
+}
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -373,10 +405,17 @@ private fun PracticeHome(
         Spacer(Modifier.height(18.dp))
 
         Card(
+            onClick = {
+                if (selectedWords.isEmpty()) {
+                    onSelectWords()
+                } else {
+                    onMode(PracticeView.Study)
+                }
+            },
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(16.dp),
-            colors = CardDefaults.cardColors(containerColor = Color.White),
-            border = CardDefaults.outlinedCardBorder(),
+            colors = CardDefaults.cardColors(containerColor = Color(0xFFF8FAFF)),
+            border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFC7D2FE)),
         ) {
             Column(Modifier.padding(16.dp)) {
                 Row(
@@ -425,7 +464,7 @@ private fun PracticeHome(
                     }
                 } else {
                     Text(
-                        "已选 ${selectedWords.size} 个单词",
+                        "已选 ${selectedWords.size} 个单词 · 点击卡片按顺序学习",
                         color = PracticeMuted,
                         fontSize = 12.sp,
                     )
@@ -457,6 +496,46 @@ private fun PracticeHome(
                                 fontSize = 11.sp,
                             )
                         }
+                    }
+                    Spacer(Modifier.height(13.dp))
+                    HorizontalDivider(color = Color(0xFFE0E7FF))
+                    Spacer(Modifier.height(11.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Surface(
+                            color = Color(0xFFE0E7FF),
+                            shape = RoundedCornerShape(10.dp),
+                        ) {
+                            Icon(
+                                Icons.AutoMirrored.Filled.MenuBook,
+                                contentDescription = null,
+                                tint = PracticeIndigo,
+                                modifier = Modifier
+                                    .padding(8.dp)
+                                    .size(18.dp),
+                            )
+                        }
+                        Spacer(Modifier.width(10.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text(
+                                "开始顺序学习",
+                                color = PracticeIndigo,
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Bold,
+                            )
+                            Text(
+                                "自动朗读 · 单词详情 · 自然拼读",
+                                color = Color(0xFF818CF8),
+                                fontSize = 11.sp,
+                            )
+                        }
+                        Icon(
+                            Icons.Default.ChevronRight,
+                            contentDescription = null,
+                            tint = PracticeIndigo,
+                        )
                     }
                 }
             }

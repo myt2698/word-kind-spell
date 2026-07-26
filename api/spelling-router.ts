@@ -19,9 +19,12 @@ import {
   spellingSessions,
   todayWordSelections,
   wordGroupLinks,
+  wordTags,
+  tags,
 } from "@db/schema";
 import { eq, and, gte, lte, desc, count, inArray } from "drizzle-orm";
 import { getCatalogOwnerId } from "./catalog";
+import { analyzeWordForStudy } from "../src/utils/phonics";
 
 // Review intervals in minutes for each level
 const REVIEW_INTERVALS: Record<number, number[]> = {
@@ -204,6 +207,30 @@ export const spellingRouter = createRouter({
       .orderBy(desc(words.createdAt));
 
     const spMap = new Map(spellingRecords.map((r) => [r.wordId, r]));
+    const tagRows = await db
+      .select({
+        wordId: wordTags.wordId,
+        id: tags.id,
+        name: tags.name,
+        description: tags.description,
+      })
+      .from(wordTags)
+      .innerJoin(tags, eq(wordTags.tagId, tags.id))
+      .where(inArray(wordTags.wordId, wordIds));
+    const tagsByWord = new Map<number, Array<{
+      id: number;
+      name: string;
+      description: string | null;
+    }>>();
+    for (const tag of tagRows) {
+      const current = tagsByWord.get(tag.wordId) ?? [];
+      current.push({
+        id: tag.id,
+        name: tag.name,
+        description: tag.description,
+      });
+      tagsByWord.set(tag.wordId, current);
+    }
 
     return activeWords.map((w) => {
       const sp = spMap.get(w.id);
@@ -213,11 +240,17 @@ export const spellingRouter = createRouter({
         phonetic: w.phonetic,
         definition: w.definition,
         example: w.example,
+        notes: w.notes,
         groupId: w.groupId,
         level: (sp?.level ?? 1) as 1 | 2 | 3,
         nextReviewAt: sp?.nextReviewAt || new Date(),
         streak: sp?.streak ?? 0,
+        errorCount: sp?.errorCount ?? 0,
+        totalAttempts: sp?.totalAttempts ?? 0,
+        totalCorrect: sp?.totalCorrect ?? 0,
         source: sp?.source || "auto",
+        tags: tagsByWord.get(w.id) ?? [],
+        phonics: analyzeWordForStudy(w.word),
       };
     });
   }),

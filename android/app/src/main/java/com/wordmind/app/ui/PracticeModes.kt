@@ -80,10 +80,10 @@ private data class LetterToken(
     val letter: Char,
 )
 
-private fun practiceSpeechRepeatDelay(word: String): Long =
+internal fun practiceSpeechRepeatDelay(word: String): Long =
     (1_100L + word.trim().length * 70L).coerceAtMost(2_200L)
 
-private suspend fun autoSpeakPracticeWordTwice(
+internal suspend fun autoSpeakPracticeWordTwice(
     word: String,
     speak: (String) -> Unit,
 ) {

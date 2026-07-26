@@ -3,6 +3,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { trpc } from "@/providers/trpc";
 import AppHeader from "@/components/AppHeader";
 import MobileNav from "@/components/MobileNav";
+import TagDetailDialog from "@/components/TagDetailDialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -35,11 +36,17 @@ import {
   Delete,
   CalendarCheck,
   ListChecks,
+  BookOpen,
+  ChevronLeft,
+  ChevronRight,
+  Tag,
+  Layers3,
 } from "lucide-react";
 import {
   generateLetterBlocks,
   generateFillBlank,
   getPhonicsColor,
+  analyzeWordForStudy,
 } from "@/utils/phonics";
 import { useSearchParams } from "react-router";
 
@@ -185,7 +192,7 @@ function TodayWordsProvider({ children, allWords }: { children: React.ReactNode;
 // ============================================================
 // Types
 // ============================================================
-type SpellView = "home" | "blocks" | "fillblank" | "flash" | "dictation";
+type SpellView = "home" | "study" | "blocks" | "fillblank" | "flash" | "dictation";
 
 // ============================================================
 // Main Component
@@ -217,7 +224,8 @@ export default function SpellPage() {
       <AppHeader />
       <TodayWordsProvider allWords={allWords}>
         {view === "home" && <SpellHome onStart={(v) => setView(v)} />}
-        {view !== "home" && view !== "dictation" && <PracticeModeWrapper mode={view} onBack={() => setView("home")} />}
+        {view === "study" && <TodayStudyWrapper onBack={() => setView("home")} />}
+        {view !== "home" && view !== "study" && view !== "dictation" && <PracticeModeWrapper mode={view} onBack={() => setView("home")} />}
         {view === "dictation" && <DictationWrapper onBack={() => setView("home")} />}
       </TodayWordsProvider>
       <MobileNav activeTab="spell" />
@@ -434,14 +442,36 @@ function SpellHome({ onStart }: { onStart: (mode: SpellView) => void }) {
       />
 
       {/* Today's Practice Section */}
-      <div className="bg-white rounded-xl border border-gray-100 p-5 mb-6">
+      <div
+        role="button"
+        tabIndex={0}
+        aria-label={selectedIds.length > 0 ? "开始今日单词顺序学习" : "选择今日练习单词"}
+        onClick={() => selectedIds.length > 0 ? onStart("study") : setSelectDialogOpen(true)}
+        onKeyDown={(event) => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            selectedIds.length > 0 ? onStart("study") : setSelectDialogOpen(true);
+          }
+        }}
+        className="group bg-gradient-to-br from-white to-indigo-50/70 rounded-2xl border border-indigo-100 p-5 mb-6 cursor-pointer shadow-sm hover:shadow-md hover:border-indigo-300 transition-all active:scale-[0.995] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400"
+      >
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-2">
-            <CalendarCheck className="w-5 h-5 text-indigo-500" />
-            <h2 className="text-sm font-semibold text-gray-900">今日练习</h2>
+            <div className="w-9 h-9 rounded-xl bg-indigo-100 flex items-center justify-center">
+              <CalendarCheck className="w-5 h-5 text-indigo-600" />
+            </div>
+            <div>
+              <h2 className="text-sm font-semibold text-gray-900">今日练习</h2>
+              <p className="text-[11px] text-indigo-500">
+                {selectedIds.length > 0 ? "点击卡片，按顺序学习每个单词" : "先选择今天要学习的单词"}
+              </p>
+            </div>
           </div>
           <button
-            onClick={() => setSelectDialogOpen(true)}
+            onClick={(event) => {
+              event.stopPropagation();
+              setSelectDialogOpen(true);
+            }}
             className="text-xs text-indigo-500 hover:text-indigo-600 font-medium px-3 py-1.5 rounded-lg hover:bg-indigo-50 transition-all"
           >
             {selectedIds.length > 0 ? "重新选词" : "去选词"}
@@ -480,9 +510,17 @@ function SpellHome({ onStart }: { onStart: (mode: SpellView) => void }) {
             >
               <ListChecks className="w-3.5 h-3.5 mr-1" />
               选择单词
-            </Button>
-          </div>
-        )}
+              </Button>
+            </div>
+          )}
+          {selectedIds.length > 0 && (
+            <div className="mt-4 pt-3 border-t border-indigo-100 flex items-center text-indigo-600">
+              <BookOpen className="w-4 h-4 mr-2" />
+              <span className="text-sm font-semibold">开始顺序学习</span>
+              <span className="ml-2 text-xs text-indigo-400">自动朗读 · 详情 · 自然拼读</span>
+              <ChevronRight className="w-5 h-5 ml-auto transition-transform group-hover:translate-x-1" />
+            </div>
+          )}
       </div>
 
       {/* Mode Selection */}
@@ -657,6 +695,265 @@ function WordSelectionDialog({
         </div>
       </DialogContent>
     </Dialog>
+  );
+}
+
+// ============================================================
+// Today's Sequential Study
+// ============================================================
+function TodayStudyWrapper({ onBack }: { onBack: () => void }) {
+  const { todayWords, selectedIds } = useTodayWords();
+
+  if (selectedIds.length === 0) {
+    return (
+      <main className="max-w-lg mx-auto px-4 py-6 pb-24 min-h-screen flex flex-col items-center justify-center">
+        <BookOpen className="w-12 h-12 text-gray-300 mb-4" />
+        <p className="text-gray-500 mb-4">请先选择今日练习单词</p>
+        <Button onClick={onBack}>
+          <ArrowLeft className="w-4 h-4 mr-1" />
+          返回选词
+        </Button>
+      </main>
+    );
+  }
+
+  if (todayWords.length === 0) {
+    return (
+      <main className="min-h-screen flex items-center justify-center">
+        <Loader2 className="w-8 h-8 animate-spin text-indigo-500" />
+      </main>
+    );
+  }
+
+  return <TodayStudyMode words={todayWords} onBack={onBack} />;
+}
+
+function TodayStudyMode({ words, onBack }: { words: any[]; onBack: () => void }) {
+  const [index, setIndex] = useState(0);
+  const [selectedTagId, setSelectedTagId] = useState<number | null>(null);
+  const currentWord = words[index];
+  useAutoSpeakTwice(currentWord);
+
+  const phonics = currentWord.phonics ?? analyzeWordForStudy(currentWord.word);
+  const attempts = currentWord.totalAttempts ?? 0;
+  const correct = currentWord.totalCorrect ?? 0;
+  const accuracy = attempts > 0 ? Math.round((correct / attempts) * 100) : 0;
+  const levelLabel = currentWord.level === 3
+    ? "熟练"
+    : currentWord.level === 2
+      ? "巩固中"
+      : "新学";
+
+  const goNext = () => {
+    if (index < words.length - 1) {
+      setIndex((current) => current + 1);
+    } else {
+      onBack();
+    }
+  };
+
+  return (
+    <main className="max-w-2xl mx-auto px-4 py-5 pb-28">
+      <div className="flex items-center gap-3 mb-4">
+        <button
+          onClick={onBack}
+          className="h-10 w-10 rounded-xl bg-white border border-gray-200 flex items-center justify-center text-gray-600"
+          aria-label="返回拼写页"
+        >
+          <ArrowLeft className="w-5 h-5" />
+        </button>
+        <div className="flex-1">
+          <div className="flex items-center justify-between text-xs text-gray-500 mb-1.5">
+            <span>今日顺序学习</span>
+            <span>{index + 1} / {words.length}</span>
+          </div>
+          <div className="h-2 bg-indigo-100 rounded-full overflow-hidden">
+            <div
+              className="h-full bg-gradient-to-r from-indigo-500 to-blue-500 rounded-full transition-all"
+              style={{ width: `${((index + 1) / words.length) * 100}%` }}
+            />
+          </div>
+        </div>
+      </div>
+
+      <section className="rounded-3xl bg-gradient-to-br from-indigo-600 to-blue-600 text-white p-6 text-center shadow-lg mb-4">
+        <p className="text-xs text-indigo-100 mb-2">进入单词时自动朗读两遍</p>
+        <div className="flex items-center justify-center gap-2">
+          <h1 className="text-4xl font-bold tracking-tight">{currentWord.word}</h1>
+          <button
+            onClick={() => speakWord(currentWord.word, currentWord.id)}
+            className="w-10 h-10 rounded-full bg-white/15 flex items-center justify-center hover:bg-white/25"
+            aria-label={`朗读 ${currentWord.word}`}
+          >
+            <Volume2 className="w-5 h-5" />
+          </button>
+        </div>
+        {currentWord.phonetic && (
+          <p className="text-indigo-100 font-mono mt-2">{currentWord.phonetic}</p>
+        )}
+        <p className="text-lg mt-4 leading-relaxed whitespace-pre-line">{currentWord.definition}</p>
+      </section>
+
+      <section className="grid grid-cols-4 gap-2 mb-4">
+        {[
+          ["阶段", levelLabel],
+          ["连续正确", `${currentWord.streak ?? 0} 次`],
+          ["练习次数", `${attempts} 次`],
+          ["正确率", attempts > 0 ? `${accuracy}%` : "暂无"],
+        ].map(([label, value]) => (
+          <div key={label} className="rounded-xl bg-white border border-gray-100 p-3 text-center">
+            <p className="text-sm font-bold text-gray-800">{value}</p>
+            <p className="text-[10px] text-gray-400 mt-1">{label}</p>
+          </div>
+        ))}
+      </section>
+
+      <section className="rounded-2xl bg-white border border-gray-100 p-5 mb-4">
+        <h2 className="text-sm font-semibold text-gray-800 flex items-center gap-2 mb-3">
+          <Tag className="w-4 h-4 text-indigo-500" />
+          单词标签
+        </h2>
+        {currentWord.tags?.length > 0 ? (
+          <div className="flex flex-wrap gap-2">
+            {currentWord.tags.map((tag: any) => (
+              <button
+                type="button"
+                key={tag.id}
+                title={tag.description || tag.name}
+                onClick={() => setSelectedTagId(tag.id)}
+                className="inline-flex items-center rounded-full bg-indigo-50 border border-indigo-100 px-3 py-1.5 text-sm font-medium text-indigo-700 hover:bg-indigo-100 hover:border-indigo-300 active:scale-95 transition-all cursor-pointer"
+              >
+                {tag.name}
+              </button>
+            ))}
+          </div>
+        ) : (
+          <p className="text-xs text-gray-400">这个单词暂时没有标签</p>
+        )}
+      </section>
+
+      <section className="rounded-2xl bg-white border border-gray-100 p-5 mb-4">
+        <h2 className="text-sm font-semibold text-gray-800 flex items-center gap-2 mb-1">
+          <Layers3 className="w-4 h-4 text-amber-500" />
+          自然拼读拆分
+        </h2>
+        <p className="text-xs text-gray-400 mb-4">先看音节，再把常见字母组合当作一个发音单位拼读。</p>
+
+        {phonics.syllables?.length > 0 && (
+          <div className="mb-4">
+            <p className="text-[11px] text-gray-400 mb-2">音节</p>
+            <div className="flex flex-wrap gap-2">
+              {phonics.syllables.map((syllable: string, syllableIndex: number) => (
+                <span key={`${syllable}-${syllableIndex}`} className="px-3 py-1.5 rounded-lg bg-slate-100 text-slate-700 font-semibold">
+                  {syllable}
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
+
+        <div className="mb-4">
+          <p className="text-[11px] text-gray-400 mb-2">字母块</p>
+          <div className="flex flex-wrap items-center gap-1.5">
+            {phonics.blocks.map((block: any, blockIndex: number) => {
+              const color = block.comboType === "vowel_combo"
+                ? "bg-amber-100 text-amber-700 border-amber-200"
+                : block.comboType === "consonant_blend"
+                  ? "bg-indigo-100 text-indigo-700 border-indigo-200"
+                  : block.comboType === "magic_e"
+                    ? "bg-pink-100 text-pink-700 border-pink-200"
+                    : block.comboType === "separator"
+                      ? "border-transparent text-gray-300"
+                      : "bg-slate-50 text-slate-700 border-slate-200";
+              return (
+                <span key={`${block.letters}-${blockIndex}`} className={`px-3 py-2 rounded-xl border text-lg font-bold ${color}`}>
+                  {block.letters === " " ? "·" : block.letters}
+                </span>
+              );
+            })}
+          </div>
+        </div>
+
+        {phonics.patterns?.length > 0 ? (
+          <div className="space-y-2">
+            {phonics.patterns.map((pattern: any, patternIndex: number) => (
+              <div key={`${pattern.type}-${pattern.text}-${patternIndex}`} className="rounded-xl bg-amber-50/70 border border-amber-100 p-3">
+                <p className="text-sm font-semibold text-amber-800">{pattern.text}</p>
+                <p className="text-xs text-amber-700/80 mt-1 leading-relaxed">{pattern.explanation}</p>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="text-xs text-gray-500 leading-relaxed">
+            这个词没有检测到固定字母组合，可以按上面的音节和单字母顺序，由慢到快合并拼读。
+          </p>
+        )}
+        <p className="text-[10px] text-gray-400 mt-3">
+          提示：自然拼读是常见规律，遇到不规则单词时请以音标和真人发音为准。
+        </p>
+      </section>
+
+      {currentWord.example && (
+        <section className="rounded-2xl bg-emerald-50 border border-emerald-100 p-5 mb-4">
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-sm font-semibold text-emerald-800">课本例句</h2>
+            <button
+              onClick={() => speakWord(currentWord.example)}
+              className="inline-flex items-center gap-1.5 text-xs text-emerald-700 bg-white/80 rounded-lg px-3 py-2"
+            >
+              <Volume2 className="w-4 h-4" />
+              朗读例句
+            </button>
+          </div>
+          <HighlightedStudyExample example={currentWord.example} word={currentWord.word} />
+        </section>
+      )}
+
+      {currentWord.notes && (
+        <section className="rounded-2xl bg-white border border-gray-100 p-5 mb-4">
+          <h2 className="text-sm font-semibold text-gray-800 mb-2">备注</h2>
+          <p className="text-sm text-gray-600 whitespace-pre-line leading-relaxed">{currentWord.notes}</p>
+        </section>
+      )}
+
+      <div className="grid grid-cols-2 gap-3">
+        <Button
+          variant="outline"
+          className="h-12"
+          disabled={index === 0}
+          onClick={() => setIndex((current) => Math.max(0, current - 1))}
+        >
+          <ChevronLeft className="w-4 h-4 mr-1" />
+          上一个
+        </Button>
+        <Button className="h-12 bg-gradient-to-r from-indigo-500 to-blue-600" onClick={goNext}>
+          {index < words.length - 1 ? "下一个" : "完成学习"}
+          {index < words.length - 1 && <ChevronRight className="w-4 h-4 ml-1" />}
+        </Button>
+      </div>
+
+      <TagDetailDialog
+        tagId={selectedTagId}
+        open={selectedTagId !== null}
+        onClose={() => setSelectedTagId(null)}
+      />
+    </main>
+  );
+}
+
+function HighlightedStudyExample({ example, word }: { example: string; word: string }) {
+  const escaped = word.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const pieces = example.split(new RegExp(`(${escaped})`, "gi"));
+  return (
+    <p className="text-base text-emerald-950 leading-relaxed whitespace-pre-line">
+      {pieces.map((piece, index) =>
+        piece.toLowerCase() === word.toLowerCase() ? (
+          <span key={index} className="font-bold text-emerald-600">{piece}</span>
+        ) : (
+          <span key={index}>{piece}</span>
+        ),
+      )}
+    </p>
   );
 }
 

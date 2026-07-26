@@ -442,6 +442,83 @@ export function getPhonicsColor(type: PhonicsTag["type"]): string {
   }
 }
 
+export interface StudyPhonicsAnalysis {
+  syllables: string[];
+  blocks: Array<{
+    letters: string;
+    comboType?: string;
+    isCombo: boolean;
+  }>;
+  patterns: Array<{
+    type: Exclude<PhonicsTag["type"], "syllable">;
+    text: string;
+    explanation: string;
+  }>;
+}
+
+function explainStudyPattern(
+  type: Exclude<PhonicsTag["type"], "syllable">,
+  text: string,
+): string {
+  switch (type) {
+    case "vowel_combo":
+      return `"${text}" 是元音组合，通常作为一个发音单位整体认读，拼读时不要拆成两个独立元音。`;
+    case "consonant_blend":
+      return `"${text}" 是辅音组合或辅音连缀，拼读时要让相邻辅音自然衔接。`;
+    case "magic_e":
+      return `"${text}" 符合“魔法 e”规律：词尾 e 通常不发音，并让前面的元音倾向读字母本音。`;
+    case "r_controlled":
+      return `"${text}" 是 R 控元音，元音受到 r 的影响，需要作为一个整体认读。`;
+  }
+}
+
+/**
+ * Build a compact, reader-facing phonics analysis for the sequential study
+ * experience. Phrases and hyphenated words are analysed one alphabetic segment
+ * at a time so punctuation never becomes a phonics block.
+ */
+export function analyzeWordForStudy(word: string): StudyPhonicsAnalysis {
+  const segments = word.match(/[a-z]+|[^a-z]+/gi) ?? [];
+  const syllables: string[] = [];
+  const blocks: StudyPhonicsAnalysis["blocks"] = [];
+  const patterns: StudyPhonicsAnalysis["patterns"] = [];
+  const seenPatterns = new Set<string>();
+
+  for (const segment of segments) {
+    if (!/^[a-z]+$/i.test(segment)) {
+      if (segment.trim()) {
+        blocks.push({ letters: segment, isCombo: false, comboType: "separator" });
+      } else {
+        blocks.push({ letters: " ", isCombo: false, comboType: "separator" });
+      }
+      continue;
+    }
+
+    syllables.push(...splitSyllables(segment));
+    blocks.push(
+      ...generateLetterBlocks(segment).map((block) => ({
+        letters: block.letters,
+        isCombo: block.isCombo,
+        comboType: block.comboType,
+      })),
+    );
+
+    for (const tag of detectPhonicsTags(segment)) {
+      if (tag.type === "syllable") continue;
+      const key = `${tag.type}:${tag.text}`;
+      if (seenPatterns.has(key)) continue;
+      seenPatterns.add(key);
+      patterns.push({
+        type: tag.type,
+        text: tag.text,
+        explanation: explainStudyPattern(tag.type, tag.text),
+      });
+    }
+  }
+
+  return { syllables, blocks, patterns };
+}
+
 /**
  * Generate blocks for "积木拼拼乐" mode
  */

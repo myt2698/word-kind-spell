@@ -564,6 +564,7 @@ private fun MainScreen(
                     )
                     Destination.Practice -> PracticeScreen(
                         api = api,
+                        catalogWords = words,
                         speak = speak,
                         onMessage = onMessage,
                         onLearningChanged = onRefresh,
