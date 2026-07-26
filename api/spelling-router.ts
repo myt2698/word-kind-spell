@@ -8,10 +8,12 @@
  */
 
 import { z } from "zod";
+import { TRPCError } from "@trpc/server";
 import { createRouter, authedQuery } from "./middleware";
 import { getDb } from "./queries/connection";
 import { words, wordSpellings, spellingErrors, spellingSessions, todayWordSelections } from "@db/schema";
 import { eq, and, gte, lte, desc, count, inArray } from "drizzle-orm";
+import { getCatalogOwnerId } from "./catalog";
 
 // Review intervals in minutes for each level
 const REVIEW_INTERVALS: Record<number, number[]> = {
@@ -34,12 +36,15 @@ export const spellingRouter = createRouter({
     .input(z.object({ wordId: z.number() }))
     .mutation(async ({ ctx, input }) => {
       const db = getDb();
-
-      // 1. Mark word as active
-      await db
-        .update(words)
-        .set({ learningStatus: "active" })
-        .where(and(eq(words.id, input.wordId), eq(words.userId, ctx.user.id)));
+      const catalogOwnerId = await getCatalogOwnerId();
+      const catalogWord = await db
+        .select({ id: words.id })
+        .from(words)
+        .where(and(eq(words.id, input.wordId), eq(words.userId, catalogOwnerId)))
+        .limit(1);
+      if (!catalogWord[0]) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "单词不存在" });
+      }
 
       // 2. Create or update wordSpellings record with source=manual
       const existing = await db
@@ -62,6 +67,7 @@ export const spellingRouter = createRouter({
             level: 1,
             nextReviewAt: new Date(), // Start immediately
             streak: 0,
+            learningStatus: "active",
           })
           .where(eq(wordSpellings.id, existing[0].id));
       } else {
@@ -75,6 +81,7 @@ export const spellingRouter = createRouter({
           totalAttempts: 0,
           totalCorrect: 0,
           source: "manual",
+          learningStatus: "active",
         });
       }
 
@@ -87,16 +94,10 @@ export const spellingRouter = createRouter({
     .mutation(async ({ ctx, input }) => {
       const db = getDb();
 
-      // Mark word as idle
-      await db
-        .update(words)
-        .set({ learningStatus: "idle" })
-        .where(and(eq(words.id, input.wordId), eq(words.userId, ctx.user.id)));
-
       // Change source back to auto
       await db
         .update(wordSpellings)
-        .set({ source: "auto" })
+        .set({ source: "auto", learningStatus: "idle" })
         .where(
           and(
             eq(wordSpellings.wordId, input.wordId),
@@ -113,16 +114,11 @@ export const spellingRouter = createRouter({
     .mutation(async ({ ctx, input }) => {
       const db = getDb();
 
-      await db
-        .update(words)
-        .set({ learningStatus: "paused" })
-        .where(and(eq(words.id, input.wordId), eq(words.userId, ctx.user.id)));
-
       // Push next review to tomorrow
       const tomorrow = new Date(Date.now() + 24 * 60 * 60 * 1000);
       await db
         .update(wordSpellings)
-        .set({ nextReviewAt: tomorrow })
+        .set({ nextReviewAt: tomorrow, learningStatus: "paused" })
         .where(
           and(
             eq(wordSpellings.wordId, input.wordId),
@@ -138,15 +134,19 @@ export const spellingRouter = createRouter({
     .input(z.object({ wordId: z.number() }))
     .query(async ({ ctx, input }) => {
       const db = getDb();
+      const catalogOwnerId = await getCatalogOwnerId();
 
       const wordRows = await db
-        .select({ learningStatus: words.learningStatus })
+        .select({ id: words.id })
         .from(words)
-        .where(and(eq(words.id, input.wordId), eq(words.userId, ctx.user.id)))
+        .where(and(eq(words.id, input.wordId), eq(words.userId, catalogOwnerId)))
         .limit(1);
 
       const spellingRows = await db
-        .select({ source: wordSpellings.source })
+        .select({
+          source: wordSpellings.source,
+          learningStatus: wordSpellings.learningStatus,
+        })
         .from(wordSpellings)
         .where(
           and(
@@ -157,8 +157,12 @@ export const spellingRouter = createRouter({
         .limit(1);
 
       return {
-        learningStatus: wordRows[0]?.learningStatus || "idle",
-        isInQueue: spellingRows.length > 0,
+        learningStatus: wordRows[0]
+          ? spellingRows[0]?.learningStatus || "idle"
+          : "idle",
+        isInQueue: Boolean(
+          spellingRows[0] && spellingRows[0].learningStatus !== "idle",
+        ),
         source: spellingRows[0]?.source || null,
       };
     }),
@@ -166,30 +170,30 @@ export const spellingRouter = createRouter({
   // Get words currently in learning (active status)
   getLearningQueue: authedQuery.query(async ({ ctx }) => {
     const db = getDb();
-
-    const activeWords = await db
-      .select()
-      .from(words)
-      .where(
-        and(
-          eq(words.userId, ctx.user.id),
-          eq(words.learningStatus, "active")
-        )
-      )
-      .orderBy(desc(words.createdAt));
-
-    const wordIds = activeWords.map((w) => w.id);
-    if (wordIds.length === 0) return [];
-
+    const catalogOwnerId = await getCatalogOwnerId();
     const spellingRecords = await db
       .select()
       .from(wordSpellings)
       .where(
         and(
           eq(wordSpellings.userId, ctx.user.id),
-          inArray(wordSpellings.wordId, wordIds)
+          eq(wordSpellings.learningStatus, "active")
         )
       );
+
+    const wordIds = spellingRecords.map((record) => record.wordId);
+    if (wordIds.length === 0) return [];
+
+    const activeWords = await db
+      .select()
+      .from(words)
+      .where(
+        and(
+          eq(words.userId, catalogOwnerId),
+          inArray(words.id, wordIds)
+        )
+      )
+      .orderBy(desc(words.createdAt));
 
     const spMap = new Map(spellingRecords.map((r) => [r.wordId, r]));
 
@@ -215,21 +219,8 @@ export const spellingRouter = createRouter({
   // Get review queue - only words with learningStatus="active"
   getReviewQueue: authedQuery.query(async ({ ctx }) => {
     const db = getDb();
+    const catalogOwnerId = await getCatalogOwnerId();
     const now = new Date();
-
-    // First get active words
-    const activeWords = await db
-      .select({ id: words.id })
-      .from(words)
-      .where(
-        and(
-          eq(words.userId, ctx.user.id),
-          eq(words.learningStatus, "active")
-        )
-      );
-
-    const activeWordIds = activeWords.map((w) => w.id);
-    if (activeWordIds.length === 0) return [];
 
     // Get due wordSpellings for active words only
     const dueRecords = await db
@@ -239,7 +230,7 @@ export const spellingRouter = createRouter({
         and(
           eq(wordSpellings.userId, ctx.user.id),
           lte(wordSpellings.nextReviewAt, now),
-          inArray(wordSpellings.wordId, activeWordIds)
+          eq(wordSpellings.learningStatus, "active")
         )
       )
       .orderBy(wordSpellings.source, wordSpellings.level);
@@ -256,10 +247,14 @@ export const spellingRouter = createRouter({
         definition: words.definition,
         example: words.example,
         groupId: words.groupId,
-        learningStatus: words.learningStatus,
       })
       .from(words)
-      .where(inArray(words.id, wordIds));
+      .where(
+        and(
+          eq(words.userId, catalogOwnerId),
+          inArray(words.id, wordIds)
+        )
+      );
 
     const wordMap = new Map(wordList.map((w) => [w.id, w]));
 
@@ -277,7 +272,7 @@ export const spellingRouter = createRouter({
         errorCount: record.errorCount,
         totalAttempts: record.totalAttempts,
         source: record.source,
-        learningStatus: word?.learningStatus || "idle",
+        learningStatus: record.learningStatus,
         spellingId: record.id,
       };
     });
@@ -297,6 +292,15 @@ export const spellingRouter = createRouter({
     )
     .mutation(async ({ ctx, input }) => {
       const db = getDb();
+      const catalogOwnerId = await getCatalogOwnerId();
+      const catalogWord = await db
+        .select({ id: words.id })
+        .from(words)
+        .where(and(eq(words.id, input.wordId), eq(words.userId, catalogOwnerId)))
+        .limit(1);
+      if (!catalogWord[0]) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "单词不存在" });
+      }
 
       const records = await db
         .select()
@@ -322,6 +326,7 @@ export const spellingRouter = createRouter({
           totalAttempts: 0,
           totalCorrect: 0,
           source: "auto",
+          learningStatus: "active",
         });
         record = {
           id: Number(result[0].insertId),
@@ -335,6 +340,7 @@ export const spellingRouter = createRouter({
           totalAttempts: 0,
           totalCorrect: 0,
           source: "auto",
+          learningStatus: "active",
           createdAt: new Date(),
           updatedAt: new Date(),
         };
@@ -391,6 +397,7 @@ export const spellingRouter = createRouter({
 
   getErrorBook: authedQuery.query(async ({ ctx }) => {
     const db = getDb();
+    const catalogOwnerId = await getCatalogOwnerId();
     const errors = await db
       .select()
       .from(spellingErrors)
@@ -404,7 +411,12 @@ export const spellingRouter = createRouter({
     const wordList = await db
       .select({ id: words.id, word: words.word, phonetic: words.phonetic, definition: words.definition })
       .from(words)
-      .where(inArray(words.id, wordIds));
+      .where(
+        and(
+          eq(words.userId, catalogOwnerId),
+          inArray(words.id, wordIds)
+        )
+      );
 
     const wordMap = new Map(wordList.map((w) => [w.id, w]));
 
@@ -420,44 +432,45 @@ export const spellingRouter = createRouter({
 
   getStats: authedQuery.query(async ({ ctx }) => {
     const db = getDb();
+    const catalogOwnerId = await getCatalogOwnerId();
 
     // Total words
     const totalWords = await db
       .select({ count: count() })
       .from(words)
-      .where(eq(words.userId, ctx.user.id));
+      .where(eq(words.userId, catalogOwnerId));
 
     // Active learning words
     const learningWords = await db
       .select({ count: count() })
-      .from(words)
+      .from(wordSpellings)
       .where(
         and(
-          eq(words.userId, ctx.user.id),
-          eq(words.learningStatus, "active")
+          eq(wordSpellings.userId, ctx.user.id),
+          eq(wordSpellings.learningStatus, "active")
         )
       );
 
     // Paused words
     const pausedWords = await db
       .select({ count: count() })
-      .from(words)
+      .from(wordSpellings)
       .where(
         and(
-          eq(words.userId, ctx.user.id),
-          eq(words.learningStatus, "paused")
+          eq(wordSpellings.userId, ctx.user.id),
+          eq(wordSpellings.learningStatus, "paused")
         )
       );
 
     // Get active word IDs for due review and byLevel
     const now = new Date();
     const activeWordIdsResult = await db
-      .select({ id: words.id })
-      .from(words)
+      .select({ id: wordSpellings.wordId })
+      .from(wordSpellings)
       .where(
         and(
-          eq(words.userId, ctx.user.id),
-          eq(words.learningStatus, "active")
+          eq(wordSpellings.userId, ctx.user.id),
+          eq(wordSpellings.learningStatus, "active")
         )
       );
     const activeIds = activeWordIdsResult.map((w) => w.id);
@@ -546,6 +559,7 @@ export const spellingRouter = createRouter({
 
   getErrorWords: authedQuery.query(async ({ ctx }) => {
     const db = getDb();
+    const catalogOwnerId = await getCatalogOwnerId();
 
     // Get distinct wordIds from spellingErrors
     const errorRows = await db
@@ -567,7 +581,7 @@ export const spellingRouter = createRouter({
       .from(words)
       .where(
         and(
-          eq(words.userId, ctx.user.id),
+          eq(words.userId, catalogOwnerId),
           inArray(words.id, wordIds)
         )
       )
@@ -596,12 +610,13 @@ export const spellingRouter = createRouter({
     .input(z.object({ wordId: z.number() }))
     .mutation(async ({ ctx, input }) => {
       const db = getDb();
+      const catalogOwnerId = await getCatalogOwnerId();
 
       // Verify the word belongs to the user
       const wordCheck = await db
         .select({ id: words.id })
         .from(words)
-        .where(and(eq(words.id, input.wordId), eq(words.userId, ctx.user.id)))
+        .where(and(eq(words.id, input.wordId), eq(words.userId, catalogOwnerId)))
         .limit(1);
 
       if (wordCheck.length === 0) {
@@ -644,9 +659,10 @@ export const spellingRouter = createRouter({
     )
     .query(async ({ ctx, input }) => {
       const db = getDb();
+      const catalogOwnerId = await getCatalogOwnerId();
 
       // Build conditions
-      const conditions: any[] = [eq(words.userId, ctx.user.id)];
+      const conditions: any[] = [eq(words.userId, catalogOwnerId)];
 
       if (input?.groupId) {
         conditions.push(eq(words.groupId, input.groupId));
@@ -654,7 +670,19 @@ export const spellingRouter = createRouter({
 
       // If source is manual, only get active learning words
       if (input?.source === "manual") {
-        conditions.push(eq(words.learningStatus, "active"));
+        const manualRows = await db
+          .select({ wordId: wordSpellings.wordId })
+          .from(wordSpellings)
+          .where(
+            and(
+              eq(wordSpellings.userId, ctx.user.id),
+              eq(wordSpellings.source, "manual"),
+              eq(wordSpellings.learningStatus, "active")
+            )
+          );
+        const manualWordIds = manualRows.map((row) => row.wordId);
+        if (manualWordIds.length === 0) return [];
+        conditions.push(inArray(words.id, manualWordIds));
       }
 
       const wordList = await db
@@ -665,7 +693,6 @@ export const spellingRouter = createRouter({
           definition: words.definition,
           example: words.example,
           groupId: words.groupId,
-          learningStatus: words.learningStatus,
         })
         .from(words)
         .where(and(...conditions))
@@ -693,6 +720,7 @@ export const spellingRouter = createRouter({
         const sp = spellingMap.get(w.id);
         return {
           ...w,
+          learningStatus: sp?.learningStatus ?? "idle",
           level: (sp?.level ?? 1) as 1 | 2 | 3,
           streak: sp?.streak ?? 0,
           errorCount: sp?.errorCount ?? 0,

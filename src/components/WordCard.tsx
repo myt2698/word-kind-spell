@@ -55,9 +55,10 @@ interface WordCardProps {
   word: WordCardData;
   onEdit: (word: WordCardData) => void;
   onDelete: (id: number) => void;
+  canManage?: boolean;
 }
 
-export default function WordCard({ word, onEdit, onDelete }: WordCardProps) {
+export default function WordCard({ word, onEdit, onDelete, canManage = false }: WordCardProps) {
   const [expanded, setExpanded] = useState(false);
   const [localStatus, setLocalStatus] = useState(word.learningStatus || "idle");
   const [tagDialogId, setTagDialogId] = useState<number | null>(null);
@@ -91,16 +92,6 @@ export default function WordCard({ word, onEdit, onDelete }: WordCardProps) {
       utils.word.list.invalidate();
     },
   });
-
-  const pauseLearning = trpc.spelling.pauseLearning.useMutation({
-    onSuccess: () => {
-      setLocalStatus("paused");
-      utils.spelling.getStats.invalidate();
-      utils.word.list.invalidate();
-    },
-  });
-
-  const handleSpeak = () => speakWord(word.word, word.id);
 
   const isActive = localStatus === "active";
   const isPaused = localStatus === "paused";
@@ -191,14 +182,16 @@ export default function WordCard({ word, onEdit, onDelete }: WordCardProps) {
             )}
 
             {/* Edit/Delete — always visible */}
-            <div className="flex items-center gap-1">
-              <Button variant="ghost" size="icon" className="h-7 w-7 text-gray-400 hover:text-indigo-600" onClick={() => onEdit(word)}>
-                <Edit3 className="w-3.5 h-3.5" />
-              </Button>
-              <Button variant="ghost" size="icon" className="h-7 w-7 text-gray-400 hover:text-red-500" onClick={() => onDelete(word.id)}>
-                <Trash2 className="w-3.5 h-3.5" />
-              </Button>
-            </div>
+            {canManage && (
+              <div className="flex items-center gap-1">
+                <Button variant="ghost" size="icon" className="h-7 w-7 text-gray-400 hover:text-indigo-600" onClick={() => onEdit(word)}>
+                  <Edit3 className="w-3.5 h-3.5" />
+                </Button>
+                <Button variant="ghost" size="icon" className="h-7 w-7 text-gray-400 hover:text-red-500" onClick={() => onDelete(word.id)}>
+                  <Trash2 className="w-3.5 h-3.5" />
+                </Button>
+              </div>
+            )}
           </div>
         </div>
 
@@ -246,10 +239,12 @@ export default function WordCard({ word, onEdit, onDelete }: WordCardProps) {
         tagId={tagDialogId}
         open={!!tagDialogId}
         onClose={() => setTagDialogId(null)}
-        onEdit={(tag) => {
-          setEditTagForm({ id: tag.id, name: tag.name, description: tag.description || "" });
-          setEditTagOpen(true);
-        }}
+        onEdit={canManage
+          ? (tag) => {
+              setEditTagForm({ id: tag.id, name: tag.name, description: tag.description || "" });
+              setEditTagOpen(true);
+            }
+          : undefined}
       />
 
       {/* Tag Edit Dialog */}

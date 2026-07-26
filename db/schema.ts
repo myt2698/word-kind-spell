@@ -185,6 +185,11 @@ export const wordSpellings = mysqlTable("word_spellings", {
   source: mysqlEnum("source", ["auto", "manual"])
     .default("auto")
     .notNull(),
+  // Per-user learning state. Catalog words are shared, so this must not live
+  // on the shared words row.
+  learningStatus: mysqlEnum("learningStatus", ["idle", "active", "paused"])
+    .default("idle")
+    .notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt")
     .defaultNow()

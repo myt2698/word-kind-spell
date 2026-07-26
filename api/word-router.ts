@@ -1,8 +1,9 @@
 import { z } from "zod";
-import { createRouter, authedQuery } from "./middleware";
+import { createRouter, authedQuery, adminQuery } from "./middleware";
 import { getDb } from "./queries/connection";
-import { words, wordTags, tags, wordLogs, wordGroups, textbooks, wordAudios } from "@db/schema";
+import { words, wordTags, tags, wordLogs, wordGroups, textbooks, wordAudios, wordSpellings } from "@db/schema";
 import { eq, and, like, or, desc, asc, sql, inArray } from "drizzle-orm";
+import { getCatalogOwnerId } from "./catalog";
 
 const YOUDAO_URL = "https://dict.youdao.com/dictvoice";
 
@@ -35,7 +36,8 @@ export const wordRouter = createRouter({
     )
     .query(async ({ ctx, input }) => {
       const db = getDb();
-      const conditions = [eq(words.userId, ctx.user.id)];
+      const catalogOwnerId = await getCatalogOwnerId();
+      const conditions = [eq(words.userId, catalogOwnerId)];
 
       // Handle textbook filter: find all groups in the textbook
       let effectiveGroupIds = input?.groupIds
@@ -51,7 +53,7 @@ export const wordRouter = createRouter({
           .where(
             and(
               eq(wordGroups.textbookId, input.textbookId),
-              eq(wordGroups.userId, ctx.user.id)
+              eq(wordGroups.userId, catalogOwnerId)
             )
           );
         const textbookGroupIds = textbookGroups.map((g) => g.id);
@@ -70,7 +72,6 @@ export const wordRouter = createRouter({
       let exactMatchFirst = false;
       if (input?.search) {
         const searchTerm = `%${input.search}%`;
-        const lowerSearch = input.search.toLowerCase();
         conditions.push(
           or(
             like(words.word, searchTerm),
@@ -124,6 +125,22 @@ export const wordRouter = createRouter({
       const wordIds = wordList.map((w) => w.id);
       const groupIdsForNames = [...new Set(wordList.map((w) => w.groupId).filter(Boolean))] as number[];
 
+      const learningRows = await db
+        .select({
+          wordId: wordSpellings.wordId,
+          learningStatus: wordSpellings.learningStatus,
+        })
+        .from(wordSpellings)
+        .where(
+          and(
+            eq(wordSpellings.userId, ctx.user.id),
+            inArray(wordSpellings.wordId, wordIds)
+          )
+        );
+      const learningMap = new Map(
+        learningRows.map((row) => [row.wordId, row.learningStatus]),
+      );
+
       // Query 2: Batch fetch all tags for these words
       const allTagRows = wordIds.length > 0
         ? await db
@@ -168,6 +185,7 @@ export const wordRouter = createRouter({
         const groupInfo = word.groupId ? groupMap.get(word.groupId) : null;
         return {
           ...word,
+          learningStatus: learningMap.get(word.id) ?? "idle",
           tags: tagMap.get(word.id) ?? [],
           groupId: word.groupId,
           groupName: groupInfo?.groupName ?? null,
@@ -194,8 +212,9 @@ export const wordRouter = createRouter({
   // 检查单词是否已存在
   checkExists: authedQuery
     .input(z.object({ word: z.string().min(1) }))
-    .query(async ({ ctx, input }) => {
+    .query(async ({ input }) => {
       const db = getDb();
+      const catalogOwnerId = await getCatalogOwnerId();
       const wordLower = input.word.trim().toLowerCase();
 
       // Find existing word (case-insensitive)
@@ -204,7 +223,7 @@ export const wordRouter = createRouter({
         .from(words)
         .where(
           and(
-            eq(words.userId, ctx.user.id),
+            eq(words.userId, catalogOwnerId),
             eq(words.word, wordLower)
           )
         )
@@ -258,11 +277,12 @@ export const wordRouter = createRouter({
     .input(z.object({ id: z.number() }))
     .query(async ({ ctx, input }) => {
       const db = getDb();
+      const catalogOwnerId = await getCatalogOwnerId();
       const result = await db
         .select()
         .from(words)
         .where(
-          and(eq(words.id, input.id), eq(words.userId, ctx.user.id))
+          and(eq(words.id, input.id), eq(words.userId, catalogOwnerId))
         )
         .limit(1);
 
@@ -290,15 +310,27 @@ export const wordRouter = createRouter({
           )
         );
 
+      const learningRows = await db
+        .select({ learningStatus: wordSpellings.learningStatus })
+        .from(wordSpellings)
+        .where(
+          and(
+            eq(wordSpellings.wordId, word.id),
+            eq(wordSpellings.userId, ctx.user.id)
+          )
+        )
+        .limit(1);
+
       return {
         ...word,
+        learningStatus: learningRows[0]?.learningStatus ?? "idle",
         tags: tagList,
         reviewCount: reviewCount[0]?.count ?? 0,
       };
     }),
 
   // 创建单词
-  create: authedQuery
+  create: adminQuery
     .input(
       z.object({
         word: z.string().min(1).max(255),
@@ -313,10 +345,11 @@ export const wordRouter = createRouter({
     )
     .mutation(async ({ ctx, input }) => {
       const db = getDb();
+      const catalogOwnerId = await getCatalogOwnerId();
       const { tagIds, ...wordData } = input;
 
       const result = await db.insert(words).values({
-        userId: ctx.user.id,
+        userId: catalogOwnerId,
         ...wordData,
         proficiency: wordData.proficiency ?? "new",
       });
@@ -355,7 +388,7 @@ export const wordRouter = createRouter({
     }),
 
   // 更新单词
-  update: authedQuery
+  update: adminQuery
     .input(
       z.object({
         id: z.number(),
@@ -371,6 +404,7 @@ export const wordRouter = createRouter({
     )
     .mutation(async ({ ctx, input }) => {
       const db = getDb();
+      const catalogOwnerId = await getCatalogOwnerId();
       const { id, tagIds, ...wordData } = input;
 
       // 清理 undefined 值，并自动更新 updatedAt
@@ -382,7 +416,7 @@ export const wordRouter = createRouter({
       await db
         .update(words)
         .set(updateData)
-        .where(and(eq(words.id, id), eq(words.userId, ctx.user.id)));
+        .where(and(eq(words.id, id), eq(words.userId, catalogOwnerId)));
 
       // 更新标签关联
       if (tagIds !== undefined) {
@@ -410,24 +444,26 @@ export const wordRouter = createRouter({
     }),
 
   // 删除单词
-  delete: authedQuery
+  delete: adminQuery
     .input(z.object({ id: z.number() }))
-    .mutation(async ({ ctx, input }) => {
+    .mutation(async ({ input }) => {
       const db = getDb();
+      const catalogOwnerId = await getCatalogOwnerId();
       await db
         .delete(words)
-        .where(and(eq(words.id, input.id), eq(words.userId, ctx.user.id)));
+        .where(and(eq(words.id, input.id), eq(words.userId, catalogOwnerId)));
       return { success: true };
     }),
 
   // 获取统计数据
   stats: authedQuery.query(async ({ ctx }) => {
     const db = getDb();
+    const catalogOwnerId = await getCatalogOwnerId();
 
     const totalWords = await db
       .select({ count: sql<number>`count(*)` })
       .from(words)
-      .where(eq(words.userId, ctx.user.id));
+      .where(eq(words.userId, catalogOwnerId));
 
     const byProficiency = await db
       .select({
@@ -435,7 +471,7 @@ export const wordRouter = createRouter({
         count: sql<number>`count(*)`,
       })
       .from(words)
-      .where(eq(words.userId, ctx.user.id))
+      .where(eq(words.userId, catalogOwnerId))
       .groupBy(words.proficiency);
 
     const todayLearned = await db

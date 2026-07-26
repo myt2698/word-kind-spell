@@ -1,15 +1,17 @@
 import { z } from "zod";
-import { createRouter, authedQuery } from "./middleware";
+import { createRouter, authedQuery, adminQuery } from "./middleware";
 import { getDb } from "./queries/connection";
 import { wordGroups, users, words } from "@db/schema";
 import { eq, and, asc, sql } from "drizzle-orm";
+import { getCatalogOwnerId } from "./catalog";
 
 export const wordGroupRouter = createRouter({
   list: authedQuery
     .input(z.object({ textbookId: z.number().optional() }).optional())
-    .query(async ({ ctx, input }) => {
+    .query(async ({ input }) => {
       const db = getDb();
-      const conditions = [eq(wordGroups.userId, ctx.user.id)];
+      const catalogOwnerId = await getCatalogOwnerId();
+      const conditions = [eq(wordGroups.userId, catalogOwnerId)];
       if (input?.textbookId) {
         conditions.push(eq(wordGroups.textbookId, input.textbookId));
       }
@@ -29,7 +31,7 @@ export const wordGroupRouter = createRouter({
             .where(
               and(
                 eq(words.groupId, group.id),
-                eq(words.userId, ctx.user.id)
+                eq(words.userId, catalogOwnerId)
               )
             );
           return {
@@ -44,22 +46,23 @@ export const wordGroupRouter = createRouter({
 
   getById: authedQuery
     .input(z.object({ id: z.number() }))
-    .query(async ({ ctx, input }) => {
+    .query(async ({ input }) => {
       const db = getDb();
+      const catalogOwnerId = await getCatalogOwnerId();
       const result = await db
         .select()
         .from(wordGroups)
         .where(
           and(
             eq(wordGroups.id, input.id),
-            eq(wordGroups.userId, ctx.user.id)
+            eq(wordGroups.userId, catalogOwnerId)
           )
         )
         .limit(1);
       return result[0] ?? null;
     }),
 
-  create: authedQuery
+  create: adminQuery
     .input(
       z.object({
         name: z.string().min(1).max(100),
@@ -68,14 +71,15 @@ export const wordGroupRouter = createRouter({
         textbookId: z.number().optional(),
       })
     )
-    .mutation(async ({ ctx, input }) => {
+    .mutation(async ({ input }) => {
       const db = getDb();
+      const catalogOwnerId = await getCatalogOwnerId();
       let sortOrder = input.sortOrder;
       if (sortOrder === undefined) {
         const existing = await db
           .select({ maxOrder: wordGroups.sortOrder })
           .from(wordGroups)
-          .where(eq(wordGroups.userId, ctx.user.id))
+          .where(eq(wordGroups.userId, catalogOwnerId))
           .orderBy(wordGroups.sortOrder);
         sortOrder = existing.length > 0
           ? Math.max(...existing.map((g) => g.maxOrder)) + 1
@@ -83,7 +87,7 @@ export const wordGroupRouter = createRouter({
       }
 
       const result = await db.insert(wordGroups).values({
-        userId: ctx.user.id,
+        userId: catalogOwnerId,
         name: input.name,
         description: input.description,
         textbookId: input.textbookId || null,
@@ -92,7 +96,7 @@ export const wordGroupRouter = createRouter({
       return { id: Number(result[0].insertId) };
     }),
 
-  update: authedQuery
+  update: adminQuery
     .input(
       z.object({
         id: z.number(),
@@ -102,39 +106,36 @@ export const wordGroupRouter = createRouter({
         textbookId: z.number().nullable().optional(),
       })
     )
-    .mutation(async ({ ctx, input }) => {
+    .mutation(async ({ input }) => {
       const db = getDb();
+      const catalogOwnerId = await getCatalogOwnerId();
       const { id, ...data } = input;
       await db
         .update(wordGroups)
         .set(data)
         .where(
-          and(eq(wordGroups.id, id), eq(wordGroups.userId, ctx.user.id))
+          and(eq(wordGroups.id, id), eq(wordGroups.userId, catalogOwnerId))
         );
       return { success: true };
     }),
 
-  delete: authedQuery
+  delete: adminQuery
     .input(z.object({ id: z.number() }))
-    .mutation(async ({ ctx, input }) => {
+    .mutation(async ({ input }) => {
       const db = getDb();
+      const catalogOwnerId = await getCatalogOwnerId();
 
       // 1. Set groupId to NULL for all words in this group
       await db
         .update(words)
         .set({ groupId: null })
-        .where(and(eq(words.groupId, input.id), eq(words.userId, ctx.user.id)));
+        .where(and(eq(words.groupId, input.id), eq(words.userId, catalogOwnerId)));
 
       // 2. Clear defaultGroupId if it's this group
       await db
         .update(users)
         .set({ defaultGroupId: null })
-        .where(
-          and(
-            eq(users.id, ctx.user.id),
-            eq(users.defaultGroupId, input.id)
-          )
-        );
+        .where(eq(users.defaultGroupId, input.id));
 
       // 3. Delete the group
       await db
@@ -142,13 +143,13 @@ export const wordGroupRouter = createRouter({
         .where(
           and(
             eq(wordGroups.id, input.id),
-            eq(wordGroups.userId, ctx.user.id)
+            eq(wordGroups.userId, catalogOwnerId)
           )
         );
       return { success: true };
     }),
 
-  reorder: authedQuery
+  reorder: adminQuery
     .input(
       z.object({
         orders: z.array(
@@ -156,8 +157,9 @@ export const wordGroupRouter = createRouter({
         ),
       })
     )
-    .mutation(async ({ ctx, input }) => {
+    .mutation(async ({ input }) => {
       const db = getDb();
+      const catalogOwnerId = await getCatalogOwnerId();
       for (const item of input.orders) {
         await db
           .update(wordGroups)
@@ -165,7 +167,7 @@ export const wordGroupRouter = createRouter({
           .where(
             and(
               eq(wordGroups.id, item.id),
-              eq(wordGroups.userId, ctx.user.id)
+              eq(wordGroups.userId, catalogOwnerId)
             )
           );
       }
@@ -176,6 +178,7 @@ export const wordGroupRouter = createRouter({
     .input(z.object({ groupId: z.number().nullable() }))
     .mutation(async ({ ctx, input }) => {
       const db = getDb();
+      const catalogOwnerId = await getCatalogOwnerId();
 
       if (input.groupId !== null) {
         const group = await db
@@ -184,7 +187,7 @@ export const wordGroupRouter = createRouter({
           .where(
             and(
               eq(wordGroups.id, input.groupId),
-              eq(wordGroups.userId, ctx.user.id)
+              eq(wordGroups.userId, catalogOwnerId)
             )
           )
           .limit(1);

@@ -19,6 +19,7 @@ export const env = {
   get kimiAuthUrl() { return get("KIMI_AUTH_URL"); },
   get kimiOpenUrl() { return get("KIMI_OPEN_URL"); },
   get ownerUnionId() { return process.env.OWNER_UNION_ID ?? ""; },
+  get catalogOwnerUserId() { return process.env.CATALOG_OWNER_USER_ID ?? ""; },
   get youdaoAppKey() { return process.env.YOUDAO_APP_KEY ?? ""; },
   get youdaoAppSecret() { return process.env.YOUDAO_APP_SECRET ?? ""; },
 

@@ -164,16 +164,18 @@ export default function TagDetailDialog({ tagId, open, onClose, onEdit }: TagDet
 
                   {/* Right: edit + other tags */}
                   <div className="flex flex-col items-end gap-1.5 shrink-0">
-                    <button
-                      onClick={() => {
-                        setEditingWord(word);
-                        setWordFormOpen(true);
-                      }}
-                      className="p-1 rounded-md hover:bg-gray-200 text-gray-400 hover:text-indigo-500 transition-colors"
-                      title="编辑单词"
-                    >
-                      <Edit3 className="w-3.5 h-3.5" />
-                    </button>
+                    {onEdit && (
+                      <button
+                        onClick={() => {
+                          setEditingWord(word);
+                          setWordFormOpen(true);
+                        }}
+                        className="p-1 rounded-md hover:bg-gray-200 text-gray-400 hover:text-indigo-500 transition-colors"
+                        title="编辑单词"
+                      >
+                        <Edit3 className="w-3.5 h-3.5" />
+                      </button>
+                    )}
                     {word.tags.length > 1 && (
                       <div className="flex flex-wrap gap-1 max-w-[120px] justify-end">
                         {word.tags

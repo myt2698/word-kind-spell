@@ -104,6 +104,7 @@ export default function Home() {
   }
   if (!user) return null;
 
+  const canManageCatalog = user.role === "admin";
   const filteredWords = words || [];
   const hasFilters = searchQuery || selectedTextbookId || selectedUnitId || selectedTagId;
 
@@ -227,12 +228,14 @@ export default function Home() {
           <p className="text-xs text-gray-500">
             共 {filteredWords.length} 个单词
           </p>
-          <Button
-            onClick={() => { setEditWord(null); setShowWordForm(true); }}
-            className="bg-gradient-to-r from-indigo-500 to-blue-600 hover:from-indigo-600 hover:to-blue-700 shadow-lg shadow-indigo-200 shrink-0 ml-3 h-9"
-          >
-            <Plus className="w-4 h-4 mr-1" />添加
-          </Button>
+          {canManageCatalog && (
+            <Button
+              onClick={() => { setEditWord(null); setShowWordForm(true); }}
+              className="bg-gradient-to-r from-indigo-500 to-blue-600 hover:from-indigo-600 hover:to-blue-700 shadow-lg shadow-indigo-200 shrink-0 ml-3 h-9"
+            >
+              <Plus className="w-4 h-4 mr-1" />添加
+            </Button>
+          )}
         </div>
 
         {/* Sort */}
@@ -242,21 +245,32 @@ export default function Home() {
 
         {/* Words List */}
         {filteredWords.length === 0 && !wordsLoading ? (
-          <EmptyState type={hasFilters ? "no-results" : "no-words"} onAdd={() => setShowWordForm(true)} />
+          <EmptyState
+            type={hasFilters ? "no-results" : "no-words"}
+            onAdd={canManageCatalog ? () => setShowWordForm(true) : undefined}
+          />
         ) : (
           <div className="space-y-3 pb-4">
             {filteredWords.map((word) => (
-              <WordCard key={word.id} word={word} onEdit={openEditForm} onDelete={handleDeleteWord} />
+              <WordCard
+                key={word.id}
+                word={word}
+                onEdit={openEditForm}
+                onDelete={handleDeleteWord}
+                canManage={canManageCatalog}
+              />
             ))}
           </div>
         )}
 
-        <WordForm
-          open={showWordForm}
-          onClose={() => { setShowWordForm(false); setEditWord(null); }}
-          onSubmit={handleWordSubmit}
-          editWord={editWord}
-        />
+        {canManageCatalog && (
+          <WordForm
+            open={showWordForm}
+            onClose={() => { setShowWordForm(false); setEditWord(null); }}
+            onSubmit={handleWordSubmit}
+            editWord={editWord}
+          />
+        )}
       </main>
 
       <MobileNav />

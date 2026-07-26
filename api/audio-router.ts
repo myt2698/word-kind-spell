@@ -9,7 +9,8 @@ import { z } from "zod";
 import { createRouter, authedQuery, publicQuery } from "./middleware";
 import { getDb } from "./queries/connection";
 import { wordAudios, words } from "@db/schema";
-import { eq, and, inArray, sql, count } from "drizzle-orm";
+import { eq, and, sql, count } from "drizzle-orm";
+import { getCatalogOwnerId } from "./catalog";
 
 const YOUDAO_URL = "https://dict.youdao.com/dictvoice";
 
@@ -32,7 +33,7 @@ export const audioRouter = createRouter({
   /** Get audio for a word by wordId. Returns base64 data if available. */
   getByWordId: publicQuery
     .input(z.object({ wordId: z.number() }))
-    .query(async ({ ctx, input }) => {
+    .query(async ({ input }) => {
       const db = getDb();
       const rows = await db
         .select({ audioData: wordAudios.audioData, format: wordAudios.format })
@@ -47,8 +48,9 @@ export const audioRouter = createRouter({
   /** Download and save audio for a word */
   download: authedQuery
     .input(z.object({ wordId: z.number() }))
-    .mutation(async ({ ctx, input }) => {
+    .mutation(async ({ input }) => {
       const db = getDb();
+      const catalogOwnerId = await getCatalogOwnerId();
 
       // Check if already exists
       const existing = await db
@@ -65,7 +67,7 @@ export const audioRouter = createRouter({
       const wordRows = await db
         .select({ word: words.word })
         .from(words)
-        .where(and(eq(words.id, input.wordId), eq(words.userId, ctx.user.id)))
+        .where(and(eq(words.id, input.wordId), eq(words.userId, catalogOwnerId)))
         .limit(1);
 
       if (wordRows.length === 0) {
@@ -90,14 +92,15 @@ export const audioRouter = createRouter({
     }),
 
   /** Batch download audio for all words that don't have audio yet */
-  batchDownload: authedQuery.mutation(async ({ ctx }) => {
+  batchDownload: authedQuery.mutation(async () => {
     const db = getDb();
+    const catalogOwnerId = await getCatalogOwnerId();
 
     // Find all words without audio for this user
     const wordRows = await db
       .select({ id: words.id, word: words.word })
       .from(words)
-      .where(eq(words.userId, ctx.user.id))
+      .where(eq(words.userId, catalogOwnerId))
       .orderBy(words.id);
 
     // Get existing audio wordIds
@@ -130,20 +133,21 @@ export const audioRouter = createRouter({
   }),
 
   /** Get stats: how many words have audio vs total */
-  getStats: authedQuery.query(async ({ ctx }) => {
+  getStats: authedQuery.query(async () => {
     const db = getDb();
+    const catalogOwnerId = await getCatalogOwnerId();
 
     const totalWords = await db
       .select({ count: count() })
       .from(words)
-      .where(eq(words.userId, ctx.user.id));
+      .where(eq(words.userId, catalogOwnerId));
 
     const totalAudios = await db
       .select({ count: count() })
       .from(wordAudios)
       .where(
         sql`${wordAudios.wordId} IN (
-          SELECT ${words.id} FROM ${words} WHERE ${words.userId} = ${ctx.user.id}
+          SELECT ${words.id} FROM ${words} WHERE ${words.userId} = ${catalogOwnerId}
         )`
       );
 
