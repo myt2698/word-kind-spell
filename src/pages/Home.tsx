@@ -12,7 +12,7 @@ import WordForm, { type WordFormData } from "@/components/WordForm";
 import EmptyState from "@/components/EmptyState";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { ArrowLeft, Plus, Search, X } from "lucide-react";
+import { ArrowLeft, CheckSquare2, Plus, Search, X } from "lucide-react";
 
 const WORD_FILTERS_STORAGE_KEY = "ciyindao:wordFilters:v1";
 
@@ -23,16 +23,10 @@ function loadWordFilters(): {
 } {
   try {
     const saved = JSON.parse(localStorage.getItem(WORD_FILTERS_STORAGE_KEY) || "{}");
-    const sortBy: SortBy = ["newest", "oldest", "alphabetical"].includes(saved.sortBy)
-      ? saved.sortBy
-      : "newest";
+    const sortBy: SortBy = ["newest", "oldest", "alphabetical"].includes(saved.sortBy) ? saved.sortBy : "newest";
     return {
-      textbookId: Number.isInteger(saved.textbookId) && saved.textbookId > 0
-        ? saved.textbookId
-        : null,
-      unitId: Number.isInteger(saved.unitId) && saved.unitId > 0
-        ? saved.unitId
-        : null,
+      textbookId: Number.isInteger(saved.textbookId) && saved.textbookId > 0 ? saved.textbookId : null,
+      unitId: Number.isInteger(saved.unitId) && saved.unitId > 0 ? saved.unitId : null,
       sortBy,
     };
   } catch {
@@ -41,7 +35,9 @@ function loadWordFilters(): {
 }
 
 export default function Home({ searchMode = false }: { searchMode?: boolean }) {
-  const { user, isLoading: authLoading } = useAuth({ redirectOnUnauthenticated: true });
+  const { user, isLoading: authLoading } = useAuth({
+    redirectOnUnauthenticated: true,
+  });
   const utils = trpc.useUtils();
   const navigate = useNavigate();
   const [initialFilters] = useState(loadWordFilters);
@@ -49,16 +45,14 @@ export default function Home({ searchMode = false }: { searchMode?: boolean }) {
   // Filter state
   const [searchQuery, setSearchQuery] = useState("");
   const [sortBy, setSortBy] = useState<SortBy>(initialFilters.sortBy);
-  const [selectedTextbookId, setSelectedTextbookId] = useState<number | null>(
-    initialFilters.textbookId,
-  );
-  const [selectedUnitId, setSelectedUnitId] = useState<number | null>(
-    initialFilters.unitId,
-  );
+  const [selectedTextbookId, setSelectedTextbookId] = useState<number | null>(initialFilters.textbookId);
+  const [selectedUnitId, setSelectedUnitId] = useState<number | null>(initialFilters.unitId);
 
   // Dialog state
   const [showWordForm, setShowWordForm] = useState(false);
   const [editWord, setEditWord] = useState<WordCardData | null>(null);
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectedWordIds, setSelectedWordIds] = useState<Set<number>>(new Set());
 
   // Fetch data
   const { data: words, isLoading: wordsLoading } = trpc.word.list.useQuery(
@@ -70,13 +64,13 @@ export default function Home({ searchMode = false }: { searchMode?: boolean }) {
           groupIds: selectedUnitId ? [selectedUnitId] : undefined,
           textbookId: selectedTextbookId ?? undefined,
           sortBy,
-        }
+        },
   );
 
   const { data: textbooks } = trpc.textbook.list.useQuery();
   const { data: units } = trpc.wordGroup.list.useQuery(
     selectedTextbookId ? { textbookId: selectedTextbookId } : undefined,
-    { enabled: !!selectedTextbookId }
+    { enabled: !!selectedTextbookId },
   );
 
   useEffect(() => {
@@ -91,22 +85,14 @@ export default function Home({ searchMode = false }: { searchMode?: boolean }) {
   }, [selectedTextbookId, selectedUnitId, sortBy]);
 
   useEffect(() => {
-    if (
-      textbooks &&
-      selectedTextbookId &&
-      !textbooks.some((textbook) => textbook.id === selectedTextbookId)
-    ) {
+    if (textbooks && selectedTextbookId && !textbooks.some((textbook) => textbook.id === selectedTextbookId)) {
       setSelectedTextbookId(null);
       setSelectedUnitId(null);
     }
   }, [textbooks, selectedTextbookId]);
 
   useEffect(() => {
-    if (
-      units &&
-      selectedUnitId &&
-      !units.some((unit) => unit.id === selectedUnitId)
-    ) {
+    if (units && selectedUnitId && !units.some((unit) => unit.id === selectedUnitId)) {
       setSelectedUnitId(null);
     }
   }, [units, selectedUnitId]);
@@ -122,18 +108,35 @@ export default function Home({ searchMode = false }: { searchMode?: boolean }) {
   const selectedTextbookName = selectedTextbookId
     ? textbooks?.find((t) => t.id === selectedTextbookId)?.name || "课本"
     : "全部课本";
-  const selectedUnitName = selectedUnitId
-    ? units?.find((u) => u.id === selectedUnitId)?.name || "单元"
-    : "全部单元";
+  const selectedUnitName = selectedUnitId ? units?.find((u) => u.id === selectedUnitId)?.name || "单元" : "全部单元";
   // Mutations
   const createWord = trpc.word.create.useMutation({
-    onSuccess: () => { utils.word.list.invalidate(); utils.tag.listWithCount.invalidate(); },
+    onSuccess: () => {
+      utils.word.list.invalidate();
+      utils.tag.listWithCount.invalidate();
+    },
   });
   const updateWord = trpc.word.update.useMutation({
-    onSuccess: () => { utils.word.list.invalidate(); utils.tag.listWithCount.invalidate(); },
+    onSuccess: () => {
+      utils.word.list.invalidate();
+      utils.tag.listWithCount.invalidate();
+    },
   });
   const deleteWord = trpc.word.delete.useMutation({
-    onSuccess: () => { utils.word.list.invalidate(); utils.tag.listWithCount.invalidate(); },
+    onSuccess: () => {
+      utils.word.list.invalidate();
+      utils.tag.listWithCount.invalidate();
+    },
+  });
+  const addManyToLearning = trpc.spelling.addManyToLearning.useMutation({
+    onSuccess: () => {
+      setSelectionMode(false);
+      setSelectedWordIds(new Set());
+      utils.word.list.invalidate();
+      utils.spelling.getStats.invalidate();
+      utils.spelling.getLearningQueue.invalidate();
+      utils.spelling.getReviewQueue.invalidate();
+    },
   });
 
   const handleWordSubmit = (data: WordFormData & { id?: number }) => {
@@ -147,12 +150,19 @@ export default function Home({ searchMode = false }: { searchMode?: boolean }) {
     }
     setEditWord(null);
   };
-  const handleDeleteWord = (id: number) => { if (confirm("确定删除这个单词吗？")) deleteWord.mutate({ id }); };
-  const openEditForm = (word: WordCardData) => { setEditWord(word); setShowWordForm(true); };
+  const handleDeleteWord = (id: number) => {
+    if (confirm("确定删除这个单词吗？")) deleteWord.mutate({ id });
+  };
+  const openEditForm = (word: WordCardData) => {
+    setEditWord(word);
+    setShowWordForm(true);
+  };
 
   const clearFilters = () => {
     setSelectedTextbookId(null);
     setSelectedUnitId(null);
+    setSelectionMode(false);
+    setSelectedWordIds(new Set());
   };
 
   if (authLoading) {
@@ -166,14 +176,31 @@ export default function Home({ searchMode = false }: { searchMode?: boolean }) {
 
   const canManageCatalog = user.role === "admin";
   const searchNeedle = searchQuery.trim().toLowerCase();
-  const filteredWords = searchMode && searchNeedle
-    ? (words || []).filter((word) =>
-        word.word.toLowerCase().includes(searchNeedle) ||
-        word.definition.toLowerCase().includes(searchNeedle) ||
-        word.notes?.toLowerCase().includes(searchNeedle)
-      )
-    : words || [];
+  const filteredWords =
+    searchMode && searchNeedle
+      ? (words || []).filter(
+          (word) =>
+            word.word.toLowerCase().includes(searchNeedle) ||
+            word.definition.toLowerCase().includes(searchNeedle) ||
+            word.notes?.toLowerCase().includes(searchNeedle),
+        )
+      : words || [];
   const hasFilters = selectedTextbookId || selectedUnitId;
+  const selectableWordIds = filteredWords
+    .filter((word) => (word.learningStatus || "idle") === "idle")
+    .map((word) => word.id);
+  const allSelectableSelected =
+    selectableWordIds.length > 0 && selectableWordIds.every((id) => selectedWordIds.has(id));
+
+  const leaveSelectionMode = () => {
+    setSelectionMode(false);
+    setSelectedWordIds(new Set());
+    addManyToLearning.reset();
+  };
+
+  const toggleSelectAll = () => {
+    setSelectedWordIds(allSelectableSelected ? new Set() : new Set(selectableWordIds));
+  };
 
   return (
     <div className="min-h-screen bg-gray-50/50">
@@ -228,47 +255,65 @@ export default function Home({ searchMode = false }: { searchMode?: boolean }) {
             {/* Textbook and unit filters share one roomy row. */}
             <div className="bg-white rounded-xl border border-gray-100 p-3 mb-4">
               <div className="grid grid-cols-2 gap-2">
-                  {/* Textbook dropdown */}
-                  <div className="relative min-w-0">
-                    <select
-                      value={selectedTextbookId ?? ""}
-                      onChange={(e) => {
-                        const val = e.target.value ? Number(e.target.value) : null;
-                        setSelectedTextbookId(val);
-                        setSelectedUnitId(null);
-                      }}
-                      className="w-full h-9 pl-2.5 pr-7 text-xs bg-gray-50 border border-gray-200 rounded-lg text-gray-700 appearance-none cursor-pointer hover:border-gray-300 transition-colors"
-                    >
-                      <option value="">全部课本</option>
-                      {textbooks?.map((tb) => (
-                        <option key={tb.id} value={tb.id}>{tb.name}</option>
-                      ))}
-                    </select>
-                    <svg className="absolute right-2 top-1/2 -translate-y-1/2 w-3 h-3 text-gray-400 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-                    </svg>
-                  </div>
+                {/* Textbook dropdown */}
+                <div className="relative min-w-0">
+                  <select
+                    value={selectedTextbookId ?? ""}
+                    onChange={(e) => {
+                      const val = e.target.value ? Number(e.target.value) : null;
+                      setSelectedTextbookId(val);
+                      setSelectedUnitId(null);
+                      leaveSelectionMode();
+                    }}
+                    className="w-full h-9 pl-2.5 pr-7 text-xs bg-gray-50 border border-gray-200 rounded-lg text-gray-700 appearance-none cursor-pointer hover:border-gray-300 transition-colors"
+                  >
+                    <option value="">全部课本</option>
+                    {textbooks?.map((tb) => (
+                      <option key={tb.id} value={tb.id}>
+                        {tb.name}
+                      </option>
+                    ))}
+                  </select>
+                  <svg
+                    className="absolute right-2 top-1/2 -translate-y-1/2 w-3 h-3 text-gray-400 pointer-events-none"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                    strokeWidth={2}
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                  </svg>
+                </div>
 
-                  {/* Unit dropdown */}
-                  <div className="relative min-w-0">
-                    <select
-                      value={selectedUnitId ?? ""}
-                      onChange={(e) => {
-                        const val = e.target.value ? Number(e.target.value) : null;
-                        setSelectedUnitId(val);
-                      }}
-                      disabled={!selectedTextbookId}
-                      className="w-full h-9 pl-2.5 pr-7 text-xs bg-gray-50 border border-gray-200 rounded-lg text-gray-700 appearance-none cursor-pointer hover:border-gray-300 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-                    >
-                      <option value="">全部单元</option>
-                      {units?.map((u) => (
-                        <option key={u.id} value={u.id}>{u.name}</option>
-                      ))}
-                    </select>
-                    <svg className="absolute right-2 top-1/2 -translate-y-1/2 w-3 h-3 text-gray-400 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-                    </svg>
-                  </div>
+                {/* Unit dropdown */}
+                <div className="relative min-w-0">
+                  <select
+                    value={selectedUnitId ?? ""}
+                    onChange={(e) => {
+                      const val = e.target.value ? Number(e.target.value) : null;
+                      setSelectedUnitId(val);
+                      leaveSelectionMode();
+                    }}
+                    disabled={!selectedTextbookId}
+                    className="w-full h-9 pl-2.5 pr-7 text-xs bg-gray-50 border border-gray-200 rounded-lg text-gray-700 appearance-none cursor-pointer hover:border-gray-300 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    <option value="">全部单元</option>
+                    {units?.map((u) => (
+                      <option key={u.id} value={u.id}>
+                        {u.name}
+                      </option>
+                    ))}
+                  </select>
+                  <svg
+                    className="absolute right-2 top-1/2 -translate-y-1/2 w-3 h-3 text-gray-400 pointer-events-none"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                    strokeWidth={2}
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                  </svg>
+                </div>
               </div>
             </div>
 
@@ -289,31 +334,84 @@ export default function Home({ searchMode = false }: { searchMode?: boolean }) {
             )}
 
             <div className="flex items-center justify-between mb-3">
-              <p className="text-xs text-gray-500">
-                共 {filteredWords.length} 个单词
-              </p>
+              <p className="text-xs text-gray-500">共 {filteredWords.length} 个单词</p>
               <div className="flex items-center gap-2">
-                <FilterBar sortBy={sortBy} onSortChange={setSortBy} />
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="icon"
-                  onClick={() => navigate("/search")}
-                  className="h-9 w-9 rounded-lg bg-white"
-                  aria-label="搜索单词"
-                >
-                  <Search className="w-4 h-4" />
-                </Button>
-                {canManageCatalog && (
-                  <Button
-                    onClick={() => { setEditWord(null); setShowWordForm(true); }}
-                    className="bg-gradient-to-r from-indigo-500 to-blue-600 hover:from-indigo-600 hover:to-blue-700 shadow-lg shadow-indigo-200 shrink-0 h-9"
-                  >
-                    <Plus className="w-4 h-4 mr-1" />添加
+                {selectionMode ? (
+                  <Button type="button" variant="ghost" onClick={leaveSelectionMode} className="h-9 px-3 text-xs">
+                    完成
                   </Button>
+                ) : (
+                  <>
+                    <FilterBar sortBy={sortBy} onSortChange={setSortBy} />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      onClick={() => navigate("/search")}
+                      className="h-9 w-9 rounded-lg bg-white"
+                      aria-label="搜索单词"
+                    >
+                      <Search className="w-4 h-4" />
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => setSelectionMode(true)}
+                      className="h-9 px-3 text-xs bg-white"
+                    >
+                      <CheckSquare2 className="w-4 h-4 mr-1" />
+                      选择
+                    </Button>
+                    {canManageCatalog && (
+                      <Button
+                        onClick={() => {
+                          setEditWord(null);
+                          setShowWordForm(true);
+                        }}
+                        className="bg-gradient-to-r from-indigo-500 to-blue-600 hover:from-indigo-600 hover:to-blue-700 shadow-lg shadow-indigo-200 shrink-0 h-9"
+                      >
+                        <Plus className="w-4 h-4 mr-1" />
+                        添加
+                      </Button>
+                    )}
+                  </>
                 )}
               </div>
             </div>
+
+            {selectionMode && (
+              <div className="flex flex-wrap items-center justify-between gap-3 bg-indigo-50 border border-indigo-100 rounded-xl px-3 py-2.5 mb-3">
+                <span className="text-xs text-indigo-700">已选 {selectedWordIds.size} 个</span>
+                <div className="flex items-center gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={toggleSelectAll}
+                    disabled={selectableWordIds.length === 0}
+                    className="h-8 px-3 text-xs bg-white"
+                  >
+                    {allSelectableSelected ? "取消全选" : "全选"}
+                  </Button>
+                  <Button
+                    type="button"
+                    onClick={() =>
+                      addManyToLearning.mutate({
+                        wordIds: [...selectedWordIds],
+                      })
+                    }
+                    disabled={selectedWordIds.size === 0 || addManyToLearning.isPending}
+                    className="h-8 px-3 text-xs bg-indigo-600 hover:bg-indigo-700"
+                  >
+                    {addManyToLearning.isPending
+                      ? "正在加入…"
+                      : `加入学习${selectedWordIds.size > 0 ? ` (${selectedWordIds.size})` : ""}`}
+                  </Button>
+                </div>
+                {addManyToLearning.error && (
+                  <p className="w-full text-xs text-red-500">{addManyToLearning.error.message || "批量加入学习失败"}</p>
+                )}
+              </div>
+            )}
           </>
         )}
 
@@ -332,6 +430,17 @@ export default function Home({ searchMode = false }: { searchMode?: boolean }) {
                 onEdit={openEditForm}
                 onDelete={handleDeleteWord}
                 canManage={canManageCatalog}
+                selectionMode={!searchMode && selectionMode}
+                selected={selectedWordIds.has(word.id)}
+                selectionDisabled={(word.learningStatus || "idle") !== "idle"}
+                onSelectionChange={(selected) => {
+                  setSelectedWordIds((current) => {
+                    const next = new Set(current);
+                    if (selected) next.add(word.id);
+                    else next.delete(word.id);
+                    return next;
+                  });
+                }}
               />
             ))}
           </div>
@@ -340,7 +449,10 @@ export default function Home({ searchMode = false }: { searchMode?: boolean }) {
         {canManageCatalog && (
           <WordForm
             open={showWordForm}
-            onClose={() => { setShowWordForm(false); setEditWord(null); }}
+            onClose={() => {
+              setShowWordForm(false);
+              setEditWord(null);
+            }}
             onSubmit={handleWordSubmit}
             editWord={editWord}
           />

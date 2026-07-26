@@ -43,140 +43,187 @@ export const spellingRouter = createRouter({
   // ========== Learning Queue (Manual) ==========
 
   // Add a word to the learning queue
-  addToLearning: authedQuery
-    .input(z.object({ wordId: z.number() }))
-    .mutation(async ({ ctx, input }) => {
-      const db = getDb();
-      const catalogOwnerId = await getCatalogOwnerId();
-      const catalogWord = await db
-        .select({ id: words.id })
-        .from(words)
-        .where(and(eq(words.id, input.wordId), eq(words.userId, catalogOwnerId)))
-        .limit(1);
-      if (!catalogWord[0]) {
-        throw new TRPCError({ code: "NOT_FOUND", message: "单词不存在" });
-      }
+  addToLearning: authedQuery.input(z.object({ wordId: z.number() })).mutation(async ({ ctx, input }) => {
+    const db = getDb();
+    const catalogOwnerId = await getCatalogOwnerId();
+    const catalogWord = await db
+      .select({ id: words.id })
+      .from(words)
+      .where(and(eq(words.id, input.wordId), eq(words.userId, catalogOwnerId)))
+      .limit(1);
+    if (!catalogWord[0]) {
+      throw new TRPCError({ code: "NOT_FOUND", message: "单词不存在" });
+    }
 
-      // 2. Create or update wordSpellings record with source=manual
-      const existing = await db
-        .select()
-        .from(wordSpellings)
-        .where(
-          and(
-            eq(wordSpellings.wordId, input.wordId),
-            eq(wordSpellings.userId, ctx.user.id)
-          )
-        )
-        .limit(1);
+    // 2. Create or update wordSpellings record with source=manual
+    const existing = await db
+      .select()
+      .from(wordSpellings)
+      .where(and(eq(wordSpellings.wordId, input.wordId), eq(wordSpellings.userId, ctx.user.id)))
+      .limit(1);
 
-      if (existing.length > 0) {
-        // Update to manual source and reset to level 1 for immediate review
-        await db
-          .update(wordSpellings)
-          .set({
-            source: "manual",
-            level: 1,
-            nextReviewAt: new Date(), // Start immediately
-            streak: 0,
-            learningStatus: "active",
-          })
-          .where(eq(wordSpellings.id, existing[0].id));
-      } else {
-        await db.insert(wordSpellings).values({
-          wordId: input.wordId,
-          userId: ctx.user.id,
+    if (existing.length > 0) {
+      // Update to manual source and reset to level 1 for immediate review
+      await db
+        .update(wordSpellings)
+        .set({
+          source: "manual",
           level: 1,
           nextReviewAt: new Date(), // Start immediately
           streak: 0,
-          errorCount: 0,
-          totalAttempts: 0,
-          totalCorrect: 0,
-          source: "manual",
           learningStatus: "active",
-        });
-      }
+        })
+        .where(eq(wordSpellings.id, existing[0].id));
+    } else {
+      await db.insert(wordSpellings).values({
+        wordId: input.wordId,
+        userId: ctx.user.id,
+        level: 1,
+        nextReviewAt: new Date(), // Start immediately
+        streak: 0,
+        errorCount: 0,
+        totalAttempts: 0,
+        totalCorrect: 0,
+        source: "manual",
+        learningStatus: "active",
+      });
+    }
 
-      return { success: true };
-    }),
+    return { success: true };
+  }),
 
-  // Remove a word from the learning queue
-  removeFromLearning: authedQuery
-    .input(z.object({ wordId: z.number() }))
+  // Add multiple catalog words to the learning queue in one request.
+  addManyToLearning: authedQuery
+    .input(
+      z.object({
+        wordIds: z.array(z.number().int().positive()).min(1).max(1000),
+      }),
+    )
     .mutation(async ({ ctx, input }) => {
-      const db = getDb();
-
-      // Change source back to auto
-      await db
-        .update(wordSpellings)
-        .set({ source: "auto", learningStatus: "idle" })
-        .where(
-          and(
-            eq(wordSpellings.wordId, input.wordId),
-            eq(wordSpellings.userId, ctx.user.id)
-          )
-        );
-
-      return { success: true };
-    }),
-
-  // Pause a word (keep in queue but temporarily skip)
-  pauseLearning: authedQuery
-    .input(z.object({ wordId: z.number() }))
-    .mutation(async ({ ctx, input }) => {
-      const db = getDb();
-
-      // Push next review to tomorrow
-      const tomorrow = new Date(Date.now() + 24 * 60 * 60 * 1000);
-      await db
-        .update(wordSpellings)
-        .set({ nextReviewAt: tomorrow, learningStatus: "paused" })
-        .where(
-          and(
-            eq(wordSpellings.wordId, input.wordId),
-            eq(wordSpellings.userId, ctx.user.id)
-          )
-        );
-
-      return { success: true };
-    }),
-
-  // Get learning status for a word
-  getStatus: authedQuery
-    .input(z.object({ wordId: z.number() }))
-    .query(async ({ ctx, input }) => {
       const db = getDb();
       const catalogOwnerId = await getCatalogOwnerId();
+      const wordIds = [...new Set(input.wordIds)];
 
-      const wordRows = await db
+      const catalogWords = await db
         .select({ id: words.id })
         .from(words)
-        .where(and(eq(words.id, input.wordId), eq(words.userId, catalogOwnerId)))
-        .limit(1);
+        .where(and(eq(words.userId, catalogOwnerId), inArray(words.id, wordIds)));
+      if (catalogWords.length !== wordIds.length) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "部分单词不存在" });
+      }
 
-      const spellingRows = await db
+      const existing = await db
         .select({
-          source: wordSpellings.source,
+          id: wordSpellings.id,
+          wordId: wordSpellings.wordId,
           learningStatus: wordSpellings.learningStatus,
         })
         .from(wordSpellings)
-        .where(
-          and(
-            eq(wordSpellings.wordId, input.wordId),
-            eq(wordSpellings.userId, ctx.user.id)
-          )
-        )
-        .limit(1);
+        .where(and(eq(wordSpellings.userId, ctx.user.id), inArray(wordSpellings.wordId, wordIds)));
+
+      const existingWordIds = new Set(existing.map((record) => record.wordId));
+      const recordsToActivate = existing.filter((record) => record.learningStatus !== "active");
+      const activatedWordIds = new Set(recordsToActivate.map((record) => record.wordId));
+      const missingWordIds = wordIds.filter((wordId) => !existingWordIds.has(wordId));
+      const now = new Date();
+
+      await db.transaction(async (tx) => {
+        if (recordsToActivate.length > 0) {
+          await tx
+            .update(wordSpellings)
+            .set({
+              source: "manual",
+              level: 1,
+              nextReviewAt: now,
+              streak: 0,
+              learningStatus: "active",
+            })
+            .where(
+              inArray(
+                wordSpellings.id,
+                recordsToActivate.map((record) => record.id),
+              ),
+            );
+        }
+
+        if (missingWordIds.length > 0) {
+          await tx.insert(wordSpellings).values(
+            missingWordIds.map((wordId) => ({
+              wordId,
+              userId: ctx.user.id,
+              level: 1,
+              nextReviewAt: now,
+              streak: 0,
+              errorCount: 0,
+              totalAttempts: 0,
+              totalCorrect: 0,
+              source: "manual" as const,
+              learningStatus: "active" as const,
+            })),
+          );
+        }
+      });
 
       return {
-        learningStatus: wordRows[0]
-          ? spellingRows[0]?.learningStatus || "idle"
-          : "idle",
-        isInQueue: Boolean(
-          spellingRows[0] && spellingRows[0].learningStatus !== "idle",
-        ),
-        source: spellingRows[0]?.source || null,
+        success: true,
+        addedCount: activatedWordIds.size + missingWordIds.length,
+        unchangedCount: wordIds.length - activatedWordIds.size - missingWordIds.length,
       };
     }),
+
+  // Remove a word from the learning queue
+  removeFromLearning: authedQuery.input(z.object({ wordId: z.number() })).mutation(async ({ ctx, input }) => {
+    const db = getDb();
+
+    // Change source back to auto
+    await db
+      .update(wordSpellings)
+      .set({ source: "auto", learningStatus: "idle" })
+      .where(and(eq(wordSpellings.wordId, input.wordId), eq(wordSpellings.userId, ctx.user.id)));
+
+    return { success: true };
+  }),
+
+  // Pause a word (keep in queue but temporarily skip)
+  pauseLearning: authedQuery.input(z.object({ wordId: z.number() })).mutation(async ({ ctx, input }) => {
+    const db = getDb();
+
+    // Push next review to tomorrow
+    const tomorrow = new Date(Date.now() + 24 * 60 * 60 * 1000);
+    await db
+      .update(wordSpellings)
+      .set({ nextReviewAt: tomorrow, learningStatus: "paused" })
+      .where(and(eq(wordSpellings.wordId, input.wordId), eq(wordSpellings.userId, ctx.user.id)));
+
+    return { success: true };
+  }),
+
+  // Get learning status for a word
+  getStatus: authedQuery.input(z.object({ wordId: z.number() })).query(async ({ ctx, input }) => {
+    const db = getDb();
+    const catalogOwnerId = await getCatalogOwnerId();
+
+    const wordRows = await db
+      .select({ id: words.id })
+      .from(words)
+      .where(and(eq(words.id, input.wordId), eq(words.userId, catalogOwnerId)))
+      .limit(1);
+
+    const spellingRows = await db
+      .select({
+        source: wordSpellings.source,
+        learningStatus: wordSpellings.learningStatus,
+      })
+      .from(wordSpellings)
+      .where(and(eq(wordSpellings.wordId, input.wordId), eq(wordSpellings.userId, ctx.user.id)))
+      .limit(1);
+
+    return {
+      learningStatus: wordRows[0] ? spellingRows[0]?.learningStatus || "idle" : "idle",
+      isInQueue: Boolean(spellingRows[0] && spellingRows[0].learningStatus !== "idle"),
+      source: spellingRows[0]?.source || null,
+    };
+  }),
 
   // Get words currently in learning (active status)
   getLearningQueue: authedQuery.query(async ({ ctx }) => {
@@ -185,12 +232,7 @@ export const spellingRouter = createRouter({
     const spellingRecords = await db
       .select()
       .from(wordSpellings)
-      .where(
-        and(
-          eq(wordSpellings.userId, ctx.user.id),
-          eq(wordSpellings.learningStatus, "active")
-        )
-      );
+      .where(and(eq(wordSpellings.userId, ctx.user.id), eq(wordSpellings.learningStatus, "active")));
 
     const wordIds = spellingRecords.map((record) => record.wordId);
     if (wordIds.length === 0) return [];
@@ -198,12 +240,7 @@ export const spellingRouter = createRouter({
     const activeWords = await db
       .select()
       .from(words)
-      .where(
-        and(
-          eq(words.userId, catalogOwnerId),
-          inArray(words.id, wordIds)
-        )
-      )
+      .where(and(eq(words.userId, catalogOwnerId), inArray(words.id, wordIds)))
       .orderBy(desc(words.createdAt));
 
     const spMap = new Map(spellingRecords.map((r) => [r.wordId, r]));
@@ -217,11 +254,14 @@ export const spellingRouter = createRouter({
       .from(wordTags)
       .innerJoin(tags, eq(wordTags.tagId, tags.id))
       .where(inArray(wordTags.wordId, wordIds));
-    const tagsByWord = new Map<number, Array<{
-      id: number;
-      name: string;
-      description: string | null;
-    }>>();
+    const tagsByWord = new Map<
+      number,
+      Array<{
+        id: number;
+        name: string;
+        description: string | null;
+      }>
+    >();
     for (const tag of tagRows) {
       const current = tagsByWord.get(tag.wordId) ?? [];
       current.push({
@@ -271,8 +311,8 @@ export const spellingRouter = createRouter({
         and(
           eq(wordSpellings.userId, ctx.user.id),
           lte(wordSpellings.nextReviewAt, now),
-          eq(wordSpellings.learningStatus, "active")
-        )
+          eq(wordSpellings.learningStatus, "active"),
+        ),
       )
       .orderBy(wordSpellings.source, wordSpellings.level);
 
@@ -290,12 +330,7 @@ export const spellingRouter = createRouter({
         groupId: words.groupId,
       })
       .from(words)
-      .where(
-        and(
-          eq(words.userId, catalogOwnerId),
-          inArray(words.id, wordIds)
-        )
-      );
+      .where(and(eq(words.userId, catalogOwnerId), inArray(words.id, wordIds)));
 
     const wordMap = new Map(wordList.map((w) => [w.id, w]));
 
@@ -329,7 +364,7 @@ export const spellingRouter = createRouter({
         userInput: z.string().optional(),
         practiceMode: z.enum(["blocks", "fillblank", "flash"]),
         duration: z.number().optional(),
-      })
+      }),
     )
     .mutation(async ({ ctx, input }) => {
       const db = getDb();
@@ -346,12 +381,7 @@ export const spellingRouter = createRouter({
       const records = await db
         .select()
         .from(wordSpellings)
-        .where(
-          and(
-            eq(wordSpellings.wordId, input.wordId),
-            eq(wordSpellings.userId, ctx.user.id)
-          )
-        )
+        .where(and(eq(wordSpellings.wordId, input.wordId), eq(wordSpellings.userId, ctx.user.id)))
         .limit(1);
 
       let record = records[0];
@@ -450,14 +480,14 @@ export const spellingRouter = createRouter({
     if (wordIds.length === 0) return [];
 
     const wordList = await db
-      .select({ id: words.id, word: words.word, phonetic: words.phonetic, definition: words.definition })
+      .select({
+        id: words.id,
+        word: words.word,
+        phonetic: words.phonetic,
+        definition: words.definition,
+      })
       .from(words)
-      .where(
-        and(
-          eq(words.userId, catalogOwnerId),
-          inArray(words.id, wordIds)
-        )
-      );
+      .where(and(eq(words.userId, catalogOwnerId), inArray(words.id, wordIds)));
 
     const wordMap = new Map(wordList.map((w) => [w.id, w]));
 
@@ -476,44 +506,26 @@ export const spellingRouter = createRouter({
     const catalogOwnerId = await getCatalogOwnerId();
 
     // Total words
-    const totalWords = await db
-      .select({ count: count() })
-      .from(words)
-      .where(eq(words.userId, catalogOwnerId));
+    const totalWords = await db.select({ count: count() }).from(words).where(eq(words.userId, catalogOwnerId));
 
     // Active learning words
     const learningWords = await db
       .select({ count: count() })
       .from(wordSpellings)
-      .where(
-        and(
-          eq(wordSpellings.userId, ctx.user.id),
-          eq(wordSpellings.learningStatus, "active")
-        )
-      );
+      .where(and(eq(wordSpellings.userId, ctx.user.id), eq(wordSpellings.learningStatus, "active")));
 
     // Paused words
     const pausedWords = await db
       .select({ count: count() })
       .from(wordSpellings)
-      .where(
-        and(
-          eq(wordSpellings.userId, ctx.user.id),
-          eq(wordSpellings.learningStatus, "paused")
-        )
-      );
+      .where(and(eq(wordSpellings.userId, ctx.user.id), eq(wordSpellings.learningStatus, "paused")));
 
     // Get active word IDs for due review and byLevel
     const now = new Date();
     const activeWordIdsResult = await db
       .select({ id: wordSpellings.wordId })
       .from(wordSpellings)
-      .where(
-        and(
-          eq(wordSpellings.userId, ctx.user.id),
-          eq(wordSpellings.learningStatus, "active")
-        )
-      );
+      .where(and(eq(wordSpellings.userId, ctx.user.id), eq(wordSpellings.learningStatus, "active")));
     const activeIds = activeWordIdsResult.map((w) => w.id);
 
     // By level - only for active words
@@ -525,12 +537,7 @@ export const spellingRouter = createRouter({
           count: count(),
         })
         .from(wordSpellings)
-        .where(
-          and(
-            eq(wordSpellings.userId, ctx.user.id),
-            inArray(wordSpellings.wordId, activeIds)
-          )
-        )
+        .where(and(eq(wordSpellings.userId, ctx.user.id), inArray(wordSpellings.wordId, activeIds)))
         .groupBy(wordSpellings.level);
     }
 
@@ -547,8 +554,8 @@ export const spellingRouter = createRouter({
           and(
             eq(wordSpellings.userId, ctx.user.id),
             lte(wordSpellings.nextReviewAt, now),
-            inArray(wordSpellings.wordId, activeIds)
-          )
+            inArray(wordSpellings.wordId, activeIds),
+          ),
         );
 
       // Newly learned = manual source + never practiced (totalAttempts=0)
@@ -560,8 +567,8 @@ export const spellingRouter = createRouter({
             eq(wordSpellings.userId, ctx.user.id),
             eq(wordSpellings.source, "manual"),
             eq(wordSpellings.totalAttempts, 0),
-            inArray(wordSpellings.wordId, activeIds)
-          )
+            inArray(wordSpellings.wordId, activeIds),
+          ),
         );
     }
 
@@ -577,12 +584,7 @@ export const spellingRouter = createRouter({
     const todaySessions = await db
       .select({ count: count() })
       .from(spellingSessions)
-      .where(
-        and(
-          eq(spellingSessions.userId, ctx.user.id),
-          gte(spellingSessions.createdAt, todayStart)
-        )
-      );
+      .where(and(eq(spellingSessions.userId, ctx.user.id), gte(spellingSessions.createdAt, todayStart)));
 
     return {
       totalWords: totalWords[0]?.count ?? 0,
@@ -610,12 +612,7 @@ export const spellingRouter = createRouter({
       await tx.delete(todayWordSelections).where(eq(todayWordSelections.userId, userId));
       await tx
         .delete(wordLogs)
-        .where(
-          and(
-            eq(wordLogs.userId, userId),
-            inArray(wordLogs.action, ["review", "test_pass", "test_fail"])
-          )
-        );
+        .where(and(eq(wordLogs.userId, userId), inArray(wordLogs.action, ["review", "test_pass", "test_fail"])));
       await tx.delete(wordSpellings).where(eq(wordSpellings.userId, userId));
     });
 
@@ -646,12 +643,7 @@ export const spellingRouter = createRouter({
         example: words.example,
       })
       .from(words)
-      .where(
-        and(
-          eq(words.userId, catalogOwnerId),
-          inArray(words.id, wordIds)
-        )
-      )
+      .where(and(eq(words.userId, catalogOwnerId), inArray(words.id, wordIds)))
       .orderBy(desc(words.createdAt));
 
     // Get error counts per word
@@ -673,56 +665,46 @@ export const spellingRouter = createRouter({
   }),
 
   /** Clear all error records for a word (mark as mastered) */
-  clearErrors: authedQuery
-    .input(z.object({ wordId: z.number() }))
-    .mutation(async ({ ctx, input }) => {
-      const db = getDb();
-      const catalogOwnerId = await getCatalogOwnerId();
+  clearErrors: authedQuery.input(z.object({ wordId: z.number() })).mutation(async ({ ctx, input }) => {
+    const db = getDb();
+    const catalogOwnerId = await getCatalogOwnerId();
 
-      // Verify the word belongs to the user
-      const wordCheck = await db
-        .select({ id: words.id })
-        .from(words)
-        .where(and(eq(words.id, input.wordId), eq(words.userId, catalogOwnerId)))
-        .limit(1);
+    // Verify the word belongs to the user
+    const wordCheck = await db
+      .select({ id: words.id })
+      .from(words)
+      .where(and(eq(words.id, input.wordId), eq(words.userId, catalogOwnerId)))
+      .limit(1);
 
-      if (wordCheck.length === 0) {
-        return { success: false, message: "单词不存在" };
-      }
+    if (wordCheck.length === 0) {
+      return { success: false, message: "单词不存在" };
+    }
 
-      // Delete all error records for this word
-      const result = await db
-        .delete(spellingErrors)
-        .where(
-          and(
-            eq(spellingErrors.wordId, input.wordId),
-            eq(spellingErrors.userId, ctx.user.id)
-          )
-        );
+    // Delete all error records for this word
+    const result = await db
+      .delete(spellingErrors)
+      .where(and(eq(spellingErrors.wordId, input.wordId), eq(spellingErrors.userId, ctx.user.id)));
 
-      // Also reset errorCount in wordSpellings
-      await db
-        .update(wordSpellings)
-        .set({ errorCount: 0 })
-        .where(
-          and(
-            eq(wordSpellings.wordId, input.wordId),
-            eq(wordSpellings.userId, ctx.user.id)
-          )
-        );
+    // Also reset errorCount in wordSpellings
+    await db
+      .update(wordSpellings)
+      .set({ errorCount: 0 })
+      .where(and(eq(wordSpellings.wordId, input.wordId), eq(wordSpellings.userId, ctx.user.id)));
 
-      return { success: true, deletedCount: result.length };
-    }),
+    return { success: true, deletedCount: result.length };
+  }),
 
   // ========== Practice Words ==========
 
   getPracticeWords: authedQuery
     .input(
-      z.object({
-        limit: z.number().min(1).max(50).default(10),
-        groupId: z.number().optional(),
-        source: z.enum(["manual", "auto", "all"]).default("all"),
-      }).optional()
+      z
+        .object({
+          limit: z.number().min(1).max(50).default(10),
+          groupId: z.number().optional(),
+          source: z.enum(["manual", "auto", "all"]).default("all"),
+        })
+        .optional(),
     )
     .query(async ({ ctx, input }) => {
       const db = getDb();
@@ -750,8 +732,8 @@ export const spellingRouter = createRouter({
             and(
               eq(wordSpellings.userId, ctx.user.id),
               eq(wordSpellings.source, "manual"),
-              eq(wordSpellings.learningStatus, "active")
-            )
+              eq(wordSpellings.learningStatus, "active"),
+            ),
           );
         const manualWordIds = manualRows.map((row) => row.wordId);
         if (manualWordIds.length === 0) return [];
@@ -780,12 +762,7 @@ export const spellingRouter = createRouter({
         const spellingRecords = await db
           .select()
           .from(wordSpellings)
-          .where(
-            and(
-              eq(wordSpellings.userId, ctx.user.id),
-              inArray(wordSpellings.wordId, wordIds)
-            )
-          );
+          .where(and(eq(wordSpellings.userId, ctx.user.id), inArray(wordSpellings.wordId, wordIds)));
         spellingMap = new Map(spellingRecords.map((r) => [r.wordId, r]));
       }
 
@@ -813,7 +790,7 @@ export const spellingRouter = createRouter({
         correctCount: z.number(),
         duration: z.number().optional(),
         wordIds: z.array(z.number()).optional(),
-      })
+      }),
     )
     .mutation(async ({ ctx, input }) => {
       const db = getDb();
@@ -837,85 +814,71 @@ export const spellingRouter = createRouter({
     const rows = await db
       .select({ wordId: todayWordSelections.wordId })
       .from(todayWordSelections)
-      .where(
-        and(
-          eq(todayWordSelections.userId, ctx.user.id),
-          eq(todayWordSelections.date, today)
-        )
-      );
+      .where(and(eq(todayWordSelections.userId, ctx.user.id), eq(todayWordSelections.date, today)));
     return rows.map((r) => r.wordId);
   }),
 
   /** Replace today's selections */
-  setTodaySelections: authedQuery
-    .input(z.object({ wordIds: z.array(z.number()) }))
-    .mutation(async ({ ctx, input }) => {
-      const db = getDb();
-      const today = new Date().toISOString().split("T")[0];
+  setTodaySelections: authedQuery.input(z.object({ wordIds: z.array(z.number()) })).mutation(async ({ ctx, input }) => {
+    const db = getDb();
+    const today = new Date().toISOString().split("T")[0];
 
-      // Delete existing selections for today
+    // Delete existing selections for today
+    await db
+      .delete(todayWordSelections)
+      .where(and(eq(todayWordSelections.userId, ctx.user.id), eq(todayWordSelections.date, today)));
+
+    // Insert new selections
+    if (input.wordIds.length > 0) {
+      await db.insert(todayWordSelections).values(
+        input.wordIds.map((wordId) => ({
+          userId: ctx.user.id,
+          wordId,
+          date: today,
+        })),
+      );
+    }
+
+    return { success: true };
+  }),
+
+  /** Toggle a single word in today's selections */
+  toggleTodaySelection: authedQuery.input(z.object({ wordId: z.number() })).mutation(async ({ ctx, input }) => {
+    const db = getDb();
+    const today = new Date().toISOString().split("T")[0];
+
+    const existing = await db
+      .select({ id: todayWordSelections.id })
+      .from(todayWordSelections)
+      .where(
+        and(
+          eq(todayWordSelections.userId, ctx.user.id),
+          eq(todayWordSelections.wordId, input.wordId),
+          eq(todayWordSelections.date, today),
+        ),
+      )
+      .limit(1);
+
+    if (existing.length > 0) {
+      // Remove
       await db
         .delete(todayWordSelections)
         .where(
           and(
             eq(todayWordSelections.userId, ctx.user.id),
-            eq(todayWordSelections.date, today)
-          )
-        );
-
-      // Insert new selections
-      if (input.wordIds.length > 0) {
-        await db.insert(todayWordSelections).values(
-          input.wordIds.map((wordId) => ({
-            userId: ctx.user.id,
-            wordId,
-            date: today,
-          }))
-        );
-      }
-
-      return { success: true };
-    }),
-
-  /** Toggle a single word in today's selections */
-  toggleTodaySelection: authedQuery
-    .input(z.object({ wordId: z.number() }))
-    .mutation(async ({ ctx, input }) => {
-      const db = getDb();
-      const today = new Date().toISOString().split("T")[0];
-
-      const existing = await db
-        .select({ id: todayWordSelections.id })
-        .from(todayWordSelections)
-        .where(
-          and(
-            eq(todayWordSelections.userId, ctx.user.id),
             eq(todayWordSelections.wordId, input.wordId),
-            eq(todayWordSelections.date, today)
-          )
-        )
-        .limit(1);
-
-      if (existing.length > 0) {
-        // Remove
-        await db
-          .delete(todayWordSelections)
-          .where(
-            and(
-              eq(todayWordSelections.userId, ctx.user.id),
-              eq(todayWordSelections.wordId, input.wordId),
-              eq(todayWordSelections.date, today)
-            )
-          );
-        return { selected: false };
-      } else {
-        // Add
-        await db.insert(todayWordSelections).values({
-          userId: ctx.user.id,
-          wordId: input.wordId,
-          date: today,
-        });
-        return { selected: true };
-      }
-    }),
+            eq(todayWordSelections.date, today),
+          ),
+        );
+      return { selected: false };
+    } else {
+      // Add
+      await db.insert(todayWordSelections).values({
+        userId: ctx.user.id,
+        wordId: input.wordId,
+        date: today,
+      });
+      return { selected: true };
+    }
+  }),
 });

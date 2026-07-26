@@ -7,12 +7,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { trpc } from "@/providers/trpc";
 import { speakWord } from "@/utils/speech";
 import TagDetailDialog from "./TagDetailDialog";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
   Volume2,
   Edit3,
@@ -24,6 +19,7 @@ import {
   GraduationCap,
   Pause,
   CheckCircle2,
+  Circle,
   Loader2,
 } from "lucide-react";
 import { useState } from "react";
@@ -56,14 +52,31 @@ interface WordCardProps {
   onEdit: (word: WordCardData) => void;
   onDelete: (id: number) => void;
   canManage?: boolean;
+  selectionMode?: boolean;
+  selected?: boolean;
+  selectionDisabled?: boolean;
+  onSelectionChange?: (selected: boolean) => void;
 }
 
-export default function WordCard({ word, onEdit, onDelete, canManage = false }: WordCardProps) {
+export default function WordCard({
+  word,
+  onEdit,
+  onDelete,
+  canManage = false,
+  selectionMode = false,
+  selected = false,
+  selectionDisabled = false,
+  onSelectionChange,
+}: WordCardProps) {
   const [expanded, setExpanded] = useState(false);
-  const [localStatus, setLocalStatus] = useState(word.learningStatus || "idle");
+  const [localStatus, setLocalStatus] = useState<WordCardData["learningStatus"] | null>(null);
   const [tagDialogId, setTagDialogId] = useState<number | null>(null);
   const [editTagOpen, setEditTagOpen] = useState(false);
-  const [editTagForm, setEditTagForm] = useState({ id: 0, name: "", description: "" });
+  const [editTagForm, setEditTagForm] = useState({
+    id: 0,
+    name: "",
+    description: "",
+  });
 
   const utils = trpc.useUtils();
 
@@ -93,22 +106,25 @@ export default function WordCard({ word, onEdit, onDelete, canManage = false }: 
     },
   });
 
-  const isActive = localStatus === "active";
-  const isPaused = localStatus === "paused";
-  const isIdle = localStatus === "idle";
+  const effectiveStatus = localStatus ?? word.learningStatus ?? "idle";
+  const isActive = effectiveStatus === "active";
+  const isPaused = effectiveStatus === "paused";
+  const isIdle = effectiveStatus === "idle";
 
   return (
     <>
       {/* Simple div list item — no Card/hover effects that break mobile touch */}
-      <div className="bg-white rounded-xl border border-gray-100 p-4">
+      <div
+        className={`bg-white rounded-xl border p-4 ${
+          selected ? "border-indigo-400 ring-2 ring-indigo-100" : "border-gray-100"
+        }`}
+      >
         <div className="flex items-start justify-between gap-3">
           <div className="flex-1 min-w-0">
             {/* Word and phonetic */}
             <div className="flex items-center gap-2 flex-wrap">
               <h3 className="text-lg font-bold text-gray-900">{word.word}</h3>
-              {word.phonetic && (
-                <span className="text-sm text-gray-400 font-mono">{word.phonetic}</span>
-              )}
+              {word.phonetic && <span className="text-sm text-gray-400 font-mono">{word.phonetic}</span>}
               <button
                 onClick={() => speakWord(word.word, word.id)}
                 className="p-2 rounded-lg hover:bg-indigo-50 text-gray-400 hover:text-indigo-600 transition-colors active:scale-90"
@@ -120,12 +136,14 @@ export default function WordCard({ word, onEdit, onDelete, canManage = false }: 
               {/* Learning status badge */}
               {isActive && (
                 <Badge className="text-[10px] px-1.5 py-0 bg-emerald-50 text-emerald-600 border-emerald-200 hover:bg-emerald-50">
-                  <CheckCircle2 className="w-2.5 h-2.5 mr-0.5" />学习中
+                  <CheckCircle2 className="w-2.5 h-2.5 mr-0.5" />
+                  学习中
                 </Badge>
               )}
               {isPaused && (
                 <Badge className="text-[10px] px-1.5 py-0 bg-amber-50 text-amber-600 border-amber-200 hover:bg-amber-50">
-                  <Pause className="w-2.5 h-2.5 mr-0.5" />暂停
+                  <Pause className="w-2.5 h-2.5 mr-0.5" />
+                  暂停
                 </Badge>
               )}
             </div>
@@ -136,7 +154,10 @@ export default function WordCard({ word, onEdit, onDelete, canManage = false }: 
             {/* Group and Tags */}
             <div className="flex flex-wrap items-center gap-1.5 mt-2">
               {word.textbookName && (
-                <Badge variant="outline" className="text-xs px-2 py-0.5 bg-gray-50 text-gray-500 border-gray-200 cursor-default">
+                <Badge
+                  variant="outline"
+                  className="text-xs px-2 py-0.5 bg-gray-50 text-gray-500 border-gray-200 cursor-default"
+                >
                   <Folder className="w-3 h-3 mr-1" />
                   {word.textbookName}
                   {word.groupName ? ` > ${word.groupName}` : ""}
@@ -157,81 +178,115 @@ export default function WordCard({ word, onEdit, onDelete, canManage = false }: 
 
           {/* Actions — always visible, no hover opacity */}
           <div className="flex flex-col items-end gap-1 shrink-0">
-            {isIdle ? (
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-7 px-2 text-xs border-emerald-200 text-emerald-600 hover:bg-emerald-50 hover:text-emerald-700"
-                onClick={() => addToLearning.mutate({ wordId: word.id })}
-                disabled={addToLearning.isPending}
-              >
-                <GraduationCap className="w-3.5 h-3.5 mr-1" />
-                {addToLearning.isPending ? "..." : "加入学习"}
-              </Button>
+            {selectionMode ? (
+              selectionDisabled ? (
+                <span className="inline-flex items-center gap-1 h-8 px-2 text-xs text-emerald-600 bg-emerald-50 rounded-lg">
+                  <CheckCircle2 className="w-4 h-4" />
+                  已在学习中
+                </span>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => onSelectionChange?.(!selected)}
+                  className={`inline-flex items-center justify-center h-9 w-9 rounded-lg border transition-colors ${
+                    selected
+                      ? "border-indigo-500 bg-indigo-500 text-white"
+                      : "border-gray-200 bg-white text-gray-400 hover:border-indigo-300 hover:text-indigo-500"
+                  }`}
+                  aria-label={selected ? `取消选择 ${word.word}` : `选择 ${word.word}`}
+                >
+                  {selected ? <CheckCircle2 className="w-5 h-5" /> : <Circle className="w-5 h-5" />}
+                </button>
+              )
             ) : (
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-7 px-2 text-xs border-emerald-200 bg-emerald-50 text-emerald-600 hover:bg-white hover:text-emerald-700"
-                onClick={() => removeFromLearning.mutate({ wordId: word.id })}
-                disabled={removeFromLearning.isPending}
-              >
-                <CheckCircle2 className="w-3.5 h-3.5 mr-1" />
-                {removeFromLearning.isPending ? "..." : "已加入"}
-              </Button>
-            )}
+              <>
+                {isIdle ? (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-7 px-2 text-xs border-emerald-200 text-emerald-600 hover:bg-emerald-50 hover:text-emerald-700"
+                    onClick={() => addToLearning.mutate({ wordId: word.id })}
+                    disabled={addToLearning.isPending}
+                  >
+                    <GraduationCap className="w-3.5 h-3.5 mr-1" />
+                    {addToLearning.isPending ? "..." : "加入学习"}
+                  </Button>
+                ) : (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-7 px-2 text-xs border-emerald-200 bg-emerald-50 text-emerald-600 hover:bg-white hover:text-emerald-700"
+                    onClick={() => removeFromLearning.mutate({ wordId: word.id })}
+                    disabled={removeFromLearning.isPending}
+                  >
+                    <CheckCircle2 className="w-3.5 h-3.5 mr-1" />
+                    {removeFromLearning.isPending ? "..." : "已加入"}
+                  </Button>
+                )}
 
-            {/* Edit/Delete — always visible */}
-            {canManage && (
-              <div className="flex items-center gap-1">
-                <Button variant="ghost" size="icon" className="h-7 w-7 text-gray-400 hover:text-indigo-600" onClick={() => onEdit(word)}>
-                  <Edit3 className="w-3.5 h-3.5" />
-                </Button>
-                <Button variant="ghost" size="icon" className="h-7 w-7 text-gray-400 hover:text-red-500" onClick={() => onDelete(word.id)}>
-                  <Trash2 className="w-3.5 h-3.5" />
-                </Button>
-              </div>
+                {/* Edit/Delete — always visible */}
+                {canManage && (
+                  <div className="flex items-center gap-1">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7 text-gray-400 hover:text-indigo-600"
+                      onClick={() => onEdit(word)}
+                    >
+                      <Edit3 className="w-3.5 h-3.5" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7 text-gray-400 hover:text-red-500"
+                      onClick={() => onDelete(word.id)}
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </Button>
+                  </div>
+                )}
+              </>
             )}
           </div>
         </div>
 
-            {/* Expand toggle */}
-            {(word.example || word.notes) && (
-              <button
-                onClick={() => setExpanded(!expanded)}
-                className="flex items-center gap-1.5 mt-2 px-3 py-1.5 -ml-2 rounded-lg text-xs text-gray-500 hover:text-gray-700 hover:bg-gray-100 transition-colors active:bg-gray-200"
-              >
-                {expanded ? (
-                  <>
-                    <ChevronUp className="w-4 h-4" />
-                    <span>收起详情</span>
-                  </>
-                ) : (
-                  <>
-                    <ChevronDown className="w-4 h-4" />
-                    <span>查看详情</span>
-                  </>
-                )}
-              </button>
+        {/* Expand toggle */}
+        {(word.example || word.notes) && (
+          <button
+            onClick={() => setExpanded(!expanded)}
+            className="flex items-center gap-1.5 mt-2 px-3 py-1.5 -ml-2 rounded-lg text-xs text-gray-500 hover:text-gray-700 hover:bg-gray-100 transition-colors active:bg-gray-200"
+          >
+            {expanded ? (
+              <>
+                <ChevronUp className="w-4 h-4" />
+                <span>收起详情</span>
+              </>
+            ) : (
+              <>
+                <ChevronDown className="w-4 h-4" />
+                <span>查看详情</span>
+              </>
             )}
+          </button>
+        )}
 
-          {/* Expanded content */}
-          {expanded && (word.example || word.notes) && (
-            <div className="px-4 pb-4 pt-0 space-y-2 border-t border-gray-50">
-              {word.example && (
-                <div className="mt-3">
-                  <p className="text-xs text-gray-400 mb-1">例句</p>
-                  <HighlightedExample example={word.example} word={word.word} />
-                </div>
-              )}
-              {word.notes && (
-                <div className="mt-2">
-                  <p className="text-xs text-gray-400 mb-1">备注</p>
-                  <p className="text-sm text-gray-600 bg-amber-50 rounded-lg p-2.5 whitespace-pre-line">{word.notes}</p>
-                </div>
-              )}
-            </div>
-          )}
+        {/* Expanded content */}
+        {expanded && (word.example || word.notes) && (
+          <div className="px-4 pb-4 pt-0 space-y-2 border-t border-gray-50">
+            {word.example && (
+              <div className="mt-3">
+                <p className="text-xs text-gray-400 mb-1">例句</p>
+                <HighlightedExample example={word.example} word={word.word} />
+              </div>
+            )}
+            {word.notes && (
+              <div className="mt-2">
+                <p className="text-xs text-gray-400 mb-1">备注</p>
+                <p className="text-sm text-gray-600 bg-amber-50 rounded-lg p-2.5 whitespace-pre-line">{word.notes}</p>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Tag Detail Dialog */}
@@ -239,12 +294,18 @@ export default function WordCard({ word, onEdit, onDelete, canManage = false }: 
         tagId={tagDialogId}
         open={!!tagDialogId}
         onClose={() => setTagDialogId(null)}
-        onEdit={canManage
-          ? (tag) => {
-              setEditTagForm({ id: tag.id, name: tag.name, description: tag.description || "" });
-              setEditTagOpen(true);
-            }
-          : undefined}
+        onEdit={
+          canManage
+            ? (tag) => {
+                setEditTagForm({
+                  id: tag.id,
+                  name: tag.name,
+                  description: tag.description || "",
+                });
+                setEditTagOpen(true);
+              }
+            : undefined
+        }
       />
 
       {/* Tag Edit Dialog */}
@@ -261,7 +322,12 @@ export default function WordCard({ word, onEdit, onDelete, canManage = false }: 
               <Label className="text-sm">标签名称</Label>
               <Input
                 value={editTagForm.name}
-                onChange={(e) => setEditTagForm((p) => ({ ...p, name: e.target.value.slice(0, 50) }))}
+                onChange={(e) =>
+                  setEditTagForm((p) => ({
+                    ...p,
+                    name: e.target.value.slice(0, 50),
+                  }))
+                }
                 placeholder="标签名称"
                 className="h-10 mt-1"
                 autoFocus
@@ -292,7 +358,7 @@ export default function WordCard({ word, onEdit, onDelete, canManage = false }: 
                     },
                     {
                       onSuccess: () => setEditTagOpen(false),
-                    }
+                    },
                   );
                 }}
               >
@@ -320,8 +386,25 @@ function stemMatch(token: string, word: string): { stem: string; suffix: string 
     if (suffix.length === 0) return { stem: token, suffix: "" };
     // Validate it's a known inflection suffix
     const validSuffixes = [
-      "s", "es", "ed", "ing", "er", "est", "d", "'s", "'d", "'ll",
-      "'re", "'ve", "'m", "’s", "’d", "’ll", "’re", "’ve", "’m",
+      "s",
+      "es",
+      "ed",
+      "ing",
+      "er",
+      "est",
+      "d",
+      "'s",
+      "'d",
+      "'ll",
+      "'re",
+      "'ve",
+      "'m",
+      "’s",
+      "’d",
+      "’ll",
+      "’re",
+      "’ve",
+      "’m",
     ];
     if (validSuffixes.includes(suffix.toLowerCase())) {
       return { stem: token.slice(0, word.length), suffix };
@@ -378,7 +461,10 @@ function HighlightedExample({ example, word }: { example: string; word: string }
   while ((match = regex.exec(example)) !== null) {
     // Add text before match
     if (match.index > lastIndex) {
-      parts.push({ type: "text", value: example.slice(lastIndex, match.index) });
+      parts.push({
+        type: "text",
+        value: example.slice(lastIndex, match.index),
+      });
     }
 
     const fullWord = match[1];

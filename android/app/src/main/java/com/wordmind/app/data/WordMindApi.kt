@@ -86,6 +86,14 @@ class WordMindApi(context: Context) {
         )
     }
 
+    suspend fun addManyToLearning(wordIds: List<Int>) {
+        if (wordIds.isEmpty()) return
+        mutate(
+            "spelling.addManyToLearning",
+            JSONObject().put("wordIds", JSONArray(wordIds)),
+        )
+    }
+
     suspend fun saveWord(id: Int?, draft: WordDraft) {
         val input = JSONObject()
             .put("word", draft.word.trim())
@@ -375,7 +383,10 @@ class WordMindApi(context: Context) {
     }
 
     private fun clearSession() {
-        preferences.edit().remove(COOKIE_KEY).apply()
+        // Logout immediately replaces the authenticated composition with the
+        // login screen. Commit synchronously so a process stop at that boundary
+        // can never restore the previous account on the next launch.
+        preferences.edit().remove(COOKIE_KEY).commit()
     }
 
     private companion object {

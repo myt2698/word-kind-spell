@@ -319,6 +319,27 @@ fun WordMindApp(api: WordMindApi) {
                             }
                         }
                     },
+                    onBulkLearningChange = { wordIds, finished ->
+                        scope.launch {
+                            try {
+                                api.addManyToLearning(wordIds)
+                                val selectedIds = wordIds.toSet()
+                                words = words.map { word ->
+                                    if (word.id in selectedIds) {
+                                        word.copy(learningStatus = "active")
+                                    } else {
+                                        word
+                                    }
+                                }
+                                finished(null)
+                            } catch (error: Exception) {
+                                error.rethrowIfCancellation()
+                                val errorMessage = error.message ?: "批量加入学习失败"
+                                message = errorMessage
+                                finished(errorMessage)
+                            }
+                        }
+                    },
                     onLogout = {
                         scope.launch {
                             try {
@@ -406,7 +427,9 @@ private fun LoginScreen(
                 shadowElevation = 12.dp,
             ) {
                 Image(
-                    painter = painterResource(R.mipmap.ic_launcher),
+                    // ic_launcher resolves to an adaptive-icon XML on modern
+                    // Android, which painterResource cannot render directly.
+                    painter = painterResource(R.mipmap.ic_launcher_foreground),
                     contentDescription = "词音岛",
                     modifier = Modifier.fillMaxSize(),
                     contentScale = ContentScale.Crop,
@@ -504,6 +527,7 @@ private fun MainScreen(
     onRefresh: () -> Unit,
     onUserUpdated: (User) -> Unit,
     onLearningChange: (Word, Boolean) -> Unit,
+    onBulkLearningChange: (List<Int>, (String?) -> Unit) -> Unit,
     onLogout: () -> Unit,
 ) {
     var destination by rememberSaveable { mutableIntStateOf(0) }
@@ -557,6 +581,7 @@ private fun MainScreen(
                         tags = tags,
                         speak = speak,
                         onLearningChange = onLearningChange,
+                        onBulkLearningChange = onBulkLearningChange,
                         canManage = user.role == "admin",
                         onAddWord = {
                             editingWord = null
@@ -660,6 +685,7 @@ private fun WordsScreen(
     tags: List<Tag>,
     speak: (String) -> Unit,
     onLearningChange: (Word, Boolean) -> Unit,
+    onBulkLearningChange: (List<Int>, (String?) -> Unit) -> Unit,
     canManage: Boolean,
     onAddWord: () -> Unit,
     onEditWord: (Word) -> Unit,
@@ -693,6 +719,14 @@ private fun WordsScreen(
         )
     }
     var detailTagId by rememberSaveable { mutableStateOf<Int?>(null) }
+    var selectionMode by remember { mutableStateOf(false) }
+    var selectedWordIds by remember { mutableStateOf<Set<Int>>(emptySet()) }
+    var bulkAdding by remember { mutableStateOf(false) }
+
+    fun leaveSelectionMode() {
+        selectionMode = false
+        selectedWordIds = emptySet()
+    }
 
     LaunchedEffect(searchOpen) {
         onSecondaryPageChanged(searchOpen)
@@ -769,10 +803,21 @@ private fun WordsScreen(
         }
     }
     val hasFilters = textbookId != null || unitId != null
+    val selectableWordIds = remember(filtered) {
+        filtered
+            .filter { it.learningStatus == "idle" }
+            .map { it.id }
+            .toSet()
+    }
+    val allSelectableSelected =
+        selectableWordIds.isNotEmpty() && selectableWordIds.all { it in selectedWordIds }
 
     BackHandler(enabled = searchOpen) {
         searchOpen = false
         query = ""
+    }
+    BackHandler(enabled = selectionMode && !searchOpen) {
+        leaveSelectionMode()
     }
 
     if (searchOpen) {
@@ -884,6 +929,7 @@ private fun WordsScreen(
                                 onSelect = { selectedId ->
                                     textbookId = selectedId
                                     unitId = null
+                                    leaveSelectionMode()
                                 },
                             )
                             WordFilterDropdown(
@@ -892,7 +938,10 @@ private fun WordsScreen(
                                 options = unitOptions,
                                 modifier = Modifier.weight(1f),
                                 enabled = textbookId != null,
-                                onSelect = { unitId = it },
+                                onSelect = {
+                                    unitId = it
+                                    leaveSelectionMode()
+                                },
                             )
                         }
                     }
@@ -904,12 +953,8 @@ private fun WordsScreen(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    val learningCount = words.count { it.learningStatus != "idle" }
                     Text(
-                        buildString {
-                            append("共 ${filtered.size} 个单词")
-                            if (learningCount > 0) append("  ·  学习中 $learningCount")
-                        },
+                        "共 ${filtered.size} 个单词",
                         modifier = Modifier.weight(1f),
                         color = Muted,
                         fontSize = 13.sp,
@@ -920,52 +965,149 @@ private fun WordsScreen(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(6.dp),
                     ) {
-                        if (hasFilters) {
+                        if (selectionMode) {
                             TextButton(
-                                onClick = {
-                                    textbookId = null
-                                    unitId = null
-                                },
-                                contentPadding = PaddingValues(horizontal = 7.dp, vertical = 0.dp),
+                                onClick = { leaveSelectionMode() },
+                                contentPadding = PaddingValues(horizontal = 9.dp, vertical = 0.dp),
                             ) {
-                                Text("清除", fontSize = 12.sp)
+                                Text("完成", fontSize = 12.sp)
                             }
-                        }
-                        WordSortDropdown(
-                            selected = sort,
-                            onSelect = { sort = it },
-                        )
-                        Surface(
-                            shape = RoundedCornerShape(10.dp),
-                            color = Color.White,
-                            border = BorderStroke(1.dp, Border),
-                        ) {
-                            IconButton(
-                                onClick = { searchOpen = true },
-                                modifier = Modifier.size(38.dp),
+                        } else {
+                            if (hasFilters) {
+                                TextButton(
+                                    onClick = {
+                                        textbookId = null
+                                        unitId = null
+                                        leaveSelectionMode()
+                                    },
+                                    contentPadding = PaddingValues(horizontal = 7.dp, vertical = 0.dp),
+                                ) {
+                                    Text("清除", fontSize = 12.sp)
+                                }
+                            }
+                            WordSortDropdown(
+                                selected = sort,
+                                onSelect = { sort = it },
+                            )
+                            Surface(
+                                shape = RoundedCornerShape(10.dp),
+                                color = Color.White,
+                                border = BorderStroke(1.dp, Border),
                             ) {
-                                Icon(
-                                    Icons.Default.Search,
-                                    contentDescription = "搜索单词",
-                                    modifier = Modifier.size(19.dp),
-                                    tint = Color(0xFF475569),
-                                )
+                                IconButton(
+                                    onClick = {
+                                        leaveSelectionMode()
+                                        searchOpen = true
+                                    },
+                                    modifier = Modifier.size(38.dp),
+                                ) {
+                                    Icon(
+                                        Icons.Default.Search,
+                                        contentDescription = "搜索单词",
+                                        modifier = Modifier.size(19.dp),
+                                        tint = Color(0xFF475569),
+                                    )
+                                }
                             }
-                        }
-                        if (canManage) {
-                            Button(
-                                onClick = onAddWord,
+                            OutlinedButton(
+                                onClick = { selectionMode = true },
                                 modifier = Modifier.height(38.dp),
                                 shape = RoundedCornerShape(10.dp),
-                                contentPadding = PaddingValues(horizontal = 11.dp, vertical = 0.dp),
+                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp),
                             ) {
                                 Icon(
-                                    Icons.Default.Add,
+                                    Icons.Default.CheckCircle,
                                     contentDescription = null,
-                                    modifier = Modifier.size(17.dp),
+                                    modifier = Modifier.size(16.dp),
                                 )
                                 Spacer(Modifier.width(4.dp))
-                                Text("添加单词", fontSize = 12.sp)
+                                Text("选择", fontSize = 12.sp)
+                            }
+                            if (canManage) {
+                                Surface(
+                                    onClick = onAddWord,
+                                    modifier = Modifier.size(38.dp),
+                                    shape = RoundedCornerShape(10.dp),
+                                    color = Indigo,
+                                ) {
+                                    Box(contentAlignment = Alignment.Center) {
+                                        Icon(
+                                            Icons.Default.Add,
+                                            contentDescription = "添加单词",
+                                            modifier = Modifier.size(18.dp),
+                                            tint = Color.White,
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            if (selectionMode) {
+                item {
+                    Surface(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp),
+                        color = Color(0xFFEEF2FF),
+                        border = BorderStroke(1.dp, Color(0xFFC7D2FE)),
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 9.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            Text(
+                                "已选 ${selectedWordIds.size} 个",
+                                modifier = Modifier.weight(1f),
+                                color = Indigo,
+                                fontSize = 12.sp,
+                            )
+                            OutlinedButton(
+                                onClick = {
+                                    selectedWordIds = if (allSelectableSelected) {
+                                        emptySet()
+                                    } else {
+                                        selectableWordIds
+                                    }
+                                },
+                                enabled = selectableWordIds.isNotEmpty() && !bulkAdding,
+                                modifier = Modifier.height(34.dp),
+                                shape = RoundedCornerShape(9.dp),
+                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp),
+                            ) {
+                                Text(
+                                    if (allSelectableSelected) "取消全选" else "全选",
+                                    fontSize = 12.sp,
+                                )
+                            }
+                            Button(
+                                onClick = {
+                                    if (selectedWordIds.isNotEmpty() && !bulkAdding) {
+                                        bulkAdding = true
+                                        onBulkLearningChange(selectedWordIds.toList()) { error ->
+                                            bulkAdding = false
+                                            if (error == null) leaveSelectionMode()
+                                        }
+                                    }
+                                },
+                                enabled = selectedWordIds.isNotEmpty() && !bulkAdding,
+                                modifier = Modifier.height(34.dp),
+                                shape = RoundedCornerShape(9.dp),
+                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp),
+                            ) {
+                                if (bulkAdding) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(14.dp),
+                                        color = Color.White,
+                                        strokeWidth = 2.dp,
+                                    )
+                                } else {
+                                    Text(
+                                        "加入学习${if (selectedWordIds.isNotEmpty()) " (${selectedWordIds.size})" else ""}",
+                                        fontSize = 12.sp,
+                                    )
+                                }
                             }
                         }
                     }
@@ -985,6 +1127,16 @@ private fun WordsScreen(
                         onEdit = { onEditWord(word) },
                         onDelete = { onDeleteWord(word) },
                         onTagClick = { detailTagId = it.id },
+                        selectionMode = selectionMode,
+                        selected = word.id in selectedWordIds,
+                        selectionEnabled = word.id in selectableWordIds,
+                        onSelectionChange = { selected ->
+                            selectedWordIds = if (selected) {
+                                selectedWordIds + word.id
+                            } else {
+                                selectedWordIds - word.id
+                            }
+                        },
                     )
                 }
             }
@@ -1213,6 +1365,10 @@ private fun WordCard(
     onEdit: () -> Unit,
     onDelete: () -> Unit,
     onTagClick: (Tag) -> Unit,
+    selectionMode: Boolean = false,
+    selected: Boolean = false,
+    selectionEnabled: Boolean = true,
+    onSelectionChange: (Boolean) -> Unit = {},
 ) {
     var expanded by rememberSaveable(word.id) { mutableStateOf(false) }
     val isLearning = word.learningStatus != "idle"
@@ -1221,7 +1377,11 @@ private fun WordCard(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(containerColor = Color.White),
-        border = CardDefaults.outlinedCardBorder(),
+        border = if (selected) {
+            BorderStroke(2.dp, Indigo)
+        } else {
+            CardDefaults.outlinedCardBorder()
+        },
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
     ) {
         Column(Modifier.padding(16.dp)) {
@@ -1251,21 +1411,68 @@ private fun WordCard(
                         Text(word.phonetic, color = Muted, fontSize = 13.sp)
                     }
                 }
-                OutlinedButton(
-                    onClick = { onLearningChange(word, !isLearning) },
-                    shape = RoundedCornerShape(10.dp),
-                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp),
-                ) {
-                    if (isLearning) {
-                        Icon(
-                            Icons.Default.CheckCircle,
-                            contentDescription = null,
-                            modifier = Modifier.size(16.dp),
-                            tint = Success,
-                        )
-                        Spacer(Modifier.width(4.dp))
+                if (selectionMode) {
+                    if (selectionEnabled) {
+                        Surface(
+                            onClick = { onSelectionChange(!selected) },
+                            modifier = Modifier.size(38.dp),
+                            shape = RoundedCornerShape(10.dp),
+                            color = if (selected) Indigo else Color.White,
+                            border = BorderStroke(
+                                1.dp,
+                                if (selected) Indigo else Border,
+                            ),
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(
+                                    Icons.Default.CheckCircle,
+                                    contentDescription = if (selected) {
+                                        "取消选择 ${word.word}"
+                                    } else {
+                                        "选择 ${word.word}"
+                                    },
+                                    modifier = Modifier.size(20.dp),
+                                    tint = if (selected) Color.White else Color(0xFF94A3B8),
+                                )
+                            }
+                        }
+                    } else {
+                        Surface(
+                            shape = RoundedCornerShape(9.dp),
+                            color = Color(0xFFECFDF5),
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 9.dp, vertical = 7.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Icon(
+                                    Icons.Default.CheckCircle,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(15.dp),
+                                    tint = Success,
+                                )
+                                Spacer(Modifier.width(4.dp))
+                                Text("已在学习中", color = Success, fontSize = 11.sp)
+                            }
+                        }
                     }
-                    Text(if (isLearning) "学习中" else "加入学习", fontSize = 12.sp)
+                } else {
+                    OutlinedButton(
+                        onClick = { onLearningChange(word, !isLearning) },
+                        shape = RoundedCornerShape(10.dp),
+                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp),
+                    ) {
+                        if (isLearning) {
+                            Icon(
+                                Icons.Default.CheckCircle,
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp),
+                                tint = Success,
+                            )
+                            Spacer(Modifier.width(4.dp))
+                        }
+                        Text(if (isLearning) "学习中" else "加入学习", fontSize = 12.sp)
+                    }
                 }
             }
             Spacer(Modifier.height(8.dp))
@@ -1311,7 +1518,7 @@ private fun WordCard(
                 }
             }
 
-            if (canManage) {
+            if (canManage && !selectionMode) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.End,
