@@ -32,6 +32,7 @@ railway-env.txt
 *.sqlite
 *.sqlite3
 db/migrations/*.sql
+backups/*.json
 # TypeScript cache
 *.tsbuildinfo
 # Build outputs

@@ -9,7 +9,11 @@ import { audioRouter } from "./audio-router";
 import { createRouter, publicQuery } from "./middleware";
 
 export const appRouter = createRouter({
-  ping: publicQuery.query(() => ({ ok: true, ts: Date.now() })),
+  ping: publicQuery.query(() => ({
+    ok: true,
+    ts: Date.now(),
+    release: process.env.RAILWAY_GIT_COMMIT_SHA?.slice(0, 7) ?? "local",
+  })),
   auth: authRouter,
   wordGroup: wordGroupRouter,
   word: wordRouter,

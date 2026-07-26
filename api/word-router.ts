@@ -1,8 +1,9 @@
 import { z } from "zod";
+import { TRPCError } from "@trpc/server";
 import { createRouter, authedQuery, adminQuery } from "./middleware";
 import { getDb } from "./queries/connection";
 import { words, wordTags, tags, wordLogs, wordGroups, textbooks, wordAudios, wordSpellings } from "@db/schema";
-import { eq, and, like, or, desc, asc, sql, inArray } from "drizzle-orm";
+import { eq, and, like, or, desc, asc, sql, inArray, ne } from "drizzle-orm";
 import { getCatalogOwnerId } from "./catalog";
 
 const YOUDAO_URL = "https://dict.youdao.com/dictvoice";
@@ -347,10 +348,25 @@ export const wordRouter = createRouter({
       const db = getDb();
       const catalogOwnerId = await getCatalogOwnerId();
       const { tagIds, ...wordData } = input;
+      const normalizedWord = wordData.word.trim();
+
+      if (!normalizedWord) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "请输入单词" });
+      }
+
+      const duplicate = await db
+        .select({ id: words.id })
+        .from(words)
+        .where(and(eq(words.userId, catalogOwnerId), eq(words.word, normalizedWord)))
+        .limit(1);
+      if (duplicate[0]) {
+        throw new TRPCError({ code: "CONFLICT", message: `单词 “${normalizedWord}” 已存在` });
+      }
 
       const result = await db.insert(words).values({
         userId: catalogOwnerId,
         ...wordData,
+        word: normalizedWord,
         proficiency: wordData.proficiency ?? "new",
       });
 
@@ -374,7 +390,7 @@ export const wordRouter = createRouter({
       });
 
       // 自动下载发音音频（异步，不阻塞返回）
-      const audioBase64 = await downloadAudioFromYoudao(wordData.word ?? "");
+      const audioBase64 = await downloadAudioFromYoudao(normalizedWord);
       if (audioBase64) {
         await db.insert(wordAudios).values({
           wordId,
@@ -407,11 +423,35 @@ export const wordRouter = createRouter({
       const catalogOwnerId = await getCatalogOwnerId();
       const { id, tagIds, ...wordData } = input;
 
+      if (wordData.word !== undefined) {
+        const normalizedWord = wordData.word.trim();
+        if (!normalizedWord) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "请输入单词" });
+        }
+        const duplicate = await db
+          .select({ id: words.id })
+          .from(words)
+          .where(
+            and(
+              eq(words.userId, catalogOwnerId),
+              eq(words.word, normalizedWord),
+              ne(words.id, id),
+            ),
+          )
+          .limit(1);
+        if (duplicate[0]) {
+          throw new TRPCError({ code: "CONFLICT", message: `单词 “${normalizedWord}” 已存在` });
+        }
+        wordData.word = normalizedWord;
+      }
+
       // 清理 undefined 值，并自动更新 updatedAt
-      const updateData = Object.fromEntries(
-        Object.entries(wordData).filter(([, v]) => v !== undefined)
-      );
-      (updateData as any).updatedAt = new Date();
+      const updateData = {
+        ...Object.fromEntries(
+          Object.entries(wordData).filter(([, v]) => v !== undefined),
+        ),
+        updatedAt: new Date(),
+      } as Partial<typeof words.$inferInsert>;
 
       await db
         .update(words)

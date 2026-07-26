@@ -104,7 +104,9 @@ export const words = mysqlTable("words", {
     .defaultNow()
     .notNull()
     .$onUpdate(() => new Date()),
-});
+}, (table) => [
+  uniqueIndex("words_userId_word_unique").on(table.userId, table.word),
+]);
 
 export type Word = typeof words.$inferSelect;
 export type InsertWord = typeof words.$inferInsert;
