@@ -165,10 +165,40 @@ class WordMindApi(context: Context) {
     suspend fun getReviewQueue(): List<PracticeWord> =
         (query("spelling.getReviewQueue") as JSONArray).toPracticeWords()
 
+    suspend fun getLearningQueue(): List<PracticeWord> =
+        (query("spelling.getLearningQueue") as JSONArray).toPracticeWords()
+
+    suspend fun getErrorWords(): List<PracticeWord> =
+        (query("spelling.getErrorWords") as JSONArray).toPracticeWords()
+
+    suspend fun getTodaySelections(): List<Int> {
+        val result = query("spelling.getTodaySelections") as JSONArray
+        return buildList {
+            for (index in 0 until result.length()) {
+                add(result.getInt(index))
+            }
+        }
+    }
+
+    suspend fun setTodaySelections(wordIds: List<Int>) {
+        mutate(
+            "spelling.setTodaySelections",
+            JSONObject().put("wordIds", JSONArray(wordIds)),
+        )
+    }
+
+    suspend fun clearSpellingErrors(wordId: Int) {
+        mutate(
+            "spelling.clearErrors",
+            JSONObject().put("wordId", wordId),
+        )
+    }
+
     suspend fun getSpellingStats(): SpellingStats {
         val result = query("spelling.getStats") as JSONObject
         return SpellingStats(
             learningWords = result.optInt("learningWords"),
+            manualDue = result.optInt("manualDue"),
             dueForReview = result.optInt("dueForReview"),
             totalErrors = result.optInt("totalErrors"),
             todaySessions = result.optInt("todaySessions"),
@@ -180,6 +210,7 @@ class WordMindApi(context: Context) {
         correct: Boolean,
         userInput: String,
         durationMs: Long,
+        practiceMode: String,
     ) {
         mutate(
             "spelling.submitResult",
@@ -187,7 +218,7 @@ class WordMindApi(context: Context) {
                 .put("wordId", wordId)
                 .put("isCorrect", correct)
                 .put("userInput", userInput)
-                .put("practiceMode", "fillblank")
+                .put("practiceMode", practiceMode)
                 .put("duration", durationMs),
         )
     }

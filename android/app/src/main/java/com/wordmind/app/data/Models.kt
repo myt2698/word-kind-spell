@@ -72,10 +72,13 @@ data class PracticeWord(
     val level: Int,
     val streak: Int,
     val errorCount: Int,
+    val totalAttempts: Int,
+    val source: String,
 )
 
 data class SpellingStats(
     val learningWords: Int,
+    val manualDue: Int,
     val dueForReview: Int,
     val totalErrors: Int,
     val todaySessions: Int,
@@ -183,6 +186,8 @@ internal fun JSONArray.toPracticeWords(): List<PracticeWord> = buildList {
                 level = item.optInt("level", 1),
                 streak = item.optInt("streak"),
                 errorCount = item.optInt("errorCount"),
+                totalAttempts = item.optInt("totalAttempts"),
+                source = item.optString("source", "auto"),
             )
         )
     }

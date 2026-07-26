@@ -3,43 +3,46 @@ package com.wordmind.app.ui
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.KeyboardActions
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.VolumeUp
-import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Bolt
+import androidx.compose.material.icons.filled.CalendarMonth
+import androidx.compose.material.icons.filled.CheckBox
+import androidx.compose.material.icons.filled.Extension
+import androidx.compose.material.icons.filled.Headphones
+import androidx.compose.material.icons.filled.Keyboard
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.School
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -48,11 +51,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
 import com.wordmind.app.data.PracticeWord
 import com.wordmind.app.data.SpellingStats
 import com.wordmind.app.data.WordMindApi
@@ -60,10 +65,27 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 
-private val PracticeIndigo = Color(0xFF4F46E5)
-private val PracticeMuted = Color(0xFF64748B)
-private val PracticeSuccess = Color(0xFF059669)
-private val PracticeDanger = Color(0xFFDC2626)
+internal val PracticeIndigo = Color(0xFF4F46E5)
+internal val PracticeMuted = Color(0xFF64748B)
+internal val PracticeSuccess = Color(0xFF059669)
+internal val PracticeDanger = Color(0xFFDC2626)
+internal val PracticeAmber = Color(0xFFD97706)
+internal val PracticePurple = Color(0xFF9333EA)
+
+internal enum class PracticeView {
+    Home,
+    Blocks,
+    FillBlank,
+    Flash,
+    Dictation,
+}
+
+private enum class StatDialogType {
+    Learning,
+    New,
+    Review,
+    Errors,
+}
 
 @Composable
 internal fun PracticeScreen(
@@ -72,30 +94,41 @@ internal fun PracticeScreen(
     onMessage: (String) -> Unit,
     onLearningChanged: () -> Unit,
 ) {
-    var queue by remember { mutableStateOf<List<PracticeWord>>(emptyList()) }
+    var learningWords by remember { mutableStateOf<List<PracticeWord>>(emptyList()) }
+    var reviewWords by remember { mutableStateOf<List<PracticeWord>>(emptyList()) }
+    var errorWords by remember { mutableStateOf<List<PracticeWord>>(emptyList()) }
+    var selectedIds by remember { mutableStateOf<Set<Int>>(emptySet()) }
     var stats by remember { mutableStateOf<SpellingStats?>(null) }
     var loading by remember { mutableStateOf(true) }
-    var submitting by remember { mutableStateOf(false) }
-    var index by rememberSaveable { mutableIntStateOf(0) }
-    var answer by rememberSaveable { mutableStateOf("") }
-    var result by rememberSaveable { mutableStateOf<Boolean?>(null) }
-    var startedAt by remember { mutableLongStateOf(System.currentTimeMillis()) }
+    var savingSelection by remember { mutableStateOf(false) }
+    var selectionOpen by remember { mutableStateOf(false) }
+    var statDialog by remember { mutableStateOf<StatDialogType?>(null) }
+    var view by rememberSaveable { mutableStateOf(PracticeView.Home) }
     val scope = rememberCoroutineScope()
 
-    suspend fun loadPractice() {
-        loading = true
+    suspend fun loadPractice(showLoading: Boolean = true) {
+        if (showLoading) loading = true
         try {
-            val data = coroutineScope {
-                val queueDeferred = async { api.getReviewQueue() }
-                val statsDeferred = async { api.getSpellingStats() }
-                queueDeferred.await() to statsDeferred.await()
+            val result = coroutineScope {
+                val learning = async { api.getLearningQueue() }
+                val review = async { api.getReviewQueue() }
+                val errors = async { api.getErrorWords() }
+                val spellingStats = async { api.getSpellingStats() }
+                val todaySelections = async { api.getTodaySelections() }
+                PracticeLoadResult(
+                    learning = learning.await(),
+                    review = review.await(),
+                    errors = errors.await(),
+                    stats = spellingStats.await(),
+                    selectedIds = todaySelections.await().toSet(),
+                )
             }
-            queue = data.first
-            stats = data.second
-            index = 0
-            answer = ""
-            result = null
-            startedAt = System.currentTimeMillis()
+            learningWords = result.learning
+            reviewWords = result.review
+            errorWords = result.errors
+            stats = result.stats
+            val activeIds = result.learning.mapTo(mutableSetOf()) { it.id }
+            selectedIds = result.selectedIds.intersect(activeIds)
         } catch (error: Exception) {
             onMessage(error.message ?: "拼写数据加载失败")
         } finally {
@@ -107,232 +140,633 @@ internal fun PracticeScreen(
         loadPractice()
     }
 
-    val current = queue.getOrNull(index)
-    LaunchedEffect(current?.id) {
-        current?.let {
-            startedAt = System.currentTimeMillis()
-            speak(it.word)
+    val selectedWords = remember(learningWords, selectedIds) {
+        learningWords.filter { it.id in selectedIds }
+    }
+
+    fun openMode(mode: PracticeView) {
+        if (selectedWords.isEmpty()) {
+            selectionOpen = true
+        } else {
+            view = mode
         }
     }
 
-    fun submit() {
-        val word = current ?: return
-        if (answer.isBlank() || result != null || submitting) return
-        val correct = answer.trim().equals(word.word, ignoreCase = true)
-        submitting = true
+    fun saveSelection(ids: Set<Int>) {
+        if (savingSelection) return
+        val previous = selectedIds
+        selectedIds = ids
+        selectionOpen = false
+        savingSelection = true
+        scope.launch {
+            try {
+                api.setTodaySelections(ids.toList())
+            } catch (error: Exception) {
+                selectedIds = previous
+                onMessage(error.message ?: "今日练习单词保存失败")
+            } finally {
+                savingSelection = false
+            }
+        }
+    }
+
+    fun submitResult(
+        word: PracticeWord,
+        correct: Boolean,
+        input: String,
+        mode: String,
+        durationMs: Long,
+    ) {
         scope.launch {
             try {
                 api.submitSpellingResult(
                     wordId = word.id,
                     correct = correct,
-                    userInput = answer.trim(),
-                    durationMs = System.currentTimeMillis() - startedAt,
-                )
-                result = correct
-                stats = stats?.copy(
-                    dueForReview = (stats?.dueForReview ?: 1).minus(1).coerceAtLeast(0),
+                    userInput = input,
+                    durationMs = durationMs,
+                    practiceMode = mode,
                 )
                 onLearningChanged()
             } catch (error: Exception) {
                 onMessage(error.message ?: "提交练习结果失败")
-            } finally {
-                submitting = false
             }
         }
     }
 
+    fun returnHome() {
+        view = PracticeView.Home
+        scope.launch { loadPractice(showLoading = false) }
+    }
+
+    when (view) {
+        PracticeView.Home -> PracticeHome(
+            loading = loading,
+            learningWords = learningWords,
+            reviewWords = reviewWords,
+            errorWords = errorWords,
+            selectedWords = selectedWords,
+            stats = stats,
+            onSelectWords = { selectionOpen = true },
+            onMode = ::openMode,
+            onStat = { statDialog = it },
+        )
+        PracticeView.Blocks -> BlocksPracticeMode(
+            words = selectedWords,
+            speak = speak,
+            onBack = ::returnHome,
+            onSubmit = ::submitResult,
+        )
+        PracticeView.FillBlank -> FillBlankPracticeMode(
+            words = selectedWords,
+            speak = speak,
+            onBack = ::returnHome,
+            onSubmit = ::submitResult,
+        )
+        PracticeView.Flash -> FlashPracticeMode(
+            words = selectedWords,
+            speak = speak,
+            onBack = ::returnHome,
+            onSubmit = ::submitResult,
+        )
+        PracticeView.Dictation -> DictationPracticeMode(
+            words = selectedWords,
+            speak = speak,
+            onBack = ::returnHome,
+        )
+    }
+
+    if (selectionOpen) {
+        PracticeWordSelectionDialog(
+            words = learningWords,
+            initialSelected = selectedIds,
+            saving = savingSelection,
+            onDismiss = { selectionOpen = false },
+            onConfirm = ::saveSelection,
+        )
+    }
+
+    statDialog?.let { type ->
+        val dialogWords = when (type) {
+            StatDialogType.Learning -> learningWords
+            StatDialogType.New -> reviewWords.filter {
+                it.source == "manual" && it.totalAttempts == 0
+            }
+            StatDialogType.Review -> reviewWords
+            StatDialogType.Errors -> errorWords
+        }
+        PracticeWordListDialog(
+            title = when (type) {
+                StatDialogType.Learning -> "学习中的单词"
+                StatDialogType.New -> "新学单词"
+                StatDialogType.Review -> "待复习队列"
+                StatDialogType.Errors -> "错题本"
+            },
+            words = dialogWords,
+            allowErrorRemoval = type == StatDialogType.Errors,
+            onRemoveError = { word ->
+                scope.launch {
+                    try {
+                        api.clearSpellingErrors(word.id)
+                        loadPractice(showLoading = false)
+                    } catch (error: Exception) {
+                        onMessage(error.message ?: "移除错题失败")
+                    }
+                }
+            },
+            onDismiss = { statDialog = null },
+        )
+    }
+}
+
+private data class PracticeLoadResult(
+    val learning: List<PracticeWord>,
+    val review: List<PracticeWord>,
+    val errors: List<PracticeWord>,
+    val stats: SpellingStats,
+    val selectedIds: Set<Int>,
+)
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun PracticeHome(
+    loading: Boolean,
+    learningWords: List<PracticeWord>,
+    reviewWords: List<PracticeWord>,
+    errorWords: List<PracticeWord>,
+    selectedWords: List<PracticeWord>,
+    stats: SpellingStats?,
+    onSelectWords: () -> Unit,
+    onMode: (PracticeView) -> Unit,
+    onStat: (StatDialogType) -> Unit,
+) {
     Column(
         modifier = Modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
-            .padding(18.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
+            .padding(start = 16.dp, end = 16.dp, top = 14.dp, bottom = 24.dp),
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Column {
-                Text("拼写练习", fontSize = 22.sp, fontWeight = FontWeight.Bold)
-                Text("艾宾浩斯到期复习", color = PracticeMuted, fontSize = 13.sp)
-            }
-            IconButton(onClick = { scope.launch { loadPractice() } }, enabled = !loading) {
-                Icon(Icons.Default.Refresh, contentDescription = "刷新练习")
-            }
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(
+                Icons.Default.School,
+                contentDescription = null,
+                tint = PracticeIndigo,
+                modifier = Modifier.size(23.dp),
+            )
+            Spacer(Modifier.width(8.dp))
+            Text("单词拼写", fontSize = 22.sp, fontWeight = FontWeight.Bold)
         }
-        Spacer(Modifier.height(14.dp))
-        StatsRow(stats)
+        Spacer(Modifier.height(3.dp))
+        Text("先选择今日练习单词，再开始练习", color = PracticeMuted, fontSize = 13.sp)
         Spacer(Modifier.height(18.dp))
 
-        when {
-            loading -> {
-                Spacer(Modifier.height(70.dp))
+        if (loading) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(180.dp),
+                contentAlignment = Alignment.Center,
+            ) {
                 CircularProgressIndicator()
             }
-            current == null -> {
-                Card(
+            return
+        }
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            PracticeStatCard(
+                value = stats?.learningWords ?: learningWords.size,
+                label = "学习中",
+                color = PracticeSuccess,
+                onClick = { onStat(StatDialogType.Learning) },
+                modifier = Modifier.weight(1f),
+            )
+            PracticeStatCard(
+                value = stats?.manualDue ?: reviewWords.count {
+                    it.source == "manual" && it.totalAttempts == 0
+                },
+                label = "新学单词",
+                color = PracticeIndigo,
+                onClick = { onStat(StatDialogType.New) },
+                modifier = Modifier.weight(1f),
+            )
+            PracticeStatCard(
+                value = stats?.dueForReview ?: reviewWords.size,
+                label = "总待复习",
+                color = PracticeAmber,
+                onClick = { onStat(StatDialogType.Review) },
+                modifier = Modifier.weight(1f),
+            )
+            PracticeStatCard(
+                value = stats?.totalErrors ?: errorWords.size,
+                label = "错题",
+                color = Color(0xFFE11D48),
+                onClick = { onStat(StatDialogType.Errors) },
+                modifier = Modifier.weight(1f),
+            )
+        }
+        Spacer(Modifier.height(18.dp))
+
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(16.dp),
+            colors = CardDefaults.cardColors(containerColor = Color.White),
+            border = CardDefaults.outlinedCardBorder(),
+        ) {
+            Column(Modifier.padding(16.dp)) {
+                Row(
                     modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(18.dp),
-                    colors = CardDefaults.cardColors(containerColor = Color.White),
-                    border = CardDefaults.outlinedCardBorder(),
+                    verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 24.dp, vertical = 42.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                    ) {
-                        Surface(
-                            modifier = Modifier.size(64.dp),
-                            shape = CircleShape,
-                            color = Color(0xFFECFDF5),
-                        ) {
-                            Box(contentAlignment = Alignment.Center) {
-                                Icon(
-                                    Icons.Default.CheckCircle,
-                                    contentDescription = null,
-                                    tint = PracticeSuccess,
-                                    modifier = Modifier.size(34.dp),
-                                )
-                            }
-                        }
-                        Spacer(Modifier.height(16.dp))
-                        Text("当前没有到期单词", fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
-                        Spacer(Modifier.height(7.dp))
-                        Text(
-                            if ((stats?.learningWords ?: 0) == 0) {
-                                "先到“单词”页把单词加入学习，随后即可开始拼写。"
-                            } else {
-                                "今天的到期任务已完成，稍后会按照记忆曲线安排下一次复习。"
-                            },
-                            color = PracticeMuted,
-                            fontSize = 14.sp,
-                            textAlign = TextAlign.Center,
-                            lineHeight = 21.sp,
-                        )
+                    Icon(
+                        Icons.Default.CalendarMonth,
+                        contentDescription = null,
+                        tint = PracticeIndigo,
+                        modifier = Modifier.size(21.dp),
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        "今日练习",
+                        modifier = Modifier.weight(1f),
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                    TextButton(onClick = onSelectWords) {
+                        Text(if (selectedWords.isEmpty()) "去选词" else "重新选词", fontSize = 12.sp)
                     }
                 }
-            }
-            else -> {
-                Text(
-                    "第 ${index + 1} / ${queue.size} 题",
-                    color = PracticeMuted,
-                    fontSize = 13.sp,
-                )
-                Spacer(Modifier.height(8.dp))
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(20.dp),
-                    colors = CardDefaults.cardColors(containerColor = Color.White),
-                    border = CardDefaults.outlinedCardBorder(),
-                ) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(22.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally,
+                if (selectedWords.isEmpty()) {
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        "还没有选择今日练习单词",
+                        modifier = Modifier.fillMaxWidth(),
+                        color = Color(0xFF94A3B8),
+                        fontSize = 13.sp,
+                        textAlign = TextAlign.Center,
+                    )
+                    Spacer(Modifier.height(7.dp))
+                    Button(
+                        onClick = onSelectWords,
+                        modifier = Modifier.align(Alignment.CenterHorizontally),
+                        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 4.dp),
                     ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            Icons.Default.CheckBox,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp),
+                        )
+                        Spacer(Modifier.width(5.dp))
+                        Text("选择单词", fontSize = 12.sp)
+                    }
+                } else {
+                    Text(
+                        "已选 ${selectedWords.size} 个单词",
+                        color = PracticeMuted,
+                        fontSize = 12.sp,
+                    )
+                    Spacer(Modifier.height(9.dp))
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                        maxLines = 3,
+                    ) {
+                        selectedWords.take(15).forEach { word ->
                             Surface(
-                                shape = RoundedCornerShape(100.dp),
                                 color = Color(0xFFEEF2FF),
+                                shape = RoundedCornerShape(100.dp),
+                                border = CardDefaults.outlinedCardBorder(),
                             ) {
                                 Text(
-                                    "等级 ${current.level}",
-                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+                                    word.word,
+                                    modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp),
                                     color = PracticeIndigo,
                                     fontSize = 11.sp,
                                 )
                             }
-                            if (current.errorCount > 0) {
-                                Spacer(Modifier.width(8.dp))
-                                Text("错过 ${current.errorCount} 次", color = PracticeDanger, fontSize = 11.sp)
-                            }
                         }
-                        Spacer(Modifier.height(17.dp))
-                        Text(
-                            current.definition,
-                            fontSize = 18.sp,
-                            lineHeight = 27.sp,
-                            textAlign = TextAlign.Center,
-                            fontWeight = FontWeight.Medium,
-                        )
-                        Spacer(Modifier.height(12.dp))
-                        OutlinedButton(
-                            onClick = { speak(current.word) },
-                            shape = RoundedCornerShape(12.dp),
-                        ) {
-                            Icon(
-                                Icons.AutoMirrored.Filled.VolumeUp,
-                                contentDescription = null,
-                                modifier = Modifier.size(20.dp),
+                        if (selectedWords.size > 15) {
+                            Text(
+                                "+${selectedWords.size - 15}",
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                color = PracticeMuted,
+                                fontSize = 11.sp,
                             )
-                            Spacer(Modifier.width(7.dp))
-                            Text("再听一次")
                         }
-                        Spacer(Modifier.height(20.dp))
-                        OutlinedTextField(
-                            value = answer,
-                            onValueChange = {
-                                if (result == null) answer = it.trimStart()
-                            },
-                            modifier = Modifier.fillMaxWidth(),
-                            label = { Text("输入英文单词") },
-                            supportingText = {
-                                Text("${current.word.length} 个字母", color = PracticeMuted)
-                            },
-                            singleLine = true,
-                            enabled = result == null && !submitting,
-                            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                            keyboardActions = KeyboardActions(onDone = { submit() }),
-                            shape = RoundedCornerShape(14.dp),
-                        )
-                        Spacer(Modifier.height(13.dp))
+                    }
+                }
+            }
+        }
+        Spacer(Modifier.height(20.dp))
 
-                        if (result == null) {
-                            Button(
-                                onClick = { submit() },
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(50.dp),
-                                enabled = answer.isNotBlank() && !submitting,
-                                shape = RoundedCornerShape(13.dp),
-                            ) {
-                                if (submitting) {
-                                    CircularProgressIndicator(
-                                        modifier = Modifier.size(20.dp),
-                                        color = Color.White,
-                                        strokeWidth = 2.dp,
-                                    )
-                                } else {
-                                    Text("提交答案")
-                                }
-                            }
-                        } else {
-                            ResultPanel(
-                                correct = result == true,
-                                correctWord = current.word,
-                                userAnswer = answer,
-                            )
-                            Spacer(Modifier.height(12.dp))
-                            Button(
+        Text("选择练习模式", color = Color(0xFF334155), fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+        Spacer(Modifier.height(10.dp))
+        PracticeModeCard(
+            title = "积木拼拼乐",
+            description = if (selectedWords.isEmpty()) {
+                "请先选择今日练习单词"
+            } else {
+                "点击字母积木拼出正确单词"
+            },
+            icon = Icons.Default.Extension,
+            color = PracticeIndigo,
+            background = Color(0xFFEEF2FF),
+            enabled = selectedWords.isNotEmpty(),
+            onClick = { onMode(PracticeView.Blocks) },
+        )
+        Spacer(Modifier.height(10.dp))
+        PracticeModeCard(
+            title = "单词消消乐",
+            description = if (selectedWords.isEmpty()) {
+                "请先选择今日练习单词"
+            } else {
+                "根据提示填写缺失的字母"
+            },
+            icon = Icons.Default.Keyboard,
+            color = PracticeSuccess,
+            background = Color(0xFFECFDF5),
+            enabled = selectedWords.isNotEmpty(),
+            onClick = { onMode(PracticeView.FillBlank) },
+        )
+        Spacer(Modifier.height(10.dp))
+        PracticeModeCard(
+            title = "极速闪电战",
+            description = if (selectedWords.isEmpty()) {
+                "请先选择今日练习单词"
+            } else {
+                "限时快速拼写挑战"
+            },
+            icon = Icons.Default.Bolt,
+            color = PracticeAmber,
+            background = Color(0xFFFFFBEB),
+            enabled = selectedWords.isNotEmpty(),
+            onClick = { onMode(PracticeView.Flash) },
+        )
+        Spacer(Modifier.height(10.dp))
+        PracticeModeCard(
+            title = "听写模式",
+            description = if (selectedWords.isEmpty()) {
+                "请先选择今日练习单词"
+            } else {
+                "每个单词读两遍，听音写词"
+            },
+            icon = Icons.Default.Headphones,
+            color = PracticePurple,
+            background = Color(0xFFFAF5FF),
+            enabled = selectedWords.isNotEmpty(),
+            onClick = { onMode(PracticeView.Dictation) },
+        )
+    }
+}
+
+@Composable
+private fun PracticeStatCard(
+    value: Int,
+    label: String,
+    color: Color,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Card(
+        onClick = onClick,
+        modifier = modifier.height(76.dp),
+        shape = RoundedCornerShape(14.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+        border = CardDefaults.outlinedCardBorder(),
+    ) {
+        Column(
+            modifier = Modifier.fillMaxSize(),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center,
+        ) {
+            Text("$value", color = color, fontSize = 19.sp, fontWeight = FontWeight.Bold)
+            Text(
+                label,
+                color = PracticeMuted,
+                fontSize = 10.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+    }
+}
+
+@Composable
+private fun PracticeModeCard(
+    title: String,
+    description: String,
+    icon: ImageVector,
+    color: Color,
+    background: Color,
+    enabled: Boolean,
+    onClick: () -> Unit,
+) {
+    Card(
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+        border = CardDefaults.outlinedCardBorder(),
+    ) {
+        Row(
+            modifier = Modifier.padding(15.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Surface(
+                modifier = Modifier.size(48.dp),
+                shape = RoundedCornerShape(13.dp),
+                color = background,
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(icon, contentDescription = null, tint = color)
+                }
+            }
+            Spacer(Modifier.width(13.dp))
+            Column(Modifier.weight(1f)) {
+                Text(title, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+                Spacer(Modifier.height(3.dp))
+                Text(description, color = PracticeMuted, fontSize = 12.sp)
+            }
+            Icon(
+                Icons.Default.PlayArrow,
+                contentDescription = null,
+                tint = if (enabled) color.copy(alpha = 0.65f) else Color(0xFFCBD5E1),
+            )
+        }
+    }
+}
+
+@Composable
+private fun PracticeWordSelectionDialog(
+    words: List<PracticeWord>,
+    initialSelected: Set<Int>,
+    saving: Boolean,
+    onDismiss: () -> Unit,
+    onConfirm: (Set<Int>) -> Unit,
+) {
+    var selected by remember { mutableStateOf(initialSelected) }
+    val allIds = remember(words) { words.mapTo(mutableSetOf()) { it.id } }
+    val allSelected = words.isNotEmpty() && selected.containsAll(allIds)
+
+    Dialog(onDismissRequest = onDismiss) {
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .fillMaxHeight(0.86f),
+            shape = RoundedCornerShape(20.dp),
+            colors = CardDefaults.cardColors(containerColor = Color.White),
+        ) {
+            Column(Modifier.fillMaxSize()) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 18.dp, vertical = 16.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(
+                        Icons.Default.CheckBox,
+                        contentDescription = null,
+                        tint = PracticeIndigo,
+                        modifier = Modifier.size(20.dp),
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        "选择今日练习单词",
+                        modifier = Modifier.weight(1f),
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                    Text("${selected.size} 已选", color = PracticeMuted, fontSize = 11.sp)
+                }
+                HorizontalDivider()
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 14.dp, vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    TextButton(
+                        onClick = {
+                            selected = if (allSelected) emptySet() else allIds
+                        },
+                    ) {
+                        Text(if (allSelected) "取消全选" else "全选", fontSize = 12.sp)
+                    }
+                    Spacer(Modifier.weight(1f))
+                    Text("${words.size} 个单词", color = PracticeMuted, fontSize = 11.sp)
+                }
+                HorizontalDivider()
+                if (words.isEmpty()) {
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxWidth(),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text("暂无学习中的单词", color = PracticeMuted, fontSize = 13.sp)
+                    }
+                } else {
+                    LazyColumn(
+                        modifier = Modifier.weight(1f),
+                        contentPadding = PaddingValues(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(7.dp),
+                    ) {
+                        items(words, key = { it.id }) { word ->
+                            val checked = word.id in selected
+                            Card(
                                 onClick = {
-                                    if (index < queue.lastIndex) {
-                                        index += 1
-                                        answer = ""
-                                        result = null
+                                    selected = if (checked) {
+                                        selected - word.id
                                     } else {
-                                        scope.launch { loadPractice() }
+                                        selected + word.id
                                     }
                                 },
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(50.dp),
+                                colors = CardDefaults.cardColors(
+                                    containerColor = if (checked) {
+                                        Color(0xFFEEF2FF)
+                                    } else {
+                                        Color.White
+                                    },
+                                ),
+                                border = CardDefaults.outlinedCardBorder(),
                                 shape = RoundedCornerShape(13.dp),
                             ) {
-                                Text(if (index < queue.lastIndex) "下一题" else "完成本轮")
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 10.dp, vertical = 8.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    Checkbox(
+                                        checked = checked,
+                                        onCheckedChange = {
+                                            selected = if (checked) {
+                                                selected - word.id
+                                            } else {
+                                                selected + word.id
+                                            }
+                                        },
+                                    )
+                                    Column(Modifier.weight(1f)) {
+                                        Text(word.word, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                                        Text(
+                                            word.definition,
+                                            color = PracticeMuted,
+                                            fontSize = 11.sp,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                        )
+                                    }
+                                    Surface(
+                                        color = when (word.level) {
+                                            1 -> Color(0xFFFEE2E2)
+                                            2 -> Color(0xFFFEF3C7)
+                                            else -> Color(0xFFD1FAE5)
+                                        },
+                                        shape = RoundedCornerShape(100.dp),
+                                    ) {
+                                        Text(
+                                            "Lv.${word.level}",
+                                            modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp),
+                                            color = when (word.level) {
+                                                1 -> PracticeDanger
+                                                2 -> PracticeAmber
+                                                else -> PracticeSuccess
+                                            },
+                                            fontSize = 10.sp,
+                                        )
+                                    }
+                                }
                             }
+                        }
+                    }
+                }
+                HorizontalDivider()
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(14.dp),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    OutlinedButton(
+                        onClick = onDismiss,
+                        modifier = Modifier.weight(1f),
+                    ) {
+                        Text("取消")
+                    }
+                    Button(
+                        onClick = { onConfirm(selected) },
+                        modifier = Modifier.weight(1f),
+                        enabled = !saving,
+                    ) {
+                        if (saving) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(18.dp),
+                                color = Color.White,
+                                strokeWidth = 2.dp,
+                            )
+                        } else {
+                            Text("确认 (${selected.size} 个)")
                         }
                     }
                 }
@@ -342,60 +776,82 @@ internal fun PracticeScreen(
 }
 
 @Composable
-private fun StatsRow(stats: SpellingStats?) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(15.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.White),
-        border = CardDefaults.outlinedCardBorder(),
-    ) {
-        Row(
+private fun PracticeWordListDialog(
+    title: String,
+    words: List<PracticeWord>,
+    allowErrorRemoval: Boolean,
+    onRemoveError: (PracticeWord) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    Dialog(onDismissRequest = onDismiss) {
+        Card(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(vertical = 15.dp),
-            horizontalArrangement = Arrangement.SpaceEvenly,
+                .fillMaxHeight(0.72f),
+            shape = RoundedCornerShape(20.dp),
+            colors = CardDefaults.cardColors(containerColor = Color.White),
         ) {
-            PracticeStat(stats?.learningWords ?: 0, "学习中")
-            PracticeStat(stats?.dueForReview ?: 0, "待复习")
-            PracticeStat(stats?.totalErrors ?: 0, "错题")
-            PracticeStat(stats?.todaySessions ?: 0, "今日轮次")
-        }
-    }
-}
-
-@Composable
-private fun PracticeStat(value: Int, label: String) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Text("$value", fontSize = 19.sp, fontWeight = FontWeight.Bold, color = PracticeIndigo)
-        Text(label, fontSize = 11.sp, color = PracticeMuted)
-    }
-}
-
-@Composable
-private fun ResultPanel(correct: Boolean, correctWord: String, userAnswer: String) {
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(13.dp),
-        color = if (correct) Color(0xFFECFDF5) else Color(0xFFFEF2F2),
-    ) {
-        Row(
-            modifier = Modifier.padding(14.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Icon(
-                if (correct) Icons.Default.CheckCircle else Icons.Default.Close,
-                contentDescription = null,
-                tint = if (correct) PracticeSuccess else PracticeDanger,
-            )
-            Spacer(Modifier.width(10.dp))
-            Column {
-                Text(
-                    if (correct) "拼写正确" else "正确答案：$correctWord",
-                    color = if (correct) PracticeSuccess else PracticeDanger,
-                    fontWeight = FontWeight.SemiBold,
-                )
-                if (!correct) {
-                    Text("你的答案：$userAnswer", color = PracticeMuted, fontSize = 12.sp)
+            Column(Modifier.fillMaxSize()) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 18.dp, vertical = 16.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        title,
+                        modifier = Modifier.weight(1f),
+                        fontSize = 17.sp,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                    Text("${words.size} 个", color = PracticeMuted, fontSize = 11.sp)
+                }
+                HorizontalDivider()
+                if (words.isEmpty()) {
+                    Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
+                        Text("暂无相关单词", color = PracticeMuted)
+                    }
+                } else {
+                    LazyColumn(
+                        modifier = Modifier.weight(1f),
+                        contentPadding = PaddingValues(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(7.dp),
+                    ) {
+                        items(words, key = { it.id }) { word ->
+                            Surface(
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(12.dp),
+                                color = Color(0xFFF8FAFC),
+                                border = CardDefaults.outlinedCardBorder(),
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    Column(Modifier.weight(1f)) {
+                                        Text(word.word, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                                        word.phonetic?.let {
+                                            Text(it, color = PracticeMuted, fontSize = 10.sp)
+                                        }
+                                    }
+                                    if (allowErrorRemoval) {
+                                        TextButton(onClick = { onRemoveError(word) }) {
+                                            Text("移除", color = PracticeDanger, fontSize = 11.sp)
+                                        }
+                                    } else {
+                                        Text("Lv.${word.level}", color = PracticeMuted, fontSize = 10.sp)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                HorizontalDivider()
+                TextButton(
+                    onClick = onDismiss,
+                    modifier = Modifier
+                        .align(Alignment.End)
+                        .padding(horizontal = 10.dp, vertical = 4.dp),
+                ) {
+                    Text("关闭")
                 }
             }
         }
