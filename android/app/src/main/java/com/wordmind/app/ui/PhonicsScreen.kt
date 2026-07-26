@@ -39,6 +39,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -69,10 +70,15 @@ internal fun PhonicsScreen(
     tags: List<Tag>,
     words: List<Word>,
     speak: (String) -> Unit,
+    onSecondaryPageChanged: (Boolean) -> Unit,
 ) {
     var view by rememberSaveable { mutableStateOf("home") }
     var selectedTag by remember { mutableStateOf<Tag?>(null) }
     var selectedPhoneme by remember { mutableStateOf<Phoneme?>(null) }
+
+    LaunchedEffect(view) {
+        onSecondaryPageChanged(view != "home")
+    }
 
     when (view) {
         "letters" -> LetterCombinationsScreen(

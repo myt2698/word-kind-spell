@@ -37,8 +37,6 @@ const CONSONANT_BLENDS = new Set([
   "bl", "br", "cl", "cr", "dr", "fr", "tr", "pr",
   "gl", "gr", "pl", "sl", "sm", "sn", "sp", "st", "sw", "sc", "sk", "tw", "wh",
   "ch", "sh", "th", "ph", "ck", "ng",
-  // Double consonants (two same letters = one sound)
-  "ff", "ll", "ss", "tt", "pp", "mm", "nn", "rr", "dd", "gg", "bb", "cc", "zz",
 ]);
 
 // ========== Priority 2: Prefixes / Suffixes / Compound Words ==========
@@ -54,47 +52,128 @@ const SUFFIXES = new Set([
 /** Special endings that form their own syllable */
 const SPECIAL_ENDINGS = ["cle", "tle", "dle", "ckle", "gle", "ble", "ple", "fle", "kle", "zle"];
 
-/** Short vowel sounds (closed syllable indicator) */
-const SHORT_VOWEL_INDICATORS: Record<string, string[]> = {
-  a: ["cat", "hat", "mat", "ran", "sat", "bad", "had", "dad", "mad", "sad", "bag", "rag", "tag", "cap", "map", "nap", "tap", "rat", "bat", "fat", "pat", "van", "can", "man", "pan"],
-  e: ["bed", "red", "led", "fed", "wet", "get", "let", "met", "net", "pet", "set", "bet", "hen", "men", "pen", "ten", "den", "vet", "web", "jet"],
-  i: ["bit", "fit", "hit", "kit", "lit", "pit", "sit", "win", "pin", "tin", "bin", "din", "fin", "gin", "him", "dim", "rid", "hid", "bid", "did", "kid", "lid", "mid"],
-  o: ["hot", "not", "got", "lot", "pot", "dot", "cot", "jot", "rot", "tot", "dog", "fog", "hog", "log", "bog", "cog", "jog", "mob", "rob", "sob", "job", "nod", "rod", "cod", "pod"],
-  u: ["but", "cut", "hut", "nut", "rut", "gum", "hum", "sum", "bum", "mum", "dug", "hug", "jug", "mug", "pug", "rug", "tug", "bud", "mud", "pub", "rub", "sub", "tub"],
-};
-
-/** Common words that are exceptions to rules */
-const EXCEPTION_WORDS: Record<string, string[]> = {
+/**
+ * Reviewed word divisions.
+ *
+ * English spelling does not encode every spoken syllable unambiguously, so a
+ * curated dictionary is safer than forcing every word through one mechanical
+ * VCV rule. This dictionary is the source of truth; generated text in database
+ * notes must never override it.
+ */
+const CURATED_WORD_DIVISIONS: Record<string, string[]> = {
+  "about": ["a", "bout"],
+  "among": ["a", "mong"],
+  "apple": ["ap", "ple"],
+  "baby": ["ba", "by"],
+  "banana": ["ba", "na", "na"],
+  "basketball": ["bas", "ket", "ball"],
+  "body": ["bod", "y"],
+  "busy": ["bus", "y"],
+  "buy": ["buy"],
+  "canada": ["can", "a", "da"],
+  "china": ["chi", "na"],
+  "chinese": ["chi", "nese"],
+  "classmate": ["class", "mate"],
+  "closed": ["closed"],
+  "colour": ["col", "our"],
+  "colourful": ["col", "our", "ful"],
+  "community": ["com", "mu", "ni", "ty"],
+  "computer": ["com", "pu", "ter"],
+  "cloudy": ["cloud", "y"],
+  "cleaner": ["clean", "er"],
+  "cookie": ["cook", "ie"],
+  "cousin": ["cous", "in"],
+  "delivery": ["de", "liv", "er", "y"],
+  "dinner": ["din", "ner"],
+  "driver": ["driv", "er"],
+  "eight": ["eight"],
+  "eighteen": ["eigh", "teen"],
+  "elephant": ["e", "le", "phant"],
+  "eleven": ["e", "lev", "en"],
+  "english": ["eng", "lish"],
+  "eraser": ["e", "ras", "er"],
+  "everyone": ["ev", "ery", "one"],
+  "eye": ["eye"],
+  "factory": ["fac", "to", "ry"],
+  "farmer": ["farm", "er"],
+  "favour": ["fa", "vour"],
+  "favourite": ["fa", "vour", "ite"],
+  "firefighter": ["fire", "fight", "er"],
+  "flavour": ["fla", "vour"],
+  "giraffe": ["gi", "raffe"],
+  "grandfather": ["grand", "fa", "ther"],
+  "grandma": ["grand", "ma"],
+  "grandmother": ["grand", "mo", "ther"],
+  "grandpa": ["grand", "pa"],
+  "healthy": ["health", "y"],
+  "helpful": ["help", "ful"],
+  "hospital": ["hos", "pi", "tal"],
+  "humour": ["hu", "mour"],
+  "idea": ["i", "de", "a"],
+  "japanese": ["jap", "a", "nese"],
+  "letter": ["let", "ter"],
+  "library": ["li", "brar", "y"],
+  "lion": ["li", "on"],
+  "listen": ["lis", "ten"],
+  "many": ["man", "y"],
+  "monkey": ["mon", "key"],
+  "morning": ["morn", "ing"],
+  "mr": ["mis", "ter"],
+  "neighbour": ["neigh", "bour"],
+  "nineteen": ["nine", "teen"],
+  "office": ["of", "fice"],
+  "orange": ["or", "ange"],
+  "paper": ["pa", "per"],
+  "pe": ["p", "e"],
+  "people": ["peo", "ple"],
+  "police": ["po", "lice"],
+  "purple": ["pur", "ple"],
+  "queen": ["queen"],
+  "question": ["ques", "tion"],
+  "rabbit": ["rab", "bit"],
+  "rainy": ["rain", "y"],
+  "seven": ["sev", "en"],
+  "seventeen": ["sev", "en", "teen"],
+  "sister": ["sis", "ter"],
+  "snowman": ["snow", "man"],
+  "student": ["stu", "dent"],
+  "summer": ["sum", "mer"],
+  "sunny": ["sun", "ny"],
+  "sweater": ["sweat", "er"],
+  "sydney": ["syd", "ney"],
+  "teacher": ["teach", "er"],
+  "their": ["their"],
+  "tiger": ["ti", "ger"],
+  "tired": ["tired"],
+  "today": ["to", "day"],
+  "together": ["to", "ge", "ther"],
+  "tomorrow": ["to", "mor", "row"],
+  "tongue": ["tongue"],
+  "uk": ["u", "k"],
+  "uncle": ["un", "cle"],
+  "usa": ["u", "s", "a"],
+  "very": ["ver", "y"],
+  "water": ["wa", "ter"],
+  "weather": ["wea", "ther"],
+  "weight": ["weight"],
+  "windy": ["wind", "y"],
+  "woman": ["wom", "an"],
+  "worker": ["work", "er"],
+  "year": ["year"],
+  "yellow": ["yel", "low"],
+  "your": ["your"],
+  "yummy": ["yum", "my"],
   "every": ["ev", "ery"],
   "business": ["busi", "ness"],
   "favorite": ["fa", "vor", "ite"],
   "chocolate": ["cho", "co", "late"],
   "different": ["dif", "fer", "ent"],
   "interest": ["in", "ter", "est"],
-  "family": ["fa", "mi", "ly"],
-  "animal": ["a", "ni", "mal"],
-  "vegetable": ["ve", "ge", "ta", "ble"],
+  "family": ["fam", "i", "ly"],
+  "animal": ["an", "i", "mal"],
+  "vegetable": ["veg", "e", "ta", "ble"],
   "comfortable": ["com", "for", "ta", "ble"],
 };
-
-/**
- * Check if a vowel is likely short based on common word patterns
- */
-function isShortVowel(vowel: string, before: string, after: string): boolean {
-  // Check if followed by single consonant + another vowel (often short)
-  if (after.length >= 2 && isConsonant(after[0]) && isVowelOrY(after[1])) {
-    return true;
-  }
-  // Check if followed by double consonant (definitely short)
-  if (after.length >= 2 && after[0] === after[1]) {
-    return true;
-  }
-  // Single consonant at end of word (closed syllable)
-  if (after.length === 1 && isConsonant(after[0])) {
-    return true;
-  }
-  return false;
-}
 
 function isVowelOrY(ch: string): boolean {
   return Y_VOWEL.has(ch.toLowerCase());
@@ -229,12 +308,11 @@ function findVowelGroups(word: string): Array<{ start: number; end: number; text
  */
 export function splitSyllables(word: string): string[] {
   const lower = word.toLowerCase().trim();
-  if (!lower || lower.length <= 2) return [lower];
-
   // Check exception dictionary first
-  if (EXCEPTION_WORDS[lower]) {
-    return [...EXCEPTION_WORDS[lower]];
+  if (CURATED_WORD_DIVISIONS[lower]) {
+    return [...CURATED_WORD_DIVISIONS[lower]];
   }
+  if (!lower || lower.length <= 2) return [lower];
 
   // Find all vowel groups
   const vowelGroups = findVowelGroups(lower);
@@ -250,20 +328,16 @@ export function splitSyllables(word: string): string[] {
     const consonants = lower.substring(gapStart, gapEnd);
 
     if (consonants.length === 0) {
-      // Adjacent vowels - check if compound word split
-      // (handled by no split between adjacent vowel groups)
+      // Distinct adjacent vowel groups represent separate syllable nuclei.
+      // Recognised vowel teams were already grouped by findVowelGroups().
+      splitPoints.push(gapStart);
       continue;
     }
 
     if (consonants.length === 1) {
-      // V-C-V pattern: check if vowel is long or short
-      // Long vowel → consonant goes to next syllable (V / CV)
-      // Short vowel → consonant stays with previous (VC / V)
-      if (isShortVowel(v1.text, lower.substring(0, v1.start), consonants + lower.substring(v2.start))) {
-        splitPoints.push(gapStart + 1); // consonant stays with first
-      } else {
-        splitPoints.push(gapStart); // consonant goes to second
-      }
+      // For VCV, try V/CV first (ti-ger, e-le-phant). Words whose first
+      // vowel is short and need VC/V are kept in the reviewed dictionary.
+      splitPoints.push(gapStart);
       continue;
     }
 
@@ -387,12 +461,18 @@ export function detectPhonicsTags(word: string): PhonicsTag[] {
     }
   }
 
-  // 3. Detect magic e patterns
+  // 3. Detect word-final magic e patterns. An internal VCe sequence such as
+  // "ele" in elephant is not a magic-e syllable.
   for (let i = 0; i < lower.length - 2; i++) {
     const v1 = lower[i];
     const mid = lower[i + 1];
     const e = lower[i + 2];
-    if (VOWELS.has(v1) && e === "e" && isConsonant(mid)) {
+    if (
+      VOWELS.has(v1) &&
+      e === "e" &&
+      i + 2 === lower.length - 1 &&
+      isConsonant(mid)
+    ) {
       tags.push({
         type: "magic_e",
         text: `${v1}${mid}e`,
@@ -402,15 +482,15 @@ export function detectPhonicsTags(word: string): PhonicsTag[] {
     }
   }
 
-  // 4. Detect r-controlled vowels
-  for (let i = 0; i < lower.length - 1; i++) {
-    const bi = lower.substring(i, i + 2);
-    if (R_CONTROLLED.has(bi)) {
+  // 4. Detect r-controlled vowels only when the vowel and r remain in the
+  // same reviewed/predicted syllable.
+  for (const group of findVowelGroups(lower)) {
+    if (R_CONTROLLED.has(group.text)) {
       tags.push({
         type: "r_controlled",
-        text: bi,
-        position: [i, i + 2],
-        description: `R控元音 "${bi}"`,
+        text: group.text,
+        position: [group.start, group.end],
+        description: `R控元音 "${group.text}"`,
       });
     }
   }
@@ -464,6 +544,9 @@ function explainStudyPattern(
     case "vowel_combo":
       return `"${text}" 是元音组合，通常作为一个发音单位整体认读，拼读时不要拆成两个独立元音。`;
     case "consonant_blend":
+      if (text === "ph") {
+        return `"ph" 是辅音字母组合，通常合起来发 /f/，拼读时不要拆开。`;
+      }
       return `"${text}" 是辅音组合或辅音连缀，拼读时要让相邻辅音自然衔接。`;
     case "magic_e":
       return `"${text}" 符合“魔法 e”规律：词尾 e 通常不发音，并让前面的元音倾向读字母本音。`;
@@ -517,6 +600,21 @@ export function analyzeWordForStudy(word: string): StudyPhonicsAnalysis {
   }
 
   return { syllables, blocks, patterns };
+}
+
+/**
+ * Format the current engine result for generated notes and migration scripts
+ * while preserving spaces and punctuation between words.
+ */
+export function formatSyllableDivision(word: string): string {
+  return (word.match(/[a-z]+|[^a-z]+/gi) ?? [])
+    .map((segment) =>
+      /^[a-z]+$/i.test(segment)
+        ? splitSyllables(segment).join("-")
+        : segment,
+    )
+    .join("")
+    .trim();
 }
 
 /**

@@ -88,7 +88,7 @@ export default function PhonicsPage() {
           />
         )}
       </main>
-      <MobileNav activeTab="phonics" />
+      {view === "home" && <MobileNav activeTab="phonics" />}
 
       <TagDetailDialog
         tagId={selectedTagId}

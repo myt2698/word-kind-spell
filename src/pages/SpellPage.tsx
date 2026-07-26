@@ -228,7 +228,7 @@ export default function SpellPage() {
         {view !== "home" && view !== "study" && view !== "dictation" && <PracticeModeWrapper mode={view} onBack={() => setView("home")} />}
         {view === "dictation" && <DictationWrapper onBack={() => setView("home")} />}
       </TodayWordsProvider>
-      <MobileNav activeTab="spell" />
+      {view === "home" && <MobileNav activeTab="spell" />}
     </div>
   );
 }
@@ -735,14 +735,6 @@ function TodayStudyMode({ words, onBack }: { words: any[]; onBack: () => void })
   useAutoSpeakTwice(currentWord);
 
   const phonics = currentWord.phonics ?? analyzeWordForStudy(currentWord.word);
-  const attempts = currentWord.totalAttempts ?? 0;
-  const correct = currentWord.totalCorrect ?? 0;
-  const accuracy = attempts > 0 ? Math.round((correct / attempts) * 100) : 0;
-  const levelLabel = currentWord.level === 3
-    ? "熟练"
-    : currentWord.level === 2
-      ? "巩固中"
-      : "新学";
 
   const goNext = () => {
     if (index < words.length - 1) {
@@ -776,10 +768,9 @@ function TodayStudyMode({ words, onBack }: { words: any[]; onBack: () => void })
         </div>
       </div>
 
-      <section className="rounded-3xl bg-gradient-to-br from-indigo-600 to-blue-600 text-white p-6 text-center shadow-lg mb-4">
-        <p className="text-xs text-indigo-100 mb-2">进入单词时自动朗读两遍</p>
+      <section className="rounded-3xl bg-gradient-to-br from-indigo-600 to-blue-600 text-white p-5 text-center shadow-lg mb-4">
         <div className="flex items-center justify-center gap-2">
-          <h1 className="text-4xl font-bold tracking-tight">{currentWord.word}</h1>
+          <h1 className="text-3xl font-bold tracking-tight">{currentWord.word}</h1>
           <button
             onClick={() => speakWord(currentWord.word, currentWord.id)}
             className="w-10 h-10 rounded-full bg-white/15 flex items-center justify-center hover:bg-white/25"
@@ -789,46 +780,45 @@ function TodayStudyMode({ words, onBack }: { words: any[]; onBack: () => void })
           </button>
         </div>
         {currentWord.phonetic && (
-          <p className="text-indigo-100 font-mono mt-2">{currentWord.phonetic}</p>
+          <p className="text-sm text-indigo-100 font-mono mt-1">{currentWord.phonetic}</p>
         )}
-        <p className="text-lg mt-4 leading-relaxed whitespace-pre-line">{currentWord.definition}</p>
-      </section>
-
-      <section className="grid grid-cols-4 gap-2 mb-4">
-        {[
-          ["阶段", levelLabel],
-          ["连续正确", `${currentWord.streak ?? 0} 次`],
-          ["练习次数", `${attempts} 次`],
-          ["正确率", attempts > 0 ? `${accuracy}%` : "暂无"],
-        ].map(([label, value]) => (
-          <div key={label} className="rounded-xl bg-white border border-gray-100 p-3 text-center">
-            <p className="text-sm font-bold text-gray-800">{value}</p>
-            <p className="text-[10px] text-gray-400 mt-1">{label}</p>
-          </div>
-        ))}
-      </section>
-
-      <section className="rounded-2xl bg-white border border-gray-100 p-5 mb-4">
-        <h2 className="text-sm font-semibold text-gray-800 flex items-center gap-2 mb-3">
-          <Tag className="w-4 h-4 text-indigo-500" />
-          单词标签
-        </h2>
-        {currentWord.tags?.length > 0 ? (
-          <div className="flex flex-wrap gap-2">
-            {currentWord.tags.map((tag: any) => (
+        <p className="text-base mt-3 leading-relaxed whitespace-pre-line">{currentWord.definition}</p>
+        {currentWord.example && (
+          <div className="mt-3 rounded-xl bg-white/10 p-3 text-left">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-xs font-medium text-indigo-100">课本例句</span>
               <button
-                type="button"
-                key={tag.id}
-                title={tag.description || tag.name}
-                onClick={() => setSelectedTagId(tag.id)}
-                className="inline-flex items-center rounded-full bg-indigo-50 border border-indigo-100 px-3 py-1.5 text-sm font-medium text-indigo-700 hover:bg-indigo-100 hover:border-indigo-300 active:scale-95 transition-all cursor-pointer"
+                onClick={() => speakWord(currentWord.example)}
+                className="inline-flex items-center gap-1.5 text-xs text-white bg-white/15 rounded-lg px-2.5 py-1.5 hover:bg-white/25"
               >
-                {tag.name}
+                <Volume2 className="w-3.5 h-3.5" />
+                朗读
               </button>
-            ))}
+            </div>
+            <HighlightedStudyExample
+              example={currentWord.example}
+              word={currentWord.word}
+              tone="hero"
+            />
           </div>
-        ) : (
-          <p className="text-xs text-gray-400">这个单词暂时没有标签</p>
+        )}
+        {currentWord.tags?.length > 0 && (
+          <div className="mt-3">
+            <div className="flex flex-wrap justify-center gap-2">
+              {currentWord.tags.map((tag: any) => (
+                <button
+                  type="button"
+                  key={tag.id}
+                  title={tag.description || tag.name}
+                  onClick={() => setSelectedTagId(tag.id)}
+                  className="inline-flex items-center rounded-full bg-white/15 border border-white/20 px-3 py-1 text-xs font-medium text-white hover:bg-white/25 active:scale-95 transition-all"
+                >
+                  <Tag className="w-3 h-3 mr-1" />
+                  {tag.name}
+                </button>
+              ))}
+            </div>
+          </div>
         )}
       </section>
 
@@ -893,22 +883,6 @@ function TodayStudyMode({ words, onBack }: { words: any[]; onBack: () => void })
         </p>
       </section>
 
-      {currentWord.example && (
-        <section className="rounded-2xl bg-emerald-50 border border-emerald-100 p-5 mb-4">
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="text-sm font-semibold text-emerald-800">课本例句</h2>
-            <button
-              onClick={() => speakWord(currentWord.example)}
-              className="inline-flex items-center gap-1.5 text-xs text-emerald-700 bg-white/80 rounded-lg px-3 py-2"
-            >
-              <Volume2 className="w-4 h-4" />
-              朗读例句
-            </button>
-          </div>
-          <HighlightedStudyExample example={currentWord.example} word={currentWord.word} />
-        </section>
-      )}
-
       {currentWord.notes && (
         <section className="rounded-2xl bg-white border border-gray-100 p-5 mb-4">
           <h2 className="text-sm font-semibold text-gray-800 mb-2">备注</h2>
@@ -941,14 +915,27 @@ function TodayStudyMode({ words, onBack }: { words: any[]; onBack: () => void })
   );
 }
 
-function HighlightedStudyExample({ example, word }: { example: string; word: string }) {
+function HighlightedStudyExample({
+  example,
+  word,
+  tone = "default",
+}: {
+  example: string;
+  word: string;
+  tone?: "default" | "hero";
+}) {
   const escaped = word.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const pieces = example.split(new RegExp(`(${escaped})`, "gi"));
   return (
-    <p className="text-base text-emerald-950 leading-relaxed whitespace-pre-line">
+    <p className={`text-base leading-relaxed whitespace-pre-line ${tone === "hero" ? "text-white" : "text-emerald-950"}`}>
       {pieces.map((piece, index) =>
         piece.toLowerCase() === word.toLowerCase() ? (
-          <span key={index} className="font-bold text-emerald-600">{piece}</span>
+          <span
+            key={index}
+            className={`font-bold ${tone === "hero" ? "text-emerald-200" : "text-emerald-600"}`}
+          >
+            {piece}
+          </span>
         ) : (
           <span key={index}>{piece}</span>
         ),

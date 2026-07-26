@@ -176,7 +176,7 @@ const entries = [
   { units: ["Unit 1"], word: "look after", phonetic: "/lʊk ˈɑːftə(r)/", definition: "照顾", example: "I look after my sister.", split: "look af-ter（短语）", tags: ["oot/ood/ook"] },
   { units: ["Unit 1"], word: "sweep", phonetic: "/swiːp/", definition: "扫", example: "We sweep the floor.", split: "sweep（1个音节）", tags: ["ee"] },
   { units: ["Unit 1"], word: "floor", phonetic: "/flɔː(r)/", definition: "地板；地面", example: "We sweep the floor.", split: "floor（1个音节）", tags: ["oor"] },
-  { units: ["Unit 1"], word: "together", phonetic: "/təˈɡeðə(r)/", definition: "在一起；共同", example: "We cook together. We are happy together.", split: "to-geth-er（3个音节）", tags: ["th /ð/"] },
+  { units: ["Unit 1"], word: "together", phonetic: "/təˈɡeðə(r)/", definition: "在一起；共同", example: "We cook together. We are happy together.", split: "to-ge-ther（3个音节）", tags: ["th /ð/"] },
   { units: ["Unit 1"], word: "people", phonetic: "/ˈpiːpl/", definition: "人；人们", example: "People speak Chinese in China.", split: "peo-ple（2个音节）", tags: ["eo /iː/", "ple"] },
   { units: ["Unit 1"], word: "child", phonetic: "/tʃaɪld/", definition: "儿童；小孩（复数 children）", example: "You are still a child. What can you do?", split: "child（1个音节）", tags: ["ch /tʃ/", "i+ld/nd"] },
   { units: ["Unit 1"], word: "helpful", phonetic: "/ˈhelpfl/", definition: "有帮助的；有用的", example: "They are helpful!", split: "help-ful（2个音节）", tags: ["闭音节 e /e/", "-ful /fl/"] },
@@ -234,7 +234,7 @@ const entries = [
 
   // Unit 5
   { units: ["Unit 5"], word: "speak", phonetic: "/spiːk/", definition: "说话；发言", example: "Hello! Mark speaking.", split: "speak（1个音节）", tags: ["ea/iː/"] },
-  { units: ["Unit 5"], word: "weather", phonetic: "/ˈweðə(r)/", definition: "天气", example: "What's the weather like in Sydney?", split: "weath-er（2个音节）", tags: ["ea/e/", "th /ð/"] },
+  { units: ["Unit 5"], word: "weather", phonetic: "/ˈweðə(r)/", definition: "天气", example: "What's the weather like in Sydney?", split: "wea-ther（2个音节）", tags: ["ea/e/", "th /ð/"] },
   { units: ["Unit 5"], word: "sunny", phonetic: "/ˈsʌni/", definition: "阳光充足的", example: "It's sunny today.", split: "sun-ny（2个音节）", tags: ["闭音节 u /ʌ/", "双写辅音，保护短元音", "辅+y多音节"] },
   { units: ["Unit 5"], word: "hot", phonetic: "/hɒt/", definition: "热的", example: "Is it hot?", split: "hot（1个音节）", tags: ["闭音节 o /ɒ/"] },
   { units: ["Unit 5"], word: "bad", phonetic: "/bæd/", definition: "令人不快的；坏的", example: "That's not bad.", split: "bad（1个音节）", tags: ["闭音节 a /æ/"] },
@@ -271,7 +271,7 @@ const entries = [
   { units: ["Unit 6"], word: "season", phonetic: "/ˈsiːzn/", definition: "季节", example: "Which season do you like?", split: "sea-son（2个音节）", tags: ["ea/iː/"] },
   { units: ["Unit 6"], word: "winter", phonetic: "/ˈwɪntə(r)/", definition: "冬天", example: "Spring, summer, autumn and winter.", split: "win-ter（2个音节）", tags: ["闭音节 i /ɪ/"] },
   { units: ["Unit 6"], word: "snow", phonetic: "/snəʊ/", definition: "下雪；雪", example: "Winter. It snows a lot.", split: "snow（1个音节）", tags: ["ow/əʊ/"] },
-  { units: ["Unit 6"], word: "get together", phonetic: "/ɡet təˈɡeðə(r)/", definition: "聚会", example: "My family and I often get together and have fun.", split: "get to-geth-er（短语）", tags: ["闭音节 e /e/", "th /ð/"] },
+  { units: ["Unit 6"], word: "get together", phonetic: "/ɡet təˈɡeðə(r)/", definition: "聚会", example: "My family and I often get together and have fun.", split: "get to-ge-ther（短语）", tags: ["闭音节 e /e/", "th /ð/"] },
   { units: ["Unit 6"], word: "spring", phonetic: "/sprɪŋ/", definition: "春天", example: "Spring, summer, autumn and winter.", split: "spring（1个音节）", tags: ["ng /ŋ/"] },
   { units: ["Unit 6"], word: "summer", phonetic: "/ˈsʌmə(r)/", definition: "夏天", example: "Spring, summer, autumn and winter.", split: "sum-mer（2个音节）", tags: ["闭音节 u /ʌ/", "双写辅音，保护短元音"] },
   { units: ["Unit 6"], word: "autumn", phonetic: "/ˈɔːtəm/", definition: "秋天", example: "Spring, summer, autumn and winter.", split: "au-tumn（2个音节）", tags: ["au /ɔː/"] },

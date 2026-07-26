@@ -171,6 +171,27 @@ class WordMindApi(context: Context) {
     suspend fun getErrorWords(): List<PracticeWord> =
         (query("spelling.getErrorWords") as JSONArray).toPracticeWords()
 
+    suspend fun getErrorBook(): List<SpellingErrorEntry> {
+        val result = query("spelling.getErrorBook") as JSONArray
+        return buildList {
+            for (index in 0 until result.length()) {
+                val item = result.getJSONObject(index)
+                add(
+                    SpellingErrorEntry(
+                        id = item.getInt("id"),
+                        wordId = item.getInt("wordId"),
+                        word = item.optString("word"),
+                        phonetic = item.nullableString("phonetic"),
+                        definition = item.optString("definition"),
+                        userInput = item.optString("userInput"),
+                        errorType = item.optString("errorType", "other"),
+                        practiceMode = item.optString("practiceMode"),
+                    )
+                )
+            }
+        }
+    }
+
     suspend fun getTodaySelections(): List<Int> {
         val result = query("spelling.getTodaySelections") as JSONArray
         return buildList {
@@ -196,12 +217,27 @@ class WordMindApi(context: Context) {
 
     suspend fun getSpellingStats(): SpellingStats {
         val result = query("spelling.getStats") as JSONObject
+        val byLevelJson = result.optJSONArray("byLevel") ?: JSONArray()
+        val byLevel = buildList {
+            for (index in 0 until byLevelJson.length()) {
+                val item = byLevelJson.getJSONObject(index)
+                add(
+                    SpellingLevelStat(
+                        level = item.optInt("level", 1),
+                        count = item.optInt("count"),
+                    )
+                )
+            }
+        }
         return SpellingStats(
+            totalWords = result.optInt("totalWords"),
             learningWords = result.optInt("learningWords"),
+            pausedWords = result.optInt("pausedWords"),
             manualDue = result.optInt("manualDue"),
             dueForReview = result.optInt("dueForReview"),
             totalErrors = result.optInt("totalErrors"),
             todaySessions = result.optInt("todaySessions"),
+            byLevel = byLevel,
         )
     }
 

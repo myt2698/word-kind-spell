@@ -107,11 +107,30 @@ data class StudyPhonicsPattern(
 )
 
 data class SpellingStats(
+    val totalWords: Int,
     val learningWords: Int,
+    val pausedWords: Int,
     val manualDue: Int,
     val dueForReview: Int,
     val totalErrors: Int,
     val todaySessions: Int,
+    val byLevel: List<SpellingLevelStat>,
+)
+
+data class SpellingLevelStat(
+    val level: Int,
+    val count: Int,
+)
+
+data class SpellingErrorEntry(
+    val id: Int,
+    val wordId: Int,
+    val word: String,
+    val phonetic: String?,
+    val definition: String,
+    val userInput: String,
+    val errorType: String,
+    val practiceMode: String,
 )
 
 internal fun JSONObject.nullableString(key: String): String? {

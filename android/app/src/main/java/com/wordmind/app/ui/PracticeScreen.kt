@@ -98,6 +98,7 @@ internal fun PracticeScreen(
     speak: (String) -> Unit,
     onMessage: (String) -> Unit,
     onLearningChanged: () -> Unit,
+    onSecondaryPageChanged: (Boolean) -> Unit,
 ) {
     var learningWords by remember { mutableStateOf<List<PracticeWord>>(emptyList()) }
     var reviewWords by remember { mutableStateOf<List<PracticeWord>>(emptyList()) }
@@ -110,6 +111,10 @@ internal fun PracticeScreen(
     var statDialog by remember { mutableStateOf<StatDialogType?>(null) }
     var view by rememberSaveable { mutableStateOf(PracticeView.Home) }
     val scope = rememberCoroutineScope()
+
+    LaunchedEffect(view) {
+        onSecondaryPageChanged(view != PracticeView.Home)
+    }
 
     suspend fun loadPractice(showLoading: Boolean = true) {
         if (showLoading) loading = true

@@ -347,7 +347,7 @@ export default function Home({ searchMode = false }: { searchMode?: boolean }) {
         )}
       </main>
 
-      <MobileNav />
+      {!searchMode && <MobileNav />}
     </div>
   );
 }

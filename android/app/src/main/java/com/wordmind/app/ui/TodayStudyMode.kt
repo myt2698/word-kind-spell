@@ -97,17 +97,6 @@ internal fun TodayStudyMode(
         current.phonics.takeIf { it.blocks.isNotEmpty() }
             ?: analyzeNativeStudyPhonics(current.word)
     }
-    val attempts = current.totalAttempts
-    val accuracy = if (attempts > 0) {
-        current.totalCorrect * 100 / attempts
-    } else {
-        null
-    }
-    val levelLabel = when (current.level) {
-        3 -> "熟练"
-        2 -> "巩固中"
-        else -> "新学"
-    }
 
     Column(
         modifier = Modifier
@@ -149,20 +138,14 @@ internal fun TodayStudyMode(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 20.dp, vertical = 22.dp),
+                    .padding(horizontal = 17.dp, vertical = 17.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                Text(
-                    "进入单词时自动朗读两遍",
-                    color = Color(0xFFC7D2FE),
-                    fontSize = 11.sp,
-                )
-                Spacer(Modifier.height(8.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
                         current.word,
                         color = Color.White,
-                        fontSize = 34.sp,
+                        fontSize = 30.sp,
                         fontWeight = FontWeight.Bold,
                     )
                     Spacer(Modifier.width(8.dp))
@@ -182,68 +165,111 @@ internal fun TodayStudyMode(
                     }
                 }
                 current.phonetic?.takeIf { it.isNotBlank() }?.let { phonetic ->
-                    Spacer(Modifier.height(6.dp))
+                    Spacer(Modifier.height(3.dp))
                     Text(
                         phonetic,
                         color = Color(0xFFE0E7FF),
                         fontFamily = FontFamily.Monospace,
-                        fontSize = 15.sp,
+                        fontSize = 13.sp,
                     )
                 }
-                Spacer(Modifier.height(14.dp))
+                Spacer(Modifier.height(9.dp))
                 Text(
                     current.definition,
                     color = Color.White,
-                    fontSize = 17.sp,
+                    fontSize = 15.sp,
                     fontWeight = FontWeight.Medium,
                 )
-            }
-        }
-        Spacer(Modifier.height(12.dp))
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(7.dp),
-        ) {
-            StudyStatusCard("阶段", levelLabel, Modifier.weight(1f))
-            StudyStatusCard("连续正确", "${current.streak} 次", Modifier.weight(1f))
-            StudyStatusCard("练习次数", "$attempts 次", Modifier.weight(1f))
-            StudyStatusCard("正确率", accuracy?.let { "$it%" } ?: "暂无", Modifier.weight(1f))
-        }
-        Spacer(Modifier.height(12.dp))
-
-        StudySection(
-            title = "单词标签",
-            icon = {
-                Icon(
-                    Icons.Default.LocalOffer,
-                    contentDescription = null,
-                    tint = PracticeIndigo,
-                    modifier = Modifier.size(18.dp),
-                )
-            },
-        ) {
-            if (current.tags.isEmpty()) {
-                Text("这个单词暂时没有标签", color = Color(0xFF94A3B8), fontSize = 12.sp)
-            } else {
-                FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(7.dp),
-                    verticalArrangement = Arrangement.spacedBy(7.dp),
-                ) {
-                    current.tags.forEach { tag ->
-                        Surface(
-                            onClick = { selectedTag = tag },
-                            color = Color(0xFFEEF2FF),
-                            border = BorderStroke(1.dp, Color(0xFFC7D2FE)),
-                            shape = RoundedCornerShape(100.dp),
-                        ) {
+                current.example?.takeIf { it.isNotBlank() }?.let { example ->
+                    Spacer(Modifier.height(11.dp))
+                    Surface(
+                        modifier = Modifier.fillMaxWidth(),
+                        color = Color.White.copy(alpha = 0.10f),
+                        shape = RoundedCornerShape(11.dp),
+                    ) {
+                        Column(Modifier.padding(horizontal = 11.dp, vertical = 9.dp)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Text(
+                                    "课本例句",
+                                    modifier = Modifier.weight(1f),
+                                    color = Color(0xFFC7D2FE),
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                )
+                                Surface(
+                                    onClick = { speak(example) },
+                                    color = Color.White.copy(alpha = 0.14f),
+                                    shape = RoundedCornerShape(7.dp),
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                    ) {
+                                        Icon(
+                                            Icons.Default.RecordVoiceOver,
+                                            contentDescription = null,
+                                            tint = Color.White,
+                                            modifier = Modifier.size(14.dp),
+                                        )
+                                        Spacer(Modifier.width(4.dp))
+                                        Text("朗读", color = Color.White, fontSize = 9.sp)
+                                    }
+                                }
+                            }
+                            Spacer(Modifier.height(6.dp))
                             Text(
-                                tag.name,
-                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
-                                color = Color(0xFF4338CA),
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.SemiBold,
+                                highlightStudyWord(
+                                    example = example,
+                                    word = current.word,
+                                    highlightColor = Color(0xFFA7F3D0),
+                                ),
+                                modifier = Modifier.fillMaxWidth(),
+                                color = Color.White,
+                                fontSize = 13.sp,
+                                lineHeight = 19.sp,
                             )
+                        }
+                    }
+                }
+                if (current.tags.isNotEmpty()) {
+                    Spacer(Modifier.height(10.dp))
+                    FlowRow(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(
+                            6.dp,
+                            alignment = Alignment.CenterHorizontally,
+                        ),
+                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        current.tags.forEach { tag ->
+                            Surface(
+                                onClick = { selectedTag = tag },
+                                color = Color.White.copy(alpha = 0.14f),
+                                border = BorderStroke(1.dp, Color.White.copy(alpha = 0.22f)),
+                                shape = RoundedCornerShape(100.dp),
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    Icon(
+                                        Icons.Default.LocalOffer,
+                                        contentDescription = null,
+                                        tint = Color.White,
+                                        modifier = Modifier.size(12.dp),
+                                    )
+                                    Spacer(Modifier.width(4.dp))
+                                    Text(
+                                        tag.name,
+                                        color = Color.White,
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                    )
+                                }
+                            }
                         }
                     }
                 }
@@ -346,57 +372,6 @@ internal fun TodayStudyMode(
             )
         }
 
-        current.example?.takeIf { it.isNotBlank() }?.let { example ->
-            Spacer(Modifier.height(12.dp))
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = Color(0xFFECFDF5)),
-                border = BorderStroke(1.dp, Color(0xFFA7F3D0)),
-                shape = RoundedCornerShape(16.dp),
-            ) {
-                Column(Modifier.padding(16.dp)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Text(
-                            "课本例句",
-                            modifier = Modifier.weight(1f),
-                            color = Color(0xFF065F46),
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.Bold,
-                        )
-                        Surface(
-                            onClick = { speak(example) },
-                            color = Color.White.copy(alpha = 0.78f),
-                            shape = RoundedCornerShape(9.dp),
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                Icon(
-                                    Icons.Default.RecordVoiceOver,
-                                    contentDescription = null,
-                                    tint = Color(0xFF047857),
-                                    modifier = Modifier.size(16.dp),
-                                )
-                                Spacer(Modifier.width(5.dp))
-                                Text("朗读例句", color = Color(0xFF047857), fontSize = 11.sp)
-                            }
-                        }
-                    }
-                    Spacer(Modifier.height(10.dp))
-                    Text(
-                        highlightStudyWord(example, current.word),
-                        color = Color(0xFF064E3B),
-                        fontSize = 15.sp,
-                        lineHeight = 23.sp,
-                    )
-                }
-            }
-        }
-
         current.notes?.takeIf { it.isNotBlank() }?.let { notes ->
             Spacer(Modifier.height(12.dp))
             StudySection(title = "备注") {
@@ -446,37 +421,6 @@ internal fun TodayStudyMode(
             speak = speak,
             onDismiss = { selectedTag = null },
         )
-    }
-}
-
-@Composable
-private fun StudyStatusCard(
-    label: String,
-    value: String,
-    modifier: Modifier,
-) {
-    Card(
-        modifier = modifier,
-        colors = CardDefaults.cardColors(containerColor = Color.White),
-        border = BorderStroke(1.dp, Color(0xFFE2E8F0)),
-        shape = RoundedCornerShape(12.dp),
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 4.dp, vertical = 10.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-        ) {
-            Text(
-                value,
-                color = Color(0xFF1E293B),
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Bold,
-                maxLines = 1,
-            )
-            Spacer(Modifier.height(3.dp))
-            Text(label, color = Color(0xFF94A3B8), fontSize = 9.sp, maxLines = 1)
-        }
     }
 }
 
@@ -604,7 +548,11 @@ private fun analyzeNativeStudyPhonics(word: String): StudyPhonicsAnalysis {
     )
 }
 
-private fun highlightStudyWord(example: String, word: String): AnnotatedString {
+private fun highlightStudyWord(
+    example: String,
+    word: String,
+    highlightColor: Color = Color(0xFF059669),
+): AnnotatedString {
     if (word.isBlank()) return AnnotatedString(example)
     val lowerExample = example.lowercase()
     val lowerWord = word.lowercase()
@@ -619,7 +567,7 @@ private fun highlightStudyWord(example: String, word: String): AnnotatedString {
             append(example.substring(cursor, match))
             withStyle(
                 SpanStyle(
-                    color = Color(0xFF059669),
+                    color = highlightColor,
                     fontWeight = FontWeight.Bold,
                 )
             ) {

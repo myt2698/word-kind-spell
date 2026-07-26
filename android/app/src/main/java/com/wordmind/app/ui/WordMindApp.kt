@@ -516,16 +516,22 @@ private fun MainScreen(
     var editingWord by remember { mutableStateOf<Word?>(null) }
     var deletingWord by remember { mutableStateOf<Word?>(null) }
     var deleteBusy by remember { mutableStateOf(false) }
+    var secondaryPageOpen by rememberSaveable { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
 
     Scaffold(
         containerColor = PageBackground,
         bottomBar = {
-            AppNavigationBar(
-                destinations = destinations,
-                selectedIndex = destination,
-                onSelect = { destination = it },
-            )
+            if (!secondaryPageOpen) {
+                AppNavigationBar(
+                    destinations = destinations,
+                    selectedIndex = destination,
+                    onSelect = {
+                        destination = it
+                        secondaryPageOpen = false
+                    },
+                )
+            }
         },
     ) { padding ->
         PullToRefreshBox(
@@ -561,6 +567,7 @@ private fun MainScreen(
                             wordEditorOpen = true
                         },
                         onDeleteWord = { deletingWord = it },
+                        onSecondaryPageChanged = { secondaryPageOpen = it },
                     )
                     Destination.Practice -> PracticeScreen(
                         api = api,
@@ -568,11 +575,13 @@ private fun MainScreen(
                         speak = speak,
                         onMessage = onMessage,
                         onLearningChanged = onRefresh,
+                        onSecondaryPageChanged = { secondaryPageOpen = it },
                     )
                     Destination.Phonics -> PhonicsScreen(
                         tags = tags,
                         words = words,
                         speak = phonicsSpeak,
+                        onSecondaryPageChanged = { secondaryPageOpen = it },
                     )
                     Destination.Manage -> AdminScreen(
                         api = api,
@@ -584,8 +593,14 @@ private fun MainScreen(
                     Destination.Profile -> ProfileScreen(
                         api = api,
                         user = user,
-                        textbooks = textbooks,
-                        words = words,
+                        onOpenAdmin = {
+                            destinations.indexOf(Destination.Manage)
+                                .takeIf { it >= 0 }
+                                ?.let {
+                                    destination = it
+                                    secondaryPageOpen = false
+                                }
+                        },
                         onUserUpdated = onUserUpdated,
                         onRefresh = onRefresh,
                         onLogout = onLogout,
@@ -649,6 +664,7 @@ private fun WordsScreen(
     onAddWord: () -> Unit,
     onEditWord: (Word) -> Unit,
     onDeleteWord: (Word) -> Unit,
+    onSecondaryPageChanged: (Boolean) -> Unit,
 ) {
     val context = LocalContext.current
     val filterPreferences = remember(context) {
@@ -677,6 +693,10 @@ private fun WordsScreen(
         )
     }
     var detailTagId by rememberSaveable { mutableStateOf<Int?>(null) }
+
+    LaunchedEffect(searchOpen) {
+        onSecondaryPageChanged(searchOpen)
+    }
 
     val units = remember(textbooks, textbookId) {
         textbooks.firstOrNull { it.id == textbookId }?.groups.orEmpty()
@@ -1521,205 +1541,6 @@ private fun TextbookCard(textbook: Textbook, fallbackWordCount: Int) {
                 }
             }
         }
-    }
-}
-
-@Composable
-private fun ProfileScreen(
-    api: WordMindApi,
-    user: User,
-    textbooks: List<Textbook>,
-    words: List<Word>,
-    onUserUpdated: (User) -> Unit,
-    onRefresh: () -> Unit,
-    onLogout: () -> Unit,
-) {
-    var editingNickname by remember { mutableStateOf(false) }
-    var changingPassword by remember { mutableStateOf(false) }
-    var clearingRecords by remember { mutableStateOf(false) }
-    var notice by remember { mutableStateOf<String?>(null) }
-
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(20.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        Surface(
-            modifier = Modifier.size(82.dp),
-            shape = CircleShape,
-            color = Color(0xFFEEF2FF),
-        ) {
-            Box(contentAlignment = Alignment.Center) {
-                Text(
-                    user.name.take(1).uppercase(),
-                    color = Indigo,
-                    fontSize = 34.sp,
-                    fontWeight = FontWeight.Bold,
-                )
-            }
-        }
-        Spacer(Modifier.height(13.dp))
-        Text(user.name, fontSize = 22.sp, fontWeight = FontWeight.Bold)
-        Text(if (user.role == "admin") "管理员账号" else "学习账号", color = Muted, fontSize = 13.sp)
-        Spacer(Modifier.height(24.dp))
-
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(16.dp),
-            colors = CardDefaults.cardColors(containerColor = Color.White),
-            border = CardDefaults.outlinedCardBorder(),
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 20.dp),
-                horizontalArrangement = Arrangement.SpaceEvenly,
-            ) {
-                Stat("${words.size}", "全部单词")
-                Stat("${textbooks.size}", "共享课本")
-                Stat("${words.count { it.learningStatus != "idle" }}", "学习中")
-            }
-        }
-        Spacer(Modifier.height(16.dp))
-
-        notice?.let {
-            MessageBanner(
-                text = it,
-                danger = false,
-                onDismiss = { notice = null },
-            )
-            Spacer(Modifier.height(16.dp))
-        }
-
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(16.dp),
-            colors = CardDefaults.cardColors(containerColor = Color.White),
-            border = CardDefaults.outlinedCardBorder(),
-        ) {
-            Column {
-                ProfileAction(
-                    icon = Icons.Default.Edit,
-                    title = "修改昵称",
-                    subtitle = "当前昵称：${user.name}",
-                    onClick = { editingNickname = true },
-                )
-                HorizontalDivider(color = Border)
-                ProfileAction(
-                    icon = Icons.Default.Key,
-                    title = "修改密码",
-                    subtitle = "使用原密码设置新密码",
-                    onClick = { changingPassword = true },
-                )
-                HorizontalDivider(color = Border)
-                ProfileAction(
-                    icon = Icons.Default.Delete,
-                    title = "清空学习记录",
-                    subtitle = "清除当前账号的进度、错题与练习记录",
-                    tint = Danger,
-                    onClick = { clearingRecords = true },
-                )
-                HorizontalDivider(color = Border)
-                ProfileAction(
-                    icon = Icons.AutoMirrored.Filled.Logout,
-                    title = "退出登录",
-                    subtitle = "退出当前账号",
-                    tint = Danger,
-                    onClick = onLogout,
-                )
-            }
-        }
-    }
-
-    if (editingNickname) {
-        EditNicknameDialog(
-            api = api,
-            user = user,
-            onUpdated = {
-                editingNickname = false
-                onUserUpdated(it)
-                notice = "昵称修改成功"
-            },
-            onDismiss = { editingNickname = false },
-        )
-    }
-
-    if (changingPassword) {
-        ChangePasswordDialog(
-            api = api,
-            onChanged = {
-                changingPassword = false
-                notice = it
-            },
-            onDismiss = { changingPassword = false },
-        )
-    }
-
-    if (clearingRecords) {
-        ClearLearningRecordsDialog(
-            api = api,
-            onCleared = {
-                clearingRecords = false
-                notice = it
-                onRefresh()
-            },
-            onDismiss = { clearingRecords = false },
-        )
-    }
-}
-
-@Composable
-private fun ProfileAction(
-    icon: ImageVector,
-    title: String,
-    subtitle: String,
-    tint: Color = Indigo,
-    onClick: () -> Unit,
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick)
-            .padding(horizontal = 16.dp, vertical = 14.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Surface(
-            modifier = Modifier.size(38.dp),
-            shape = RoundedCornerShape(11.dp),
-            color = if (tint == Danger) Color(0xFFFEF2F2) else Color(0xFFEEF2FF),
-        ) {
-            Box(contentAlignment = Alignment.Center) {
-                Icon(
-                    imageVector = icon,
-                    contentDescription = null,
-                    tint = tint,
-                    modifier = Modifier.size(20.dp),
-                )
-            }
-        }
-        Spacer(Modifier.width(12.dp))
-        Column(modifier = Modifier.weight(1f)) {
-            Text(title, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = tint)
-            Spacer(Modifier.height(2.dp))
-            Text(subtitle, fontSize = 12.sp, color = Muted)
-        }
-        Icon(
-            imageVector = Icons.Default.ChevronRight,
-            contentDescription = null,
-            tint = Muted,
-            modifier = Modifier.size(18.dp),
-        )
-    }
-}
-
-@Composable
-private fun Stat(value: String, label: String) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(value, fontSize = 23.sp, fontWeight = FontWeight.Bold, color = Indigo)
-        Spacer(Modifier.height(3.dp))
-        Text(label, color = Muted, fontSize = 12.sp)
     }
 }
 
