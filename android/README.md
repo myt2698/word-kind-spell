@@ -7,7 +7,7 @@ This directory contains the native WordMind Android client.
 - Speech: Android `TextToSpeech`
 - Backend: `https://word-kind-spell-production.up.railway.app`
 - Package: `com.wordmind.app`
-- Version: `1.0.3-native` (`versionCode` 4)
+- Version: `1.0.4-native` (`versionCode` 5)
 - Minimum Android version: Android 6.0 (API 23)
 
 The app does not use Capacitor, Cordova, WebView, Chrome, or another browser

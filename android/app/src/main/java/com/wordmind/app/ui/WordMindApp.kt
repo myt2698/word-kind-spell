@@ -44,12 +44,16 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.MenuAnchorType
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.OutlinedButton
@@ -550,6 +554,7 @@ private fun MainScreen(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun WordsScreen(
     words: List<Word>,
@@ -570,6 +575,15 @@ private fun WordsScreen(
 
     val units = remember(textbooks, textbookId) {
         textbooks.firstOrNull { it.id == textbookId }?.groups.orEmpty()
+    }
+    val textbookOptions = remember(textbooks) {
+        textbooks.map { it.id to it.name }
+    }
+    val unitOptions = remember(units) {
+        units.map { it.id to it.name }
+    }
+    val tagOptions = remember(tags) {
+        tags.map { it.id to it.name }
     }
     val filtered = remember(words, query, textbookId, unitId, tagId, sort) {
         val needle = query.trim().lowercase()
@@ -612,77 +626,33 @@ private fun WordsScreen(
             )
         }
         item {
-            Column {
-                Text("课本", color = Muted, fontSize = 12.sp)
-                Spacer(Modifier.height(4.dp))
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    item {
-                        FilterChip(
-                            selected = textbookId == null,
-                            onClick = {
-                                textbookId = null
-                                unitId = null
-                            },
-                            label = { Text("全部课本") },
-                        )
-                    }
-                    items(textbooks, key = { it.id }) { textbook ->
-                        FilterChip(
-                            selected = textbookId == textbook.id,
-                            onClick = {
-                                textbookId = textbook.id
-                                unitId = null
-                            },
-                            label = { Text(textbook.name, maxLines = 1) },
-                        )
-                    }
-                }
-            }
-        }
-        if (textbookId != null) {
-            item {
-                Column {
-                    Text("单元", color = Muted, fontSize = 12.sp)
-                    Spacer(Modifier.height(4.dp))
-                    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        item {
-                            FilterChip(
-                                selected = unitId == null,
-                                onClick = { unitId = null },
-                                label = { Text("全部单元") },
-                            )
-                        }
-                        items(units, key = { it.id }) { unit ->
-                            FilterChip(
-                                selected = unitId == unit.id,
-                                onClick = { unitId = unit.id },
-                                label = { Text(unit.name, maxLines = 1) },
-                            )
-                        }
-                    }
-                }
-            }
-        }
-        item {
-            Column {
-                Text("标签", color = Muted, fontSize = 12.sp)
-                Spacer(Modifier.height(4.dp))
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    item {
-                        FilterChip(
-                            selected = tagId == null,
-                            onClick = { tagId = null },
-                            label = { Text("全部标签") },
-                        )
-                    }
-                    items(tags, key = { it.id }) { tag ->
-                        FilterChip(
-                            selected = tagId == tag.id,
-                            onClick = { tagId = tag.id },
-                            label = { Text(tag.name, maxLines = 1) },
-                        )
-                    }
-                }
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                WordFilterDropdown(
+                    label = "课本",
+                    allLabel = "全部课本",
+                    selectedId = textbookId,
+                    options = textbookOptions,
+                    onSelect = { selectedId ->
+                        textbookId = selectedId
+                        unitId = null
+                    },
+                )
+                WordFilterDropdown(
+                    label = "单元",
+                    allLabel = "全部单元",
+                    selectedId = unitId,
+                    options = unitOptions,
+                    enabled = textbookId != null,
+                    disabledLabel = "请先选择课本",
+                    onSelect = { unitId = it },
+                )
+                WordFilterDropdown(
+                    label = "标签",
+                    allLabel = "全部标签",
+                    selectedId = tagId,
+                    options = tagOptions,
+                    onSelect = { tagId = it },
+                )
             }
         }
         item {
@@ -761,6 +731,77 @@ private fun WordsScreen(
                     canManage = canManage,
                     onEdit = { onEditWord(word) },
                     onDelete = { onDeleteWord(word) },
+                )
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun WordFilterDropdown(
+    label: String,
+    allLabel: String,
+    selectedId: Int?,
+    options: List<Pair<Int, String>>,
+    enabled: Boolean = true,
+    disabledLabel: String = allLabel,
+    onSelect: (Int?) -> Unit,
+) {
+    var expanded by remember { mutableStateOf(false) }
+    val selectedLabel = if (enabled) {
+        options.firstOrNull { it.first == selectedId }?.second ?: allLabel
+    } else {
+        disabledLabel
+    }
+
+    ExposedDropdownMenuBox(
+        expanded = expanded,
+        onExpandedChange = {
+            if (enabled) {
+                expanded = !expanded
+            }
+        },
+    ) {
+        OutlinedTextField(
+            value = selectedLabel,
+            onValueChange = {},
+            modifier = Modifier
+                .menuAnchor(MenuAnchorType.PrimaryNotEditable, enabled = enabled)
+                .fillMaxWidth(),
+            enabled = enabled,
+            readOnly = true,
+            label = { Text(label) },
+            trailingIcon = {
+                ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded)
+            },
+            singleLine = true,
+            shape = RoundedCornerShape(12.dp),
+        )
+        ExposedDropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false },
+        ) {
+            DropdownMenuItem(
+                text = { Text(allLabel) },
+                onClick = {
+                    onSelect(null)
+                    expanded = false
+                },
+            )
+            options.forEach { option ->
+                DropdownMenuItem(
+                    text = {
+                        Text(
+                            option.second,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    },
+                    onClick = {
+                        onSelect(option.first)
+                        expanded = false
+                    },
                 )
             }
         }
