@@ -2,7 +2,7 @@ import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 import { createRouter, authedQuery, adminQuery } from "./middleware";
 import { getDb } from "./queries/connection";
-import { textbooks, wordGroups, words } from "@db/schema";
+import { textbooks, wordGroups, words, wordGroupLinks } from "@db/schema";
 import { eq, and, count, inArray } from "drizzle-orm";
 import { getCatalogOwnerId } from "./catalog";
 
@@ -89,10 +89,11 @@ export const textbookRouter = createRouter({
       .orderBy(wordGroups.sortOrder);
 
     const wordCounts = await db
-      .select({ groupId: words.groupId, count: count() })
-      .from(words)
+      .select({ groupId: wordGroupLinks.groupId, count: count() })
+      .from(wordGroupLinks)
+      .innerJoin(words, eq(wordGroupLinks.wordId, words.id))
       .where(eq(words.userId, catalogOwnerId))
-      .groupBy(words.groupId);
+      .groupBy(wordGroupLinks.groupId);
 
     const countMap = new Map(wordCounts.map((w) => [w.groupId, w.count]));
     const groupsByTextbook = new Map<number, Array<(typeof groups)[number] & { wordCount: number }>>();
@@ -221,10 +222,11 @@ export const textbookRouter = createRouter({
 
       // Get word counts per group
       const wordCounts = await db
-        .select({ groupId: words.groupId, count: count() })
-        .from(words)
+        .select({ groupId: wordGroupLinks.groupId, count: count() })
+        .from(wordGroupLinks)
+        .innerJoin(words, eq(wordGroupLinks.wordId, words.id))
         .where(eq(words.userId, catalogOwnerId))
-        .groupBy(words.groupId);
+        .groupBy(wordGroupLinks.groupId);
 
       const countMap = new Map(wordCounts.map((w) => [w.groupId, w.count]));
 

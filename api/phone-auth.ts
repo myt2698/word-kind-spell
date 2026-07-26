@@ -196,6 +196,53 @@ export async function changePassword(
 }
 
 /**
+ * Change the unique nickname used for login.
+ */
+export async function updateName(
+  userId: number,
+  name: string
+): Promise<{
+  success: boolean;
+  name?: string;
+  message?: string;
+}> {
+  try {
+    const trimmedName = name.trim();
+    if (!trimmedName) {
+      return { success: false, message: "请输入昵称" };
+    }
+    if (trimmedName.length > 20) {
+      return { success: false, message: "昵称最多20个字符" };
+    }
+
+    const db = getDb();
+    const existing = await db
+      .select({ id: users.id })
+      .from(users)
+      .where(eq(users.name, trimmedName))
+      .limit(1);
+
+    if (existing[0] && existing[0].id !== userId) {
+      return { success: false, message: "该昵称已被使用，请换一个" };
+    }
+
+    await db
+      .update(users)
+      .set({ name: trimmedName })
+      .where(eq(users.id, userId));
+
+    return { success: true, name: trimmedName, message: "昵称修改成功" };
+  } catch (err: unknown) {
+    console.error("[auth] Update name exception:", err);
+    const message = err instanceof Error ? err.message : "未知错误";
+    if (message.includes("Duplicate") || message.includes("unique")) {
+      return { success: false, message: "该昵称已被使用，请换一个" };
+    }
+    return { success: false, message: "修改异常: " + message };
+  }
+}
+
+/**
  * Find user by ID (excludes password)
  */
 export async function findUserById(userId: number) {

@@ -1,6 +1,7 @@
 package com.wordmind.app.ui
 
 import android.speech.tts.TextToSpeech
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -33,19 +34,22 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Label
 import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.automirrored.filled.MenuBook
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Book
 import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Folder
+import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.material.icons.filled.Key
 import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.School
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Button
@@ -56,7 +60,6 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -70,9 +73,8 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.lightColorScheme
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -89,15 +91,18 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.wordmind.app.BuildConfig
 import com.wordmind.app.data.Tag
 import com.wordmind.app.data.Textbook
 import com.wordmind.app.data.User
@@ -127,7 +132,7 @@ private val WordMindColors = lightColorScheme(
 private enum class Destination(val label: String, val icon: ImageVector) {
     Words("单词", Icons.Default.Book),
     Practice("拼写", Icons.Default.School),
-    Textbooks("课本", Icons.AutoMirrored.Filled.MenuBook),
+    Phonics("拼读", Icons.Default.GraphicEq),
     Manage("管理", Icons.Default.Build),
     Profile("我的", Icons.Default.Person),
 }
@@ -210,6 +215,7 @@ fun WordMindApp(api: WordMindApi) {
                     onMessage = { message = it },
                     onDismissMessage = { message = null },
                     onRefresh = { scope.launch { refreshCatalog() } },
+                    onUserUpdated = { user = it },
                     onLearningChange = { word, active ->
                         scope.launch {
                             try {
@@ -406,6 +412,7 @@ private fun MainScreen(
     onMessage: (String) -> Unit,
     onDismissMessage: () -> Unit,
     onRefresh: () -> Unit,
+    onUserUpdated: (User) -> Unit,
     onLearningChange: (Word, Boolean) -> Unit,
     onLogout: () -> Unit,
 ) {
@@ -414,6 +421,7 @@ private fun MainScreen(
         Destination.entries.filter { it != Destination.Manage || user.role == "admin" }
     }
     val speak = rememberWordSpeaker()
+    val phonicsSpeak = rememberWordSpeaker(Locale.UK)
     var wordEditorOpen by remember { mutableStateOf(false) }
     var editingWord by remember { mutableStateOf<Word?>(null) }
     var deletingWord by remember { mutableStateOf<Word?>(null) }
@@ -422,43 +430,6 @@ private fun MainScreen(
 
     Scaffold(
         containerColor = PageBackground,
-        topBar = {
-            TopAppBar(
-                title = {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("WordMind", fontWeight = FontWeight.Bold)
-                        if (user.role == "admin") {
-                            Spacer(Modifier.width(10.dp))
-                            Surface(
-                                shape = RoundedCornerShape(100.dp),
-                                color = Color(0xFFEEF2FF),
-                            ) {
-                                Text(
-                                    "管理员",
-                                    modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp),
-                                    color = Indigo,
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.SemiBold,
-                                )
-                            }
-                        }
-                    }
-                },
-                actions = {
-                    IconButton(onClick = onRefresh, enabled = !loading) {
-                        if (loading) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(21.dp),
-                                strokeWidth = 2.dp,
-                            )
-                        } else {
-                            Icon(Icons.Default.Refresh, contentDescription = "刷新")
-                        }
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = PageBackground),
-            )
-        },
         bottomBar = {
             NavigationBar(containerColor = Color.White) {
                 destinations.forEachIndexed { index, item ->
@@ -472,52 +443,68 @@ private fun MainScreen(
             }
         },
     ) { padding ->
-        Column(
+        PullToRefreshBox(
+            isRefreshing = loading,
+            onRefresh = onRefresh,
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding),
         ) {
-            if (!message.isNullOrBlank()) {
-                MessageBanner(
-                    text = message,
-                    danger = true,
-                    onDismiss = onDismissMessage,
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                )
-            }
-            when (destinations[destination]) {
-                Destination.Words -> WordsScreen(
-                    words = words,
-                    textbooks = textbooks,
-                    tags = tags,
-                    speak = speak,
-                    onLearningChange = onLearningChange,
-                    canManage = user.role == "admin",
-                    onAddWord = {
-                        editingWord = null
-                        wordEditorOpen = true
-                    },
-                    onEditWord = {
-                        editingWord = it
-                        wordEditorOpen = true
-                    },
-                    onDeleteWord = { deletingWord = it },
-                )
-                Destination.Practice -> PracticeScreen(
-                    api = api,
-                    speak = speak,
-                    onMessage = onMessage,
-                    onLearningChanged = onRefresh,
-                )
-                Destination.Textbooks -> TextbooksScreen(textbooks, words)
-                Destination.Manage -> AdminScreen(
-                    api = api,
-                    textbooks = textbooks,
-                    tags = tags,
-                    onChanged = onRefresh,
-                    onMessage = onMessage,
-                )
-                Destination.Profile -> ProfileScreen(user, textbooks, words, onLogout)
+            Column(modifier = Modifier.fillMaxSize()) {
+                if (!message.isNullOrBlank()) {
+                    MessageBanner(
+                        text = message,
+                        danger = true,
+                        onDismiss = onDismissMessage,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                    )
+                }
+                when (destinations[destination]) {
+                    Destination.Words -> WordsScreen(
+                        words = words,
+                        textbooks = textbooks,
+                        tags = tags,
+                        speak = speak,
+                        onLearningChange = onLearningChange,
+                        canManage = user.role == "admin",
+                        onAddWord = {
+                            editingWord = null
+                            wordEditorOpen = true
+                        },
+                        onEditWord = {
+                            editingWord = it
+                            wordEditorOpen = true
+                        },
+                        onDeleteWord = { deletingWord = it },
+                    )
+                    Destination.Practice -> PracticeScreen(
+                        api = api,
+                        speak = speak,
+                        onMessage = onMessage,
+                        onLearningChanged = onRefresh,
+                    )
+                    Destination.Phonics -> PhonicsScreen(
+                        tags = tags,
+                        words = words,
+                        speak = phonicsSpeak,
+                    )
+                    Destination.Manage -> AdminScreen(
+                        api = api,
+                        textbooks = textbooks,
+                        tags = tags,
+                        onChanged = onRefresh,
+                        onMessage = onMessage,
+                    )
+                    Destination.Profile -> ProfileScreen(
+                        api = api,
+                        user = user,
+                        textbooks = textbooks,
+                        words = words,
+                        onUserUpdated = onUserUpdated,
+                        onRefresh = onRefresh,
+                        onLogout = onLogout,
+                    )
+                }
             }
         }
     }
@@ -577,9 +564,9 @@ private fun WordsScreen(
     onDeleteWord: (Word) -> Unit,
 ) {
     var query by rememberSaveable { mutableStateOf("") }
+    var searchOpen by rememberSaveable { mutableStateOf(false) }
     var textbookId by rememberSaveable { mutableStateOf<Int?>(null) }
     var unitId by rememberSaveable { mutableStateOf<Int?>(null) }
-    var tagId by rememberSaveable { mutableStateOf<Int?>(null) }
     var sort by rememberSaveable { mutableStateOf(WordSort.Newest) }
     var detailTagId by rememberSaveable { mutableStateOf<Int?>(null) }
 
@@ -592,19 +579,10 @@ private fun WordsScreen(
     val unitOptions = remember(units) {
         units.map { it.id to it.name }
     }
-    val tagOptions = remember(tags) {
-        tags.map { it.id to it.name }
-    }
-    val filtered = remember(words, query, textbookId, unitId, tagId, sort) {
-        val needle = query.trim().lowercase()
+    val filtered = remember(words, textbookId, unitId, sort) {
         val matches = words.filter { word ->
             (textbookId == null || word.textbookId == textbookId) &&
-                (unitId == null || word.groupId == unitId) &&
-                (tagId == null || word.tags.any { it.id == tagId }) &&
-                (needle.isBlank() ||
-                    word.word.lowercase().contains(needle) ||
-                    word.definition.lowercase().contains(needle) ||
-                    word.notes.orEmpty().lowercase().contains(needle))
+                (unitId == null || word.groupId == unitId)
         }
         when (sort) {
             WordSort.Newest -> matches
@@ -614,149 +592,241 @@ private fun WordsScreen(
             )
         }
     }
-    val hasFilters = query.isNotBlank() ||
-        textbookId != null ||
-        unitId != null ||
-        tagId != null
+    val searchResults = remember(words, query, sort) {
+        val needle = query.trim().lowercase()
+        val matches = words.filter { word ->
+            needle.isBlank() ||
+                word.word.lowercase().contains(needle) ||
+                word.definition.lowercase().contains(needle) ||
+                word.notes.orEmpty().lowercase().contains(needle)
+        }
+        when (sort) {
+            WordSort.Newest -> matches
+            WordSort.Oldest -> matches.asReversed()
+            WordSort.Alphabetical -> matches.sortedWith(
+                compareBy(String.CASE_INSENSITIVE_ORDER) { it.word }
+            )
+        }
+    }
+    val hasFilters = textbookId != null || unitId != null
 
-    LazyColumn(
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 10.dp, bottom = 20.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp),
-    ) {
-        item {
-            Surface(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(16.dp),
-                color = Color.White,
-                border = BorderStroke(1.dp, Border),
-            ) {
-                Column(
-                    modifier = Modifier.padding(10.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
+    BackHandler(enabled = searchOpen) {
+        searchOpen = false
+        query = ""
+    }
+
+    if (searchOpen) {
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 10.dp, bottom = 20.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            item {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = Color.White,
+                        border = BorderStroke(1.dp, Border),
                     ) {
-                        WordFilterDropdown(
-                            allLabel = "全部课本",
-                            selectedId = textbookId,
-                            options = textbookOptions,
-                            modifier = Modifier.weight(1f),
-                            onSelect = { selectedId ->
-                                textbookId = selectedId
-                                unitId = null
+                        IconButton(
+                            onClick = {
+                                searchOpen = false
+                                query = ""
                             },
-                        )
-                        WordFilterDropdown(
-                            allLabel = "全部单元",
-                            selectedId = unitId,
-                            options = unitOptions,
-                            modifier = Modifier.weight(1f),
-                            enabled = textbookId != null,
-                            onSelect = { unitId = it },
-                        )
-                        WordFilterDropdown(
-                            allLabel = "全部标签",
-                            selectedId = tagId,
-                            options = tagOptions,
-                            modifier = Modifier.weight(1f),
-                            onSelect = { tagId = it },
-                        )
+                            modifier = Modifier.size(44.dp),
+                        ) {
+                            Icon(
+                                Icons.AutoMirrored.Filled.ArrowBack,
+                                contentDescription = "返回单词首页",
+                                modifier = Modifier.size(21.dp),
+                            )
+                        }
                     }
                     CompactWordSearchField(
                         value = query,
                         onValueChange = { query = it },
                         onClear = { query = "" },
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+            }
+            item {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        if (query.isBlank()) {
+                            "共 ${searchResults.size} 个单词"
+                        } else {
+                            "找到 ${searchResults.size} 个单词"
+                        },
+                        color = Muted,
+                        fontSize = 13.sp,
+                    )
+                    WordSortDropdown(
+                        selected = sort,
+                        onSelect = { sort = it },
+                    )
+                }
+            }
+            if (searchResults.isEmpty()) {
+                item {
+                    EmptyContent("没有找到匹配的单词")
+                }
+            } else {
+                items(searchResults, key = { it.id }) { word ->
+                    WordCard(
+                        word = word,
+                        speak = speak,
+                        onLearningChange = onLearningChange,
+                        canManage = canManage,
+                        onEdit = { onEditWord(word) },
+                        onDelete = { onDeleteWord(word) },
+                        onTagClick = { detailTagId = it.id },
                     )
                 }
             }
         }
-        item {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text("排序", color = Muted, fontSize = 12.sp)
-                Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-                    WordSort.entries.forEach { option ->
-                        FilterChip(
-                            selected = sort == option,
-                            onClick = { sort = option },
-                            label = { Text(option.label) },
-                        )
-                    }
-                }
-            }
-        }
-        item {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                val learningCount = words.count { it.learningStatus != "idle" }
-                Text(
-                    buildString {
-                        append("共 ${filtered.size} 个单词")
-                        if (learningCount > 0) append("  ·  学习中 $learningCount")
-                    },
-                    modifier = Modifier.weight(1f),
-                    color = Muted,
-                    fontSize = 13.sp,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    if (hasFilters) {
-                        TextButton(
-                            onClick = {
-                                query = ""
-                                textbookId = null
-                                unitId = null
-                                tagId = null
-                            },
-                            contentPadding = PaddingValues(horizontal = 7.dp, vertical = 0.dp),
-                        ) {
-                            Text("清除", fontSize = 12.sp)
-                        }
-                    }
-                    if (canManage) {
-                        Button(
-                            onClick = onAddWord,
-                            modifier = Modifier.height(38.dp),
-                            shape = RoundedCornerShape(10.dp),
-                            contentPadding = PaddingValues(horizontal = 11.dp, vertical = 0.dp),
-                        ) {
-                            Icon(
-                                Icons.Default.Add,
-                                contentDescription = null,
-                                modifier = Modifier.size(17.dp),
-                            )
-                            Spacer(Modifier.width(4.dp))
-                            Text("添加单词", fontSize = 12.sp)
-                        }
-                    }
-                }
-            }
-        }
-        if (filtered.isEmpty()) {
+    } else {
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 10.dp, bottom = 20.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
             item {
-                EmptyContent(if (words.isEmpty()) "暂无单词数据" else "没有找到匹配的单词")
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(16.dp),
+                    color = Color.White,
+                    border = BorderStroke(1.dp, Border),
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(10.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            WordFilterDropdown(
+                                allLabel = "全部课本",
+                                selectedId = textbookId,
+                                options = textbookOptions,
+                                modifier = Modifier.weight(1f),
+                                onSelect = { selectedId ->
+                                    textbookId = selectedId
+                                    unitId = null
+                                },
+                            )
+                            WordFilterDropdown(
+                                allLabel = "全部单元",
+                                selectedId = unitId,
+                                options = unitOptions,
+                                modifier = Modifier.weight(1f),
+                                enabled = textbookId != null,
+                                onSelect = { unitId = it },
+                            )
+                        }
+                    }
+                }
             }
-        } else {
-            items(filtered, key = { it.id }) { word ->
-                WordCard(
-                    word = word,
-                    speak = speak,
-                    onLearningChange = onLearningChange,
-                    canManage = canManage,
-                    onEdit = { onEditWord(word) },
-                    onDelete = { onDeleteWord(word) },
-                    onTagClick = { detailTagId = it.id },
-                )
+            item {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    val learningCount = words.count { it.learningStatus != "idle" }
+                    Text(
+                        buildString {
+                            append("共 ${filtered.size} 个单词")
+                            if (learningCount > 0) append("  ·  学习中 $learningCount")
+                        },
+                        modifier = Modifier.weight(1f),
+                        color = Muted,
+                        fontSize = 13.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        if (hasFilters) {
+                            TextButton(
+                                onClick = {
+                                    textbookId = null
+                                    unitId = null
+                                },
+                                contentPadding = PaddingValues(horizontal = 7.dp, vertical = 0.dp),
+                            ) {
+                                Text("清除", fontSize = 12.sp)
+                            }
+                        }
+                        WordSortDropdown(
+                            selected = sort,
+                            onSelect = { sort = it },
+                        )
+                        Surface(
+                            shape = RoundedCornerShape(10.dp),
+                            color = Color.White,
+                            border = BorderStroke(1.dp, Border),
+                        ) {
+                            IconButton(
+                                onClick = { searchOpen = true },
+                                modifier = Modifier.size(38.dp),
+                            ) {
+                                Icon(
+                                    Icons.Default.Search,
+                                    contentDescription = "搜索单词",
+                                    modifier = Modifier.size(19.dp),
+                                    tint = Color(0xFF475569),
+                                )
+                            }
+                        }
+                        if (canManage) {
+                            Button(
+                                onClick = onAddWord,
+                                modifier = Modifier.height(38.dp),
+                                shape = RoundedCornerShape(10.dp),
+                                contentPadding = PaddingValues(horizontal = 11.dp, vertical = 0.dp),
+                            ) {
+                                Icon(
+                                    Icons.Default.Add,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(17.dp),
+                                )
+                                Spacer(Modifier.width(4.dp))
+                                Text("添加单词", fontSize = 12.sp)
+                            }
+                        }
+                    }
+                }
+            }
+            if (filtered.isEmpty()) {
+                item {
+                    EmptyContent(if (words.isEmpty()) "暂无单词数据" else "没有找到匹配的单词")
+                }
+            } else {
+                items(filtered, key = { it.id }) { word ->
+                    WordCard(
+                        word = word,
+                        speak = speak,
+                        onLearningChange = onLearningChange,
+                        canManage = canManage,
+                        onEdit = { onEditWord(word) },
+                        onDelete = { onDeleteWord(word) },
+                        onTagClick = { detailTagId = it.id },
+                    )
+                }
             }
         }
     }
@@ -773,6 +843,58 @@ private fun WordsScreen(
             speak = speak,
             onDismiss = { detailTagId = null },
         )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun WordSortDropdown(
+    selected: WordSort,
+    onSelect: (WordSort) -> Unit,
+) {
+    var expanded by remember { mutableStateOf(false) }
+
+    ExposedDropdownMenuBox(
+        modifier = Modifier.width(94.dp),
+        expanded = expanded,
+        onExpandedChange = { expanded = !expanded },
+    ) {
+        Surface(
+            modifier = Modifier
+                .menuAnchor(MenuAnchorType.PrimaryNotEditable)
+                .fillMaxWidth()
+                .height(38.dp),
+            shape = RoundedCornerShape(10.dp),
+            color = Color.White,
+            border = BorderStroke(1.dp, Border),
+        ) {
+            Row(
+                modifier = Modifier.padding(start = 12.dp, end = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    selected.label,
+                    modifier = Modifier.weight(1f),
+                    color = Color(0xFF475569),
+                    fontSize = 12.sp,
+                )
+                ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded)
+            }
+        }
+        ExposedDropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false },
+        ) {
+            WordSort.entries.forEach { option ->
+                DropdownMenuItem(
+                    text = { Text(option.label) },
+                    onClick = {
+                        onSelect(option)
+                        expanded = false
+                    },
+                )
+            }
+        }
     }
 }
 
@@ -861,10 +983,10 @@ private fun CompactWordSearchField(
     value: String,
     onValueChange: (String) -> Unit,
     onClear: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     Surface(
-        modifier = Modifier
-            .fillMaxWidth()
+        modifier = modifier
             .height(44.dp),
         shape = RoundedCornerShape(10.dp),
         color = Color.White,
@@ -1077,7 +1199,12 @@ private fun WordCard(
                     Spacer(Modifier.height(10.dp))
                     Text("例句", color = Muted, fontSize = 11.sp)
                     Spacer(Modifier.height(3.dp))
-                    Text(it, color = Color(0xFF334155), fontSize = 14.sp, lineHeight = 20.sp)
+                    Text(
+                        highlightWordInExample(example = it, word = word.word),
+                        color = Color(0xFF334155),
+                        fontSize = 14.sp,
+                        lineHeight = 20.sp,
+                    )
                 }
                 word.notes?.let {
                     Spacer(Modifier.height(10.dp))
@@ -1099,6 +1226,38 @@ private fun WordCard(
                 }
             }
         }
+    }
+}
+
+private fun highlightWordInExample(
+    example: String,
+    word: String,
+): AnnotatedString {
+    val target = word.trim()
+    if (target.isEmpty()) return AnnotatedString(example)
+
+    val wordPattern = Regex(
+        pattern = "(?<![\\p{L}\\p{N}])${Regex.escape(target)}(?![\\p{L}\\p{N}])",
+        option = RegexOption.IGNORE_CASE,
+    )
+    val matches = wordPattern.findAll(example).toList()
+    if (matches.isEmpty()) return AnnotatedString(example)
+
+    return buildAnnotatedString {
+        var cursor = 0
+        matches.forEach { match ->
+            append(example.substring(cursor, match.range.first))
+            withStyle(
+                SpanStyle(
+                    color = Color(0xFF166534),
+                    fontWeight = FontWeight.SemiBold,
+                )
+            ) {
+                append(match.value)
+            }
+            cursor = match.range.last + 1
+        }
+        append(example.substring(cursor))
     }
 }
 
@@ -1227,11 +1386,19 @@ private fun TextbookCard(textbook: Textbook, fallbackWordCount: Int) {
 
 @Composable
 private fun ProfileScreen(
+    api: WordMindApi,
     user: User,
     textbooks: List<Textbook>,
     words: List<Word>,
+    onUserUpdated: (User) -> Unit,
+    onRefresh: () -> Unit,
     onLogout: () -> Unit,
 ) {
+    var editingNickname by remember { mutableStateOf(false) }
+    var changingPassword by remember { mutableStateOf(false) }
+    var clearingRecords by remember { mutableStateOf(false) }
+    var notice by remember { mutableStateOf<String?>(null) }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -1277,39 +1444,133 @@ private fun ProfileScreen(
         }
         Spacer(Modifier.height(16.dp))
 
+        notice?.let {
+            MessageBanner(
+                text = it,
+                danger = false,
+                onDismiss = { notice = null },
+            )
+            Spacer(Modifier.height(16.dp))
+        }
+
         Card(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(16.dp),
             colors = CardDefaults.cardColors(containerColor = Color.White),
             border = CardDefaults.outlinedCardBorder(),
         ) {
-            Column(Modifier.padding(16.dp)) {
-                Text("客户端", color = Muted, fontSize = 12.sp)
-                Spacer(Modifier.height(5.dp))
-                Text("WordMind 原生 Android", fontWeight = FontWeight.SemiBold)
-                Spacer(Modifier.height(3.dp))
-                Text("Kotlin + Jetpack Compose，无 WebView", color = Success, fontSize = 13.sp)
-                Spacer(Modifier.height(14.dp))
-                Text("数据服务", color = Muted, fontSize = 12.sp)
-                Spacer(Modifier.height(5.dp))
-                Text(
-                    BuildConfig.API_BASE_URL.removePrefix("https://"),
-                    fontSize = 13.sp,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
+            Column {
+                ProfileAction(
+                    icon = Icons.Default.Edit,
+                    title = "修改昵称",
+                    subtitle = "当前昵称：${user.name}",
+                    onClick = { editingNickname = true },
+                )
+                HorizontalDivider(color = Border)
+                ProfileAction(
+                    icon = Icons.Default.Key,
+                    title = "修改密码",
+                    subtitle = "使用原密码设置新密码",
+                    onClick = { changingPassword = true },
+                )
+                HorizontalDivider(color = Border)
+                ProfileAction(
+                    icon = Icons.Default.Delete,
+                    title = "清空学习记录",
+                    subtitle = "清除当前账号的进度、错题与练习记录",
+                    tint = Danger,
+                    onClick = { clearingRecords = true },
+                )
+                HorizontalDivider(color = Border)
+                ProfileAction(
+                    icon = Icons.AutoMirrored.Filled.Logout,
+                    title = "退出登录",
+                    subtitle = "退出当前账号",
+                    tint = Danger,
+                    onClick = onLogout,
                 )
             }
         }
-        Spacer(Modifier.height(22.dp))
-        OutlinedButton(
-            onClick = onLogout,
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(13.dp),
+    }
+
+    if (editingNickname) {
+        EditNicknameDialog(
+            api = api,
+            user = user,
+            onUpdated = {
+                editingNickname = false
+                onUserUpdated(it)
+                notice = "昵称修改成功"
+            },
+            onDismiss = { editingNickname = false },
+        )
+    }
+
+    if (changingPassword) {
+        ChangePasswordDialog(
+            api = api,
+            onChanged = {
+                changingPassword = false
+                notice = it
+            },
+            onDismiss = { changingPassword = false },
+        )
+    }
+
+    if (clearingRecords) {
+        ClearLearningRecordsDialog(
+            api = api,
+            onCleared = {
+                clearingRecords = false
+                notice = it
+                onRefresh()
+            },
+            onDismiss = { clearingRecords = false },
+        )
+    }
+}
+
+@Composable
+private fun ProfileAction(
+    icon: ImageVector,
+    title: String,
+    subtitle: String,
+    tint: Color = Indigo,
+    onClick: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Surface(
+            modifier = Modifier.size(38.dp),
+            shape = RoundedCornerShape(11.dp),
+            color = if (tint == Danger) Color(0xFFFEF2F2) else Color(0xFFEEF2FF),
         ) {
-            Icon(Icons.AutoMirrored.Filled.Logout, contentDescription = null)
-            Spacer(Modifier.width(8.dp))
-            Text("退出登录")
+            Box(contentAlignment = Alignment.Center) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = tint,
+                    modifier = Modifier.size(20.dp),
+                )
+            }
         }
+        Spacer(Modifier.width(12.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(title, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = tint)
+            Spacer(Modifier.height(2.dp))
+            Text(subtitle, fontSize = 12.sp, color = Muted)
+        }
+        Icon(
+            imageVector = Icons.Default.ChevronRight,
+            contentDescription = null,
+            tint = Muted,
+            modifier = Modifier.size(18.dp),
+        )
     }
 }
 
@@ -1363,7 +1624,7 @@ private fun MessageBanner(
 }
 
 @Composable
-private fun rememberWordSpeaker(): (String) -> Unit {
+private fun rememberWordSpeaker(locale: Locale = Locale.US): (String) -> Unit {
     val context = LocalContext.current
     var ready by remember { mutableStateOf(false) }
     val textToSpeech = remember {
@@ -1372,9 +1633,9 @@ private fun rememberWordSpeaker(): (String) -> Unit {
         }
     }
 
-    LaunchedEffect(ready) {
+    LaunchedEffect(ready, locale) {
         if (ready) {
-            textToSpeech.language = Locale.US
+            textToSpeech.language = locale
             textToSpeech.setSpeechRate(0.88f)
         }
     }
@@ -1385,7 +1646,7 @@ private fun rememberWordSpeaker(): (String) -> Unit {
         }
     }
 
-    return remember(textToSpeech, ready) {
+    return remember(textToSpeech, ready, locale) {
         { word ->
             if (ready) {
                 textToSpeech.speak(word, TextToSpeech.QUEUE_FLUSH, null, "word-$word")

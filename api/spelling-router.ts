@@ -11,7 +11,15 @@ import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 import { createRouter, authedQuery } from "./middleware";
 import { getDb } from "./queries/connection";
-import { words, wordSpellings, spellingErrors, spellingSessions, todayWordSelections } from "@db/schema";
+import {
+  words,
+  wordLogs,
+  wordSpellings,
+  spellingErrors,
+  spellingSessions,
+  todayWordSelections,
+  wordGroupLinks,
+} from "@db/schema";
 import { eq, and, gte, lte, desc, count, inArray } from "drizzle-orm";
 import { getCatalogOwnerId } from "./catalog";
 
@@ -555,6 +563,32 @@ export const spellingRouter = createRouter({
     };
   }),
 
+  /**
+   * Clear every learning/practice record owned by the current account.
+   * Shared catalog data and other accounts are never touched.
+   */
+  clearLearningRecords: authedQuery.mutation(async ({ ctx }) => {
+    const db = getDb();
+    const userId = ctx.user.id;
+
+    await db.transaction(async (tx) => {
+      await tx.delete(spellingErrors).where(eq(spellingErrors.userId, userId));
+      await tx.delete(spellingSessions).where(eq(spellingSessions.userId, userId));
+      await tx.delete(todayWordSelections).where(eq(todayWordSelections.userId, userId));
+      await tx
+        .delete(wordLogs)
+        .where(
+          and(
+            eq(wordLogs.userId, userId),
+            inArray(wordLogs.action, ["review", "test_pass", "test_fail"])
+          )
+        );
+      await tx.delete(wordSpellings).where(eq(wordSpellings.userId, userId));
+    });
+
+    return { success: true, message: "学习记录已清空" };
+  }),
+
   // ========== Error Words ==========
 
   getErrorWords: authedQuery.query(async ({ ctx }) => {
@@ -665,7 +699,13 @@ export const spellingRouter = createRouter({
       const conditions: any[] = [eq(words.userId, catalogOwnerId)];
 
       if (input?.groupId) {
-        conditions.push(eq(words.groupId, input.groupId));
+        const linkedRows = await db
+          .select({ wordId: wordGroupLinks.wordId })
+          .from(wordGroupLinks)
+          .where(eq(wordGroupLinks.groupId, input.groupId));
+        const linkedWordIds = linkedRows.map((row) => row.wordId);
+        if (linkedWordIds.length === 0) return [];
+        conditions.push(inArray(words.id, linkedWordIds));
       }
 
       // If source is manual, only get active learning words
@@ -720,6 +760,7 @@ export const spellingRouter = createRouter({
         const sp = spellingMap.get(w.id);
         return {
           ...w,
+          groupId: input?.groupId ?? w.groupId,
           learningStatus: sp?.learningStatus ?? "idle",
           level: (sp?.level ?? 1) as 1 | 2 | 3,
           streak: sp?.streak ?? 0,

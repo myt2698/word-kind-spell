@@ -4,6 +4,7 @@ import {
   register as registerUser,
   login as loginUser,
   changePassword as changeUserPassword,
+  updateName as updateUserName,
 } from "./phone-auth";
 import { signPhoneSessionToken } from "./session-v2";
 import { getSessionCookieOptions } from "./lib/cookies";
@@ -105,6 +106,40 @@ export const authRouter = createRouter({
       } catch (err: any) {
         console.error("[auth] Change password error:", err);
         return { success: false, message: "修改失败: " + (err.message || "未知错误") };
+      }
+    }),
+
+  // Change the unique nickname used for login
+  updateName: authedQuery
+    .input(
+      z.object({
+        name: z.string().trim().min(1, "请输入昵称").max(20, "昵称最多20个字符"),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      try {
+        const result = await updateUserName(ctx.user.id, input.name);
+        if (!result.success || !result.name) return result;
+
+        // Keep the long-lived session payload consistent with the renamed account.
+        const token = await signPhoneSessionToken(ctx.user.id, result.name);
+        const cookieOpts = getSessionCookieOptions(ctx.req.headers);
+        ctx.resHeaders.append(
+          "set-cookie",
+          cookie.serialize(Session.cookieName, token, {
+            httpOnly: cookieOpts.httpOnly,
+            path: cookieOpts.path,
+            sameSite: cookieOpts.sameSite?.toLowerCase() as "lax" | "none",
+            secure: cookieOpts.secure,
+            maxAge: Session.maxAgeMs / 1000,
+          })
+        );
+
+        return result;
+      } catch (err: unknown) {
+        console.error("[auth] Update name error:", err);
+        const message = err instanceof Error ? err.message : "未知错误";
+        return { success: false, message: "修改失败: " + message };
       }
     }),
 

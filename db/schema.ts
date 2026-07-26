@@ -111,6 +111,25 @@ export const words = mysqlTable("words", {
 export type Word = typeof words.$inferSelect;
 export type InsertWord = typeof words.$inferInsert;
 
+// 单词-单元关联表
+// 同一个共享单词只保存一份，但可以同时属于多个课本、多个单元。
+// words.groupId 暂时保留为“主单元”，用于兼容旧客户端和旧数据。
+export const wordGroupLinks = mysqlTable("word_group_links", {
+  id: serial("id").primaryKey(),
+  wordId: bigint("wordId", { mode: "number", unsigned: true })
+    .notNull()
+    .references(() => words.id, { onDelete: "cascade" }),
+  groupId: bigint("groupId", { mode: "number", unsigned: true })
+    .notNull()
+    .references(() => wordGroups.id, { onDelete: "cascade" }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, (table) => [
+  uniqueIndex("word_group_links_word_group_unique").on(table.wordId, table.groupId),
+]);
+
+export type WordGroupLink = typeof wordGroupLinks.$inferSelect;
+export type InsertWordGroupLink = typeof wordGroupLinks.$inferInsert;
+
 // 标签表
 export const tags = mysqlTable("tags", {
   id: serial("id").primaryKey(),

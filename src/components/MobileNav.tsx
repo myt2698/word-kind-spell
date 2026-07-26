@@ -1,4 +1,4 @@
-import { LayoutGrid, PenLine, User } from "lucide-react";
+import { AudioLines, LayoutGrid, PenLine, User } from "lucide-react";
 import { useNavigate, useLocation } from "react-router";
 
 interface MobileNavProps {
@@ -9,6 +9,7 @@ interface MobileNavProps {
 const tabs = [
   { key: "words", label: "单词", icon: LayoutGrid, path: "/" },
   { key: "spell", label: "拼写", icon: PenLine, path: "/spell" },
+  { key: "phonics", label: "拼读", icon: AudioLines, path: "/phonics" },
   { key: "profile", label: "我的", icon: User, path: "/profile" },
 ];
 
@@ -19,6 +20,7 @@ export default function MobileNav({ activeTab, onTabChange }: MobileNavProps) {
   const currentPath = location.pathname;
   const currentTab = activeTab ?? (
     currentPath === "/spell" ? "spell" :
+    currentPath === "/phonics" ? "phonics" :
     currentPath === "/profile" ? "profile" :
     "words"
   );

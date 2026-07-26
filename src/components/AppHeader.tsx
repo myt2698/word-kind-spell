@@ -25,12 +25,14 @@ interface AppHeaderProps {
   searchComponent?: React.ReactNode;
 }
 
-function ChangePasswordDialog({
+export function ChangePasswordDialog({
   open,
   onClose,
+  onChanged,
 }: {
   open: boolean;
   onClose: () => void;
+  onChanged?: () => void;
 }) {
   const [oldPassword, setOldPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
@@ -49,6 +51,7 @@ function ChangePasswordDialog({
         setConfirmPassword("");
         setTimeout(() => {
           setSuccess("");
+          onChanged?.();
           onClose();
         }, 1500);
       } else {

@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { createRouter, authedQuery, adminQuery } from "./middleware";
 import { getDb } from "./queries/connection";
-import { wordGroups, users, words } from "@db/schema";
+import { wordGroups, wordGroupLinks, users, words } from "@db/schema";
 import { eq, and, asc, sql } from "drizzle-orm";
 import { getCatalogOwnerId } from "./catalog";
 
@@ -27,10 +27,11 @@ export const wordGroupRouter = createRouter({
         groups.map(async (group) => {
           const countResult = await db
             .select({ count: sql<number>`count(*)` })
-            .from(words)
+            .from(wordGroupLinks)
+            .innerJoin(words, eq(wordGroupLinks.wordId, words.id))
             .where(
               and(
-                eq(words.groupId, group.id),
+                eq(wordGroupLinks.groupId, group.id),
                 eq(words.userId, catalogOwnerId)
               )
             );

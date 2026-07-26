@@ -7,7 +7,7 @@ This directory contains the native WordMind Android client.
 - Speech: Android `TextToSpeech`
 - Backend: `https://word-kind-spell-production.up.railway.app`
 - Package: `com.wordmind.app`
-- Version: `1.0.6-native` (`versionCode` 7)
+- Version: `1.0.8-native` (`versionCode` 9)
 - Minimum Android version: Android 6.0 (API 23)
 
 The app does not use Capacitor, Cordova, WebView, Chrome, or another browser
@@ -17,6 +17,8 @@ runtime.
 
 - Login, registration, persistent sessions, and logout
 - Shared textbook, unit, tag, and word data from Railway
+- Native phonics library with alphabetically sorted letter patterns and a
+  British-English 44-sound IPA guide with spoken examples
 - Compact word search, textbook/unit/tag filtering, latest/oldest/alphabetical
   sorting, clickable tag details, word detail expansion, and native pronunciation
 - Cross-device daily word selection and four native practice modes: letter

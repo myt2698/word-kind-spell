@@ -67,34 +67,35 @@ function playBase64(base64: string) {
 }
 
 /** Web Speech — sync */
-function speakWeb(word: string) {
+function speakWeb(word: string, language = "en-US") {
   if (!("speechSynthesis" in window)) return false;
   try {
     const s = window.speechSynthesis;
     s.resume();
     s.cancel();
     const list = cachedVoices.length > 0 ? cachedVoices : s.getVoices();
+    const languagePrefix = language.toLowerCase();
+    const broadLanguage = languagePrefix.split("-")[0];
     const v =
-      list.find((x) => x.lang.startsWith("en") && x.name.includes("Google US")) ||
-      list.find((x) => x.lang.startsWith("en") && x.name.includes("Google")) ||
-      list.find((x) => x.lang.startsWith("en") && x.name.includes("Samantha")) ||
-      list.find((x) => x.lang.startsWith("en") && x.name.includes("Daniel")) ||
-      list.find((x) => x.lang.startsWith("en"));
+      list.find((x) => x.lang.toLowerCase().startsWith(languagePrefix) && x.name.includes("Google")) ||
+      list.find((x) => x.lang.toLowerCase().startsWith(languagePrefix)) ||
+      list.find((x) => x.lang.toLowerCase().startsWith(broadLanguage) && x.name.includes("Google")) ||
+      list.find((x) => x.lang.toLowerCase().startsWith(broadLanguage));
     if (!v) return false;
     const u = new SpeechSynthesisUtterance(word);
-    u.lang = "en-US"; u.rate = 0.85; u.volume = 1; u.voice = v;
+    u.lang = language; u.rate = 0.85; u.volume = 1; u.voice = v;
     s.speak(u);
     return true;
   } catch { return false; }
 }
 
 /** Youdao — last resort */
-function speakYoudao(word: string) {
+function speakYoudao(word: string, pronunciationType = 2) {
   if (!navigator.onLine) return;
   try {
     const a = getAudio();
     a.pause();
-    a.src = `https://dict.youdao.com/dictvoice?audio=${encodeURIComponent(word)}&type=2`;
+    a.src = `https://dict.youdao.com/dictvoice?audio=${encodeURIComponent(word)}&type=${pronunciationType}`;
     a.currentTime = 0;
     a.play().catch(() => {});
   } catch { /* ignore */ }
@@ -133,4 +134,11 @@ export function speakWord(word: string, wordId?: number) {
   // Path 2/3: Web Speech -> Youdao
   if (speakWeb(word)) return;
   speakYoudao(word);
+}
+
+/** Speak a British-English example word for the phonics/IPA section. */
+export function speakBritishWord(word: string) {
+  if (!word) return;
+  if (speakWeb(word, "en-GB")) return;
+  speakYoudao(word, 1);
 }

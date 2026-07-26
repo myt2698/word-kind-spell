@@ -2,7 +2,7 @@ import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 import { createRouter, authedQuery, adminQuery } from "./middleware";
 import { getDb } from "./queries/connection";
-import { words, wordTags, tags, wordLogs, wordGroups, textbooks, wordAudios, wordSpellings } from "@db/schema";
+import { words, wordTags, tags, wordLogs, wordGroups, wordGroupLinks, textbooks, wordAudios, wordSpellings } from "@db/schema";
 import { eq, and, like, or, desc, asc, sql, inArray, ne } from "drizzle-orm";
 import { getCatalogOwnerId } from "./catalog";
 
@@ -67,7 +67,13 @@ export const wordRouter = createRouter({
       }
 
       if (effectiveGroupIds.length > 0) {
-        conditions.push(inArray(words.groupId, effectiveGroupIds));
+        const linkedWords = await db
+          .select({ wordId: wordGroupLinks.wordId })
+          .from(wordGroupLinks)
+          .where(inArray(wordGroupLinks.groupId, effectiveGroupIds));
+        const linkedWordIds = [...new Set(linkedWords.map((row) => row.wordId))];
+        if (linkedWordIds.length === 0) return [];
+        conditions.push(inArray(words.id, linkedWordIds));
       }
 
       let exactMatchFirst = false;
@@ -124,8 +130,6 @@ export const wordRouter = createRouter({
       }
 
       const wordIds = wordList.map((w) => w.id);
-      const groupIdsForNames = [...new Set(wordList.map((w) => w.groupId).filter(Boolean))] as number[];
-
       const learningRows = await db
         .select({
           wordId: wordSpellings.wordId,
@@ -163,32 +167,51 @@ export const wordRouter = createRouter({
         tagMap.set(row.wordId, existing);
       }
 
-      // Query 3: Batch fetch all group names + textbook names + textbookId
-      const groupMap = new Map<number, { groupName: string; textbookName: string; textbookId: number }>();
-      if (groupIdsForNames.length > 0) {
-        const groupRows = await db
-          .select({
-            id: wordGroups.id,
-            groupName: wordGroups.name,
-            textbookName: textbooks.name,
-            textbookId: textbooks.id,
-          })
-          .from(wordGroups)
-          .innerJoin(textbooks, eq(wordGroups.textbookId, textbooks.id))
-          .where(inArray(wordGroups.id, groupIdsForNames));
-        for (const g of groupRows) {
-          groupMap.set(g.id, { groupName: g.groupName, textbookName: g.textbookName, textbookId: g.textbookId });
-        }
+      // Query 3: Fetch every textbook/unit membership for each word.
+      const groupRows = await db
+        .select({
+          wordId: wordGroupLinks.wordId,
+          groupId: wordGroups.id,
+          groupName: wordGroups.name,
+          textbookName: textbooks.name,
+          textbookId: textbooks.id,
+        })
+        .from(wordGroupLinks)
+        .innerJoin(wordGroups, eq(wordGroupLinks.groupId, wordGroups.id))
+        .innerJoin(textbooks, eq(wordGroups.textbookId, textbooks.id))
+        .where(inArray(wordGroupLinks.wordId, wordIds));
+      const groupsByWord = new Map<number, Array<{
+        groupId: number;
+        groupName: string;
+        textbookName: string;
+        textbookId: number;
+      }>>();
+      for (const group of groupRows) {
+        const existing = groupsByWord.get(group.wordId) ?? [];
+        existing.push({
+          groupId: group.groupId,
+          groupName: group.groupName,
+          textbookName: group.textbookName,
+          textbookId: group.textbookId,
+        });
+        groupsByWord.set(group.wordId, existing);
       }
 
       // Assemble results
       let results = wordList.map((word) => {
-        const groupInfo = word.groupId ? groupMap.get(word.groupId) : null;
+        const memberships = groupsByWord.get(word.id) ?? [];
+        const groupInfo =
+          memberships.find((group) => effectiveGroupIds.includes(group.groupId)) ??
+          memberships.find((group) => group.groupId === word.groupId) ??
+          memberships[0] ??
+          null;
         return {
           ...word,
           learningStatus: learningMap.get(word.id) ?? "idle",
           tags: tagMap.get(word.id) ?? [],
-          groupId: word.groupId,
+          groups: memberships,
+          groupIds: memberships.map((group) => group.groupId),
+          groupId: groupInfo?.groupId ?? word.groupId,
           groupName: groupInfo?.groupName ?? null,
           textbookId: groupInfo?.textbookId ?? null,
           textbookName: groupInfo?.textbookName ?? "扩展词汇",
@@ -243,16 +266,21 @@ export const wordRouter = createRouter({
         .innerJoin(tags, eq(wordTags.tagId, tags.id))
         .where(eq(wordTags.wordId, word.id));
 
-      // Fetch group name
-      let groupName = null;
-      if (word.groupId) {
-        const groupResult = await db
-          .select({ name: wordGroups.name })
-          .from(wordGroups)
-          .where(eq(wordGroups.id, word.groupId))
-          .limit(1);
-        groupName = groupResult[0]?.name ?? null;
-      }
+      const memberships = await db
+        .select({
+          groupId: wordGroups.id,
+          groupName: wordGroups.name,
+          textbookId: textbooks.id,
+          textbookName: textbooks.name,
+        })
+        .from(wordGroupLinks)
+        .innerJoin(wordGroups, eq(wordGroupLinks.groupId, wordGroups.id))
+        .innerJoin(textbooks, eq(wordGroups.textbookId, textbooks.id))
+        .where(eq(wordGroupLinks.wordId, word.id));
+      const primaryGroup =
+        memberships.find((group) => group.groupId === word.groupId) ??
+        memberships[0] ??
+        null;
 
       return {
         exists: true as const,
@@ -265,8 +293,10 @@ export const wordRouter = createRouter({
           notes: word.notes,
           proficiency: word.proficiency,
           tags: tagList,
-          groupId: word.groupId,
-          groupName,
+          groups: memberships,
+          groupIds: memberships.map((group) => group.groupId),
+          groupId: primaryGroup?.groupId ?? word.groupId,
+          groupName: primaryGroup?.groupName ?? null,
           createdAt: word.createdAt,
           updatedAt: word.updatedAt,
         },
@@ -322,8 +352,22 @@ export const wordRouter = createRouter({
         )
         .limit(1);
 
+      const memberships = await db
+        .select({
+          groupId: wordGroups.id,
+          groupName: wordGroups.name,
+          textbookId: textbooks.id,
+          textbookName: textbooks.name,
+        })
+        .from(wordGroupLinks)
+        .innerJoin(wordGroups, eq(wordGroupLinks.groupId, wordGroups.id))
+        .innerJoin(textbooks, eq(wordGroups.textbookId, textbooks.id))
+        .where(eq(wordGroupLinks.wordId, word.id));
+
       return {
         ...word,
+        groups: memberships,
+        groupIds: memberships.map((group) => group.groupId),
         learningStatus: learningRows[0]?.learningStatus ?? "idle",
         tags: tagList,
         reviewCount: reviewCount[0]?.count ?? 0,
@@ -340,6 +384,7 @@ export const wordRouter = createRouter({
         example: z.string().optional(),
         notes: z.string().optional(),
         groupId: z.number().optional(),
+        groupIds: z.array(z.number()).optional(),
         tagIds: z.array(z.number()).optional(),
         proficiency: z.enum(["new", "learning", "familiar", "mastered"]).optional(),
       })
@@ -347,8 +392,11 @@ export const wordRouter = createRouter({
     .mutation(async ({ ctx, input }) => {
       const db = getDb();
       const catalogOwnerId = await getCatalogOwnerId();
-      const { tagIds, ...wordData } = input;
+      const { tagIds, groupIds, ...wordData } = input;
       const normalizedWord = wordData.word.trim();
+      const membershipGroupIds = [
+        ...new Set(groupIds ?? (wordData.groupId ? [wordData.groupId] : [])),
+      ];
 
       if (!normalizedWord) {
         throw new TRPCError({ code: "BAD_REQUEST", message: "请输入单词" });
@@ -366,11 +414,18 @@ export const wordRouter = createRouter({
       const result = await db.insert(words).values({
         userId: catalogOwnerId,
         ...wordData,
+        groupId: membershipGroupIds[0] ?? wordData.groupId ?? null,
         word: normalizedWord,
         proficiency: wordData.proficiency ?? "new",
       });
 
       const wordId = Number(result[0].insertId);
+
+      if (membershipGroupIds.length > 0) {
+        await db.insert(wordGroupLinks).values(
+          membershipGroupIds.map((groupId) => ({ wordId, groupId })),
+        );
+      }
 
       // 关联标签
       if (tagIds && tagIds.length > 0) {
@@ -414,6 +469,7 @@ export const wordRouter = createRouter({
         example: z.string().optional(),
         notes: z.string().optional(),
         groupId: z.number().nullable().optional(),
+        groupIds: z.array(z.number()).optional(),
         tagIds: z.array(z.number()).optional(),
         proficiency: z.enum(["new", "learning", "familiar", "mastered"]).optional(),
       })
@@ -421,7 +477,12 @@ export const wordRouter = createRouter({
     .mutation(async ({ ctx, input }) => {
       const db = getDb();
       const catalogOwnerId = await getCatalogOwnerId();
-      const { id, tagIds, ...wordData } = input;
+      const { id, tagIds, groupIds, ...wordData } = input;
+
+      if (groupIds !== undefined) {
+        const uniqueGroupIds = [...new Set(groupIds)];
+        wordData.groupId = uniqueGroupIds[0] ?? null;
+      }
 
       if (wordData.word !== undefined) {
         const normalizedWord = wordData.word.trim();
@@ -457,6 +518,33 @@ export const wordRouter = createRouter({
         .update(words)
         .set(updateData)
         .where(and(eq(words.id, id), eq(words.userId, catalogOwnerId)));
+
+      if (groupIds !== undefined) {
+        const uniqueGroupIds = [...new Set(groupIds)];
+        await db.delete(wordGroupLinks).where(eq(wordGroupLinks.wordId, id));
+        if (uniqueGroupIds.length > 0) {
+          await db.insert(wordGroupLinks).values(
+            uniqueGroupIds.map((groupId) => ({ wordId: id, groupId })),
+          );
+        }
+      } else if (wordData.groupId) {
+        const existingGroupLink = await db
+          .select({ id: wordGroupLinks.id })
+          .from(wordGroupLinks)
+          .where(
+            and(
+              eq(wordGroupLinks.wordId, id),
+              eq(wordGroupLinks.groupId, wordData.groupId),
+            ),
+          )
+          .limit(1);
+        if (!existingGroupLink[0]) {
+          await db.insert(wordGroupLinks).values({
+            wordId: id,
+            groupId: wordData.groupId,
+          });
+        }
+      }
 
       // 更新标签关联
       if (tagIds !== undefined) {

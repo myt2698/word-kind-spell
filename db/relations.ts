@@ -1,5 +1,5 @@
 import { relations } from "drizzle-orm";
-import { users, textbooks, wordGroups, words, tags, wordTags, wordLogs, wordSpellings, spellingErrors, spellingSessions } from "./schema";
+import { users, textbooks, wordGroups, words, wordGroupLinks, tags, wordTags, wordLogs, wordSpellings, spellingErrors, spellingSessions } from "./schema";
 
 export const usersRelations = relations(users, ({ many }) => ({
   textbooks: many(textbooks),
@@ -21,15 +21,22 @@ export const wordGroupsRelations = relations(wordGroups, ({ one, many }) => ({
   user: one(users, { fields: [wordGroups.userId], references: [users.id] }),
   textbook: one(textbooks, { fields: [wordGroups.textbookId], references: [textbooks.id] }),
   words: many(words),
+  wordGroupLinks: many(wordGroupLinks),
 }));
 
 export const wordsRelations = relations(words, ({ one, many }) => ({
   user: one(users, { fields: [words.userId], references: [users.id] }),
   group: one(wordGroups, { fields: [words.groupId], references: [wordGroups.id] }),
+  wordGroupLinks: many(wordGroupLinks),
   wordTags: many(wordTags),
   logs: many(wordLogs),
   wordSpellings: many(wordSpellings),
   spellingErrors: many(spellingErrors),
+}));
+
+export const wordGroupLinksRelations = relations(wordGroupLinks, ({ one }) => ({
+  word: one(words, { fields: [wordGroupLinks.wordId], references: [words.id] }),
+  group: one(wordGroups, { fields: [wordGroupLinks.groupId], references: [wordGroups.id] }),
 }));
 
 export const tagsRelations = relations(tags, ({ one, many }) => ({

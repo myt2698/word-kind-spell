@@ -2,15 +2,32 @@ import { useState } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { useNavigate } from "react-router";
 import { trpc } from "@/providers/trpc";
-import AppHeader from "@/components/AppHeader";
+import AppHeader, { ChangePasswordDialog } from "@/components/AppHeader";
 import MobileNav from "@/components/MobileNav";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import {
   LogOut,
   KeyRound,
-  BookOpen,
-  Target,
   AlertTriangle,
   CheckCircle2,
   XCircle,
@@ -21,6 +38,9 @@ import {
   GraduationCap,
   Pause,
   Shield,
+  Pencil,
+  Trash2,
+  ChevronRight,
 } from "lucide-react";
 
 type ProfileTab = "stats" | "errors" | "settings";
@@ -28,10 +48,62 @@ type ProfileTab = "stats" | "errors" | "settings";
 export default function ProfilePage() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const utils = trpc.useUtils();
   const [activeTab, setActiveTab] = useState<ProfileTab>("stats");
+  const [showNicknameDialog, setShowNicknameDialog] = useState(false);
+  const [showPasswordDialog, setShowPasswordDialog] = useState(false);
+  const [showClearDialog, setShowClearDialog] = useState(false);
+  const [nickname, setNickname] = useState("");
+  const [settingsMessage, setSettingsMessage] = useState("");
+  const [settingsError, setSettingsError] = useState("");
 
   const { data: stats, isLoading: statsLoading } = trpc.spelling.getStats.useQuery();
   const { data: errors, isLoading: errorsLoading } = trpc.spelling.getErrorBook.useQuery();
+  const practicedWords = stats?.byLevel?.reduce((sum, item) => sum + Number(item.count), 0) ?? 0;
+
+  const updateName = trpc.auth.updateName.useMutation({
+    onSuccess: async (data) => {
+      if (!data.success) {
+        setSettingsError(data.message || "昵称修改失败");
+        return;
+      }
+      await utils.auth.me.invalidate();
+      setShowNicknameDialog(false);
+      setSettingsError("");
+      setSettingsMessage("昵称修改成功，下次请使用新昵称登录");
+    },
+    onError: (error) => setSettingsError(error.message || "昵称修改失败"),
+  });
+
+  const clearLearningRecords = trpc.spelling.clearLearningRecords.useMutation({
+    onSuccess: async (data) => {
+      await utils.spelling.invalidate();
+      await utils.word.list.invalidate();
+      setShowClearDialog(false);
+      setSettingsError("");
+      setSettingsMessage(data.message || "学习记录已清空");
+    },
+    onError: (error) => setSettingsError(error.message || "清空失败"),
+  });
+
+  const submitNickname = () => {
+    const nextName = nickname.trim();
+    setSettingsError("");
+    setSettingsMessage("");
+    if (!nextName) {
+      setSettingsError("请输入昵称");
+      return;
+    }
+    if (nextName.length > 20) {
+      setSettingsError("昵称最多20个字符");
+      return;
+    }
+    if (nextName === user?.name) {
+      setSettingsError("昵称没有变化");
+      return;
+    }
+    updateName.mutate({ name: nextName });
+  };
 
   if (!user) return null;
 
@@ -137,7 +209,7 @@ export default function ProfilePage() {
                           className={`h-full rounded-full ${
                             b.level === 1 ? "bg-red-400" : b.level === 2 ? "bg-amber-400" : "bg-green-400"
                           }`}
-                          style={{ width: `${Math.min((b.count / (stats.practicedWords || 1)) * 100, 100)}%` }}
+                          style={{ width: `${Math.min((Number(b.count) / (practicedWords || 1)) * 100, 100)}%` }}
                         />
                       </div>
                     </div>
@@ -174,19 +246,187 @@ export default function ProfilePage() {
         )}
 
         {activeTab === "settings" && (
-          <div className="bg-white rounded-xl border border-gray-100 p-4 space-y-3">
-            <Button
-              variant="outline"
-              className="w-full h-11 justify-start gap-2"
-              onClick={() => logout()}
-            >
-              <LogOut className="w-4 h-4 text-red-500" />
-              <span className="text-red-500">退出登录</span>
-            </Button>
+          <div className="space-y-3">
+            {settingsMessage && (
+              <div className="rounded-xl border border-emerald-100 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
+                {settingsMessage}
+              </div>
+            )}
+            {settingsError && (
+              <div className="rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-600">
+                {settingsError}
+              </div>
+            )}
+            <div className="overflow-hidden rounded-xl border border-gray-100 bg-white">
+              <SettingsRow
+                icon={Pencil}
+                title="修改昵称"
+                description={`当前昵称：${user.name}`}
+                onClick={() => {
+                  setNickname(user.name || "");
+                  setSettingsError("");
+                  setSettingsMessage("");
+                  setShowNicknameDialog(true);
+                }}
+              />
+              <SettingsRow
+                icon={KeyRound}
+                title="修改密码"
+                description="使用原密码设置新密码"
+                onClick={() => {
+                  setSettingsError("");
+                  setSettingsMessage("");
+                  setShowPasswordDialog(true);
+                }}
+              />
+              <SettingsRow
+                icon={Trash2}
+                title="清空学习记录"
+                description="清除当前账号的进度、错题与练习记录"
+                danger
+                onClick={() => {
+                  setSettingsError("");
+                  setSettingsMessage("");
+                  setShowClearDialog(true);
+                }}
+              />
+              <SettingsRow
+                icon={LogOut}
+                title="退出登录"
+                description="退出当前账号"
+                danger
+                onClick={() => logout()}
+              />
+            </div>
           </div>
         )}
       </main>
       <MobileNav activeTab="profile" />
+
+      <Dialog
+        open={showNicknameDialog}
+        onOpenChange={(open) => {
+          if (!updateName.isPending) setShowNicknameDialog(open);
+        }}
+      >
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>修改昵称</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-gray-500">昵称也是登录账号，修改后请使用新昵称登录。</p>
+          {settingsError && (
+            <div className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">{settingsError}</div>
+          )}
+          <div className="space-y-1.5">
+            <Label htmlFor="profile-nickname">昵称</Label>
+            <Input
+              id="profile-nickname"
+              value={nickname}
+              maxLength={20}
+              autoFocus
+              disabled={updateName.isPending}
+              onChange={(event) => {
+                setNickname(event.target.value);
+                setSettingsError("");
+              }}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") submitNickname();
+              }}
+            />
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              disabled={updateName.isPending}
+              onClick={() => setShowNicknameDialog(false)}
+            >
+              取消
+            </Button>
+            <Button disabled={updateName.isPending} onClick={submitNickname}>
+              {updateName.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "保存"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <ChangePasswordDialog
+        open={showPasswordDialog}
+        onClose={() => setShowPasswordDialog(false)}
+        onChanged={() => setSettingsMessage("密码修改成功")}
+      />
+
+      <AlertDialog open={showClearDialog} onOpenChange={setShowClearDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>清空学习记录？</AlertDialogTitle>
+            <AlertDialogDescription className="space-y-2">
+              <span className="block">
+                将清空当前账号的学习队列、复习进度、错题、练习场次和今日选词。
+              </span>
+              <span className="block font-medium text-gray-700">
+                共享单词、课本和其他账号的数据不会删除。
+              </span>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          {settingsError && (
+            <div className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">{settingsError}</div>
+          )}
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={clearLearningRecords.isPending}>取消</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={clearLearningRecords.isPending}
+              className="bg-red-600 text-white hover:bg-red-700"
+              onClick={(event) => {
+                event.preventDefault();
+                clearLearningRecords.mutate();
+              }}
+            >
+              {clearLearningRecords.isPending ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                "确认清空"
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
+  );
+}
+
+function SettingsRow({
+  icon: Icon,
+  title,
+  description,
+  danger = false,
+  onClick,
+}: {
+  icon: typeof Pencil;
+  title: string;
+  description: string;
+  danger?: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      className="flex w-full items-center gap-3 border-b border-gray-100 px-4 py-3.5 text-left transition-colors last:border-b-0 hover:bg-gray-50"
+      onClick={onClick}
+    >
+      <span
+        className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${
+          danger ? "bg-red-50 text-red-500" : "bg-indigo-50 text-indigo-600"
+        }`}
+      >
+        <Icon className="h-4.5 w-4.5" />
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className={`block text-sm font-medium ${danger ? "text-red-600" : "text-gray-900"}`}>
+          {title}
+        </span>
+        <span className="block truncate text-xs text-gray-500">{description}</span>
+      </span>
+      <ChevronRight className="h-4 w-4 shrink-0 text-gray-300" />
+    </button>
   );
 }

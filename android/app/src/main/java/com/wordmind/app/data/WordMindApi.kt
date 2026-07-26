@@ -236,6 +236,25 @@ class WordMindApi(context: Context) {
         return result.optString("message", "密码修改成功")
     }
 
+    suspend fun updateName(name: String): User {
+        val result = mutate(
+            "auth.updateName",
+            JSONObject().put("name", name.trim()),
+        ) as JSONObject
+        if (!result.optBoolean("success")) {
+            throw ApiException(result.optString("message", "昵称修改失败"))
+        }
+        return me()
+    }
+
+    suspend fun clearLearningRecords(): String {
+        val result = mutate("spelling.clearLearningRecords", null) as JSONObject
+        if (!result.optBoolean("success")) {
+            throw ApiException(result.optString("message", "清空失败"))
+        }
+        return result.optString("message", "学习记录已清空")
+    }
+
     suspend fun logout() {
         try {
             mutate("auth.logout", null)
