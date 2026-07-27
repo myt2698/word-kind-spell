@@ -191,6 +191,45 @@ describe("catalog syllable divisions", () => {
 });
 
 describe("phonics analysis", () => {
+  it.each([
+    ["share", ["sh", "are"], "are"],
+    ["queen", ["qu", "ee", "n"], "qu"],
+    ["eight", ["eigh", "t"], "eigh"],
+    ["picture", ["p", "i", "c", "ture"], "ture"],
+    ["monkey", ["m", "o", "nk", "e", "y"], "nk"],
+  ])(
+    "keeps the reviewed longest grapheme in %s",
+    (word, expectedBlocks, expectedPattern) => {
+      const analysis = analyzeWordForStudy(word);
+
+      expect(analysis.blocks.map((block) => block.letters)).toEqual(
+        expectedBlocks,
+      );
+      expect(analysis.patterns).toContainEqual(
+        expect.objectContaining({ text: expectedPattern }),
+      );
+    },
+  );
+
+  it("does not reduce are in share to ar plus magic e", () => {
+    const analysis = analyzeWordForStudy("share");
+
+    expect(analysis.patterns).not.toContainEqual(
+      expect.objectContaining({ text: "ar" }),
+    );
+    expect(analysis.patterns).not.toContainEqual(
+      expect.objectContaining({ type: "magic_e" }),
+    );
+  });
+
+  it("keeps spelling blocks faithful for spoken abbreviations", () => {
+    const analysis = analyzeWordForStudy("Mr");
+
+    expect(analysis.syllables).toEqual(["mis", "ter"]);
+    expect(analysis.blocks.map((block) => block.letters)).toEqual(["m", "r"]);
+    expect(analysis.blocks.map((block) => block.letters).join("")).toBe("mr");
+  });
+
   it("does not label the internal ele in elephant as magic e", () => {
     const analysis = analyzeWordForStudy("elephant");
 

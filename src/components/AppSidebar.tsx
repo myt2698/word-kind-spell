@@ -1,6 +1,5 @@
 import { trpc } from "@/providers/trpc";
 import { Button } from "@/components/ui/button";
-import { useNavigate } from "react-router";
 import {
   LayoutGrid,
   Settings,
@@ -39,7 +38,6 @@ export default function AppSidebar({
   mobile,
   onClose,
 }: AppSidebarProps) {
-  const navigate = useNavigate();
   const { data: groups } = trpc.wordGroup.list.useQuery();
   const { data: tags } = trpc.tag.listWithCount.useQuery();
   const { data: userSettings } = trpc.wordGroup.getSettings.useQuery();

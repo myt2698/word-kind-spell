@@ -16,7 +16,7 @@ import {
 } from "@/components/ui/dialog";
 import {
   Tag, BookOpen, Edit3, Trash2, ChevronUp, ChevronDown,
-  Star, GripVertical, X, Loader2, Plus, ChevronRight, FolderOpen,
+  GripVertical, Loader2, Plus, ChevronRight, FolderOpen,
   
 } from "lucide-react";
 
@@ -96,10 +96,6 @@ export default function ManagePage() {
       utils.textbook.list.invalidate();
     },
   });
-  const setDefaultUnit = trpc.wordGroup.setDefault.useMutation({
-    onSuccess: () => utils.wordGroup.getSettings.invalidate(),
-  });
-
   const createTag = trpc.tag.create.useMutation({
     onSuccess: () => { utils.tag.list.invalidate(); utils.tag.listWithCount.invalidate(); setTagForm({ name: "", description: "" }); setTagDialogOpen(false); },
   });
@@ -280,6 +276,7 @@ export default function ManagePage() {
               tagId={tagDetailId}
               open={tagDetailOpen}
               onClose={() => { setTagDetailOpen(false); setTagDetailId(null); }}
+              canEditWords
               onEdit={(tag) => {
                 setTagDetailOpen(false);
                 setEditingTagId(tag.id);
@@ -461,5 +458,3 @@ export default function ManagePage() {
     </div>
   );
 }
-
-

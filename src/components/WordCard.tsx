@@ -29,6 +29,13 @@ interface TagInfo {
   name: string;
 }
 
+export interface WordGroupInfo {
+  groupId: number;
+  groupName: string;
+  textbookId: number;
+  textbookName: string;
+}
+
 export interface WordCardData {
   id: number;
   word: string;
@@ -42,6 +49,8 @@ export interface WordCardData {
   groupName?: string | null;
   textbookId?: number | null;
   textbookName?: string | null;
+  groupIds?: number[];
+  groups?: WordGroupInfo[];
   createdAt: Date;
   updatedAt: Date;
   learningStatus?: "idle" | "active" | "paused";
@@ -294,6 +303,7 @@ export default function WordCard({
         tagId={tagDialogId}
         open={!!tagDialogId}
         onClose={() => setTagDialogId(null)}
+        canEditWords={canManage}
         onEdit={
           canManage
             ? (tag) => {

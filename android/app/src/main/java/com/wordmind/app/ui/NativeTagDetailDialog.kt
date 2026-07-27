@@ -20,6 +20,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Label
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -28,6 +29,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -49,6 +51,7 @@ internal fun NativeTagDetailDialog(
     tag: Tag,
     words: List<Word>,
     speak: (String) -> Unit,
+    onEditWord: ((Word) -> Unit)? = null,
     onDismiss: () -> Unit,
 ) {
     Dialog(onDismissRequest = onDismiss) {
@@ -123,7 +126,11 @@ internal fun NativeTagDetailDialog(
                         verticalArrangement = Arrangement.spacedBy(0.dp),
                     ) {
                         items(words, key = { it.id }) { word ->
-                            TagDetailWordRow(word = word, speak = speak)
+                            TagDetailWordRow(
+                                word = word,
+                                speak = speak,
+                                onEdit = onEditWord?.let { edit -> { edit(word) } },
+                            )
                             HorizontalDivider(
                                 modifier = Modifier.padding(horizontal = 18.dp),
                                 color = TagBorder,
@@ -140,6 +147,7 @@ internal fun NativeTagDetailDialog(
 private fun TagDetailWordRow(
     word: Word,
     speak: (String) -> Unit,
+    onEdit: (() -> Unit)?,
 ) {
     Column(
         modifier = Modifier
@@ -171,6 +179,17 @@ private fun TagDetailWordRow(
                     modifier = Modifier.size(19.dp),
                     tint = TagIndigo,
                 )
+            }
+            if (onEdit != null) {
+                TextButton(onClick = onEdit) {
+                    Icon(
+                        Icons.Default.Edit,
+                        contentDescription = null,
+                        modifier = Modifier.size(15.dp),
+                    )
+                    Spacer(Modifier.width(4.dp))
+                    Text("编辑", fontSize = 12.sp)
+                }
             }
         }
         Spacer(Modifier.height(4.dp))

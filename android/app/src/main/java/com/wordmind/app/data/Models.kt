@@ -67,7 +67,7 @@ data class WordDraft(
     val definition: String,
     val example: String,
     val notes: String,
-    val groupId: Int?,
+    val groupIds: List<Int>,
     val tagIds: List<Int>,
 )
 

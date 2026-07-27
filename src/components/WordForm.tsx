@@ -48,24 +48,20 @@ export interface WordFormData {
   definition: string;
   example: string;
   notes: string;
-  groupId: number | undefined;
+  groupIds: number[];
   tagIds: number[];
   proficiency: "new" | "learning" | "familiar" | "mastered";
 }
 
 export default function WordForm({ open, onClose, onSubmit, editWord }: WordFormProps) {
   const utils = trpc.useUtils();
-  const { data: textbooks } = trpc.textbook.listWithDefault.useQuery();
+  const { data: textbooks } = trpc.textbook.list.useQuery();
   const { data: allTags } = trpc.tag.list.useQuery();
-  const { data: userSettings } = trpc.wordGroup.getSettings.useQuery();
 
   const [selectedTextbookId, setSelectedTextbookId] = useState<number | null>(null);
+  const [selectedUnitPickerId, setSelectedUnitPickerId] = useState<number | null>(null);
   const [isEditingMode, setIsEditingMode] = useState(false);
   const [editingWordId, setEditingWordId] = useState<number | null>(null);
-  const { data: units } = trpc.wordGroup.list.useQuery(
-    selectedTextbookId ? { textbookId: selectedTextbookId } : undefined,
-    { enabled: !!selectedTextbookId }
-  );
 
   const [form, setForm] = useState<WordFormData>({
     word: "",
@@ -73,7 +69,7 @@ export default function WordForm({ open, onClose, onSubmit, editWord }: WordForm
     definition: "",
     example: "",
     notes: "",
-    groupId: undefined,
+    groupIds: [],
     tagIds: [],
     proficiency: "new",
   });
@@ -92,10 +88,18 @@ export default function WordForm({ open, onClose, onSubmit, editWord }: WordForm
     definition: string;
     example: string | null;
     notes: string | null;
-    proficiency: string;
+    proficiency: "new" | "learning" | "familiar" | "mastered";
     tags: { id: number; name: string }[];
     groupId: number | null;
     groupName: string | null;
+    textbookId?: number | null;
+    groupIds?: number[];
+    groups?: Array<{
+      groupId: number;
+      groupName: string;
+      textbookId: number;
+      textbookName: string;
+    }>;
     createdAt: Date;
     updatedAt: Date;
   } | null>(null);
@@ -144,20 +148,26 @@ export default function WordForm({ open, onClose, onSubmit, editWord }: WordForm
       setHasAutoFilled(false);
       lookupMutation.reset();
       if (editWord) {
+        const groupIds =
+          editWord.groupIds ??
+          editWord.groups?.map((group) => group.groupId) ??
+          (editWord.groupId ? [editWord.groupId] : []);
+        const initialTextbookId =
+          editWord.groups?.find((group) => group.groupId === groupIds[0])?.textbookId ??
+          editWord.textbookId ??
+          null;
         setForm({
           word: editWord.word,
           phonetic: editWord.phonetic || "",
           definition: editWord.definition,
           example: editWord.example || "",
           notes: editWord.notes || "",
-          groupId: editWord.groupId ?? undefined,
+          groupIds,
           tagIds: editWord.tags.map((t) => t.id),
           proficiency: editWord.proficiency,
         });
-        // Use textbookId from editWord if available
-        if ((editWord as any)?.textbookId) {
-          setSelectedTextbookId((editWord as any).textbookId);
-        }
+        setSelectedTextbookId(initialTextbookId);
+        setSelectedUnitPickerId(null);
       } else {
         // Load last selected textbook & unit from localStorage
         const lastTextbookId = localStorage.getItem(LAST_TEXTBOOK_KEY);
@@ -174,7 +184,7 @@ export default function WordForm({ open, onClose, onSubmit, editWord }: WordForm
             definition: "",
             example: "",
             notes: "",
-            groupId: savedUnitId ?? undefined,
+            groupIds: savedUnitId ? [savedUnitId] : [],
             tagIds: [],
             proficiency: "new",
           });
@@ -187,7 +197,7 @@ export default function WordForm({ open, onClose, onSubmit, editWord }: WordForm
             definition: "",
             example: "",
             notes: "",
-            groupId: undefined,
+            groupIds: [],
             tagIds: [],
             proficiency: "new",
           });
@@ -196,7 +206,7 @@ export default function WordForm({ open, onClose, onSubmit, editWord }: WordForm
     }
     // Track previous open state
     prevOpenRef.current = open;
-  }, [editWord, open, userSettings, textbooks]);
+  }, [editWord, open, textbooks]);
 
   const doLookup = async (word: string) => {
     if (!word || word.length < 2) {
@@ -240,8 +250,10 @@ export default function WordForm({ open, onClose, onSubmit, editWord }: WordForm
     const isDefaultTextbook = selectedTextbookId === defaultTbId;
     if (selectedTextbookId && !isDefaultTextbook) {
       localStorage.setItem(LAST_TEXTBOOK_KEY, String(selectedTextbookId));
-      if (form.groupId) {
-        localStorage.setItem(LAST_UNIT_KEY, String(form.groupId));
+      const selectedTextbook = textbooks?.find((textbook) => textbook.id === selectedTextbookId);
+      const lastUnitId = selectedTextbook?.groups.find((unit) => form.groupIds.includes(unit.id))?.id;
+      if (lastUnitId) {
+        localStorage.setItem(LAST_UNIT_KEY, String(lastUnitId));
       } else {
         localStorage.removeItem(LAST_UNIT_KEY);
       }
@@ -304,6 +316,17 @@ export default function WordForm({ open, onClose, onSubmit, editWord }: WordForm
   };
 
   const isPending = isLookingUp || lookupMutation.isPending;
+  const selectedMemberships = (textbooks ?? []).flatMap((textbook) =>
+    textbook.groups
+      .filter((unit) => form.groupIds.includes(unit.id))
+      .map((unit) => ({
+        groupId: unit.id,
+        groupName: unit.name,
+        textbookName: textbook.name,
+      })),
+  );
+  const pickerUnits =
+    textbooks?.find((textbook) => textbook.id === selectedTextbookId)?.groups ?? [];
 
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
@@ -426,24 +449,32 @@ export default function WordForm({ open, onClose, onSubmit, editWord }: WordForm
                       setExistingWord(null);
                       setIsEditingMode(true);
                       setEditingWordId(ew.id);
+                      const groupIds =
+                        ew.groupIds ??
+                        ew.groups?.map((group) => group.groupId) ??
+                        (ew.groupId ? [ew.groupId] : []);
                       setForm({
                         word: ew.word,
                         phonetic: ew.phonetic || "",
                         definition: ew.definition,
                         example: ew.example || "",
                         notes: ew.notes || "",
-                        groupId: ew.groupId ?? undefined,
+                        groupIds,
                         tagIds: ew.tags.map((t: any) => t.id),
                         proficiency: ew.proficiency,
                       });
                       // Set textbook for this unit
-                      if (ew.textbookId) {
-                        setSelectedTextbookId(ew.textbookId);
+                      const primaryTextbookId =
+                        ew.groups?.find((group) => group.groupId === groupIds[0])?.textbookId ??
+                        ew.textbookId;
+                      if (primaryTextbookId) {
+                        setSelectedTextbookId(primaryTextbookId);
                       } else {
                         const allUnits = textbooks?.flatMap((tb: any) => tb.groups || []);
                         const unit = allUnits?.find((u: any) => u.id === ew.groupId);
                         if (unit?.textbookId) setSelectedTextbookId(unit.textbookId);
                       }
+                      setSelectedUnitPickerId(null);
                     }}
                   >
                     <Edit3 className="w-3 h-3 mr-1" />
@@ -523,25 +554,65 @@ export default function WordForm({ open, onClose, onSubmit, editWord }: WordForm
             />
           </div>
 
-          {/* Textbook + Unit (cascade) */}
+          {/* Textbook + Unit memberships */}
           <div className="space-y-2">
-            <Label className="text-sm font-medium flex items-center gap-1">
-              <BookOpen className="w-3.5 h-3.5" /> 课本 & 单元
-            </Label>
-            {/* Textbook selector */}
+            <div className="flex items-center justify-between gap-3">
+              <Label className="text-sm font-medium flex items-center gap-1">
+                <BookOpen className="w-3.5 h-3.5" /> 课本与单元（可多选）
+              </Label>
+              {form.groupIds.length > 0 && (
+                <button
+                  type="button"
+                  className="text-xs text-gray-400 hover:text-red-500"
+                  onClick={() => updateForm({ groupIds: [] })}
+                >
+                  清空全部
+                </button>
+              )}
+            </div>
+
+            <div className="min-h-10 rounded-lg border border-gray-200 bg-gray-50 p-2">
+              {selectedMemberships.length > 0 ? (
+                <div className="flex flex-wrap gap-1.5">
+                  {selectedMemberships.map((membership) => (
+                    <button
+                      key={membership.groupId}
+                      type="button"
+                      className="inline-flex items-center gap-1 rounded-full border border-indigo-200 bg-indigo-50 px-2.5 py-1 text-xs font-medium text-indigo-700"
+                      onClick={() =>
+                        updateForm({
+                          groupIds: form.groupIds.filter((id) => id !== membership.groupId),
+                        })
+                      }
+                      title="移除此课本单元关联"
+                    >
+                      {membership.textbookName} · {membership.groupName}
+                      <X className="h-3 w-3" />
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <p className="px-1 py-0.5 text-xs text-gray-500">扩展词汇（未关联课本）</p>
+              )}
+            </div>
+
+            <p className="text-[11px] text-gray-400">
+              先选择课本，再选择单元；选择后会加入上方关联列表。
+            </p>
             <Select
               value={selectedTextbookId == null ? "default" : String(selectedTextbookId)}
               onValueChange={(v) => {
                 const tbId = v === "default" ? null : parseInt(v);
                 setSelectedTextbookId(tbId);
-                updateForm({ groupId: null });
+                setSelectedUnitPickerId(null);
+                if (tbId === null) updateForm({ groupIds: [] });
               }}
             >
               <SelectTrigger className="h-10">
-                <SelectValue placeholder="扩展词汇" />
+                <SelectValue placeholder="选择课本" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="default">扩展词汇</SelectItem>
+                <SelectItem value="default">扩展词汇（清空课本关联）</SelectItem>
                 {textbooks?.map((tb) => (
                   <SelectItem key={tb.id} value={tb.id.toString()}>
                     {tb.name}
@@ -550,22 +621,23 @@ export default function WordForm({ open, onClose, onSubmit, editWord }: WordForm
               </SelectContent>
             </Select>
 
-            {/* Unit selector - only show when a non-default textbook is selected */}
-            {selectedTextbookId != null && !textbooks?.find((tb: any) => tb.id === selectedTextbookId)?.isDefault && (
+            {selectedTextbookId != null && (
               <Select
-                value={form.groupId == null ? "default" : String(form.groupId)}
-                onValueChange={(v) =>
-                  updateForm({ groupId: v === "default" ? null : parseInt(v) })
-                }
+                value={selectedUnitPickerId?.toString()}
+                onValueChange={(v) => {
+                  const groupId = parseInt(v);
+                  setSelectedUnitPickerId(null);
+                  updateForm({ groupIds: [...new Set([...form.groupIds, groupId])] });
+                }}
               >
                 <SelectTrigger className="h-10">
-                  <SelectValue placeholder="不选单元" />
+                  <SelectValue placeholder="选择要关联的单元" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="default">不选单元</SelectItem>
-                  {units?.map((u) => (
+                  {pickerUnits.map((u) => (
                     <SelectItem key={u.id} value={u.id.toString()}>
                       {u.name}
+                      {form.groupIds.includes(u.id) ? "（已关联）" : ""}
                     </SelectItem>
                   ))}
                 </SelectContent>

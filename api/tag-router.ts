@@ -1,7 +1,15 @@
 import { z } from "zod";
 import { createRouter, authedQuery, adminQuery } from "./middleware";
 import { getDb } from "./queries/connection";
-import { tags, wordTags, words, wordGroups, textbooks, wordSpellings } from "@db/schema";
+import {
+  tags,
+  wordTags,
+  words,
+  wordGroups,
+  wordGroupLinks,
+  textbooks,
+  wordSpellings,
+} from "@db/schema";
 import { eq, and, sql, desc, inArray } from "drizzle-orm";
 import { getCatalogOwnerId } from "./catalog";
 
@@ -140,26 +148,39 @@ export const tagRouter = createRouter({
         .where(and(eq(words.userId, catalogOwnerId), inArray(words.id, wordIds)))
         .orderBy(desc(words.createdAt));
 
-      // 4. 获取单元名称 + 课本名称
-      const groupIds = [...new Set(wordList.map((w) => w.groupId).filter(Boolean))] as number[];
-      const groupMap = new Map<number, { groupName: string; textbookName: string }>();
-      if (groupIds.length > 0) {
-        const groupRows = await db
-          .select({
-            id: wordGroups.id,
-            groupName: wordGroups.name,
-            textbookName: textbooks.name,
-          })
-          .from(wordGroups)
-          .innerJoin(textbooks, eq(wordGroups.textbookId, textbooks.id))
-          .where(inArray(wordGroups.id, groupIds));
-        for (const g of groupRows) {
-          groupMap.set(g.id, { groupName: g.groupName, textbookName: g.textbookName });
-        }
+      // 4. 获取完整的课本/单元关联。words.groupId 仅是兼容旧客户端的主单元，
+      // 实际关联以 word_group_links 为准。
+      const allWordIds = wordList.map((w) => w.id);
+      const groupRows = await db
+        .select({
+          wordId: wordGroupLinks.wordId,
+          groupId: wordGroups.id,
+          groupName: wordGroups.name,
+          textbookId: textbooks.id,
+          textbookName: textbooks.name,
+        })
+        .from(wordGroupLinks)
+        .innerJoin(wordGroups, eq(wordGroupLinks.groupId, wordGroups.id))
+        .innerJoin(textbooks, eq(wordGroups.textbookId, textbooks.id))
+        .where(inArray(wordGroupLinks.wordId, allWordIds));
+      const groupsByWord = new Map<number, Array<{
+        groupId: number;
+        groupName: string;
+        textbookId: number;
+        textbookName: string;
+      }>>();
+      for (const group of groupRows) {
+        const existing = groupsByWord.get(group.wordId) ?? [];
+        existing.push({
+          groupId: group.groupId,
+          groupName: group.groupName,
+          textbookId: group.textbookId,
+          textbookName: group.textbookName,
+        });
+        groupsByWord.set(group.wordId, existing);
       }
 
-      // 5. 获取这些单词的所有标签（用于展示）
-      const allWordIds = wordList.map((w) => w.id);
+      // 5. 获取这些单词的所有标签（用于展示和编辑）
       const allTagRows = await db
         .select({
           wordId: wordTags.wordId,
@@ -194,11 +215,19 @@ export const tagRouter = createRouter({
       );
 
       const enrichedWords = wordList.map((w) => {
-        const info = w.groupId ? groupMap.get(w.groupId) : null;
+        const memberships = groupsByWord.get(w.id) ?? [];
+        const primaryGroup =
+          memberships.find((group) => group.groupId === w.groupId) ??
+          memberships[0] ??
+          null;
         return {
           ...w,
-          groupName: info?.groupName ?? null,
-          textbookName: info?.textbookName ?? "扩展词汇",
+          groups: memberships,
+          groupIds: memberships.map((group) => group.groupId),
+          groupId: primaryGroup?.groupId ?? w.groupId,
+          groupName: primaryGroup?.groupName ?? null,
+          textbookId: primaryGroup?.textbookId ?? null,
+          textbookName: primaryGroup?.textbookName ?? "扩展词汇",
           tags: tagMap.get(w.id) ?? [],
           learningStatus: learningMap.get(w.id) ?? "idle",
         };

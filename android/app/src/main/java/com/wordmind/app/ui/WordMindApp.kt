@@ -606,6 +606,11 @@ private fun MainScreen(
                         tags = tags,
                         words = words,
                         speak = phonicsSpeak,
+                        canManage = user.role == "admin",
+                        onEditWord = {
+                            editingWord = it
+                            wordEditorOpen = true
+                        },
                         onSecondaryPageChanged = { secondaryPageOpen = it },
                     )
                     Destination.Manage -> AdminScreen(

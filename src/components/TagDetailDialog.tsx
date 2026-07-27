@@ -18,9 +18,16 @@ interface TagDetailDialogProps {
   open: boolean;
   onClose: () => void;
   onEdit?: (tag: { id: number; name: string; description: string | null }) => void;
+  canEditWords?: boolean;
 }
 
-export default function TagDetailDialog({ tagId, open, onClose, onEdit }: TagDetailDialogProps) {
+export default function TagDetailDialog({
+  tagId,
+  open,
+  onClose,
+  onEdit,
+  canEditWords = false,
+}: TagDetailDialogProps) {
   const utils = trpc.useUtils();
   const { data, isLoading } = trpc.tag.getById.useQuery(
     { id: tagId! },
@@ -56,6 +63,10 @@ export default function TagDetailDialog({ tagId, open, onClose, onEdit }: TagDet
         proficiency: editingWord.proficiency,
         groupId: editingWord.groupId,
         groupName: editingWord.groupName,
+        textbookId: editingWord.textbookId,
+        textbookName: editingWord.textbookName,
+        groupIds: editingWord.groupIds,
+        groups: editingWord.groups,
         tags: editingWord.tags,
         createdAt: new Date(),
         updatedAt: new Date(),
@@ -164,16 +175,17 @@ export default function TagDetailDialog({ tagId, open, onClose, onEdit }: TagDet
 
                   {/* Right: edit + other tags */}
                   <div className="flex flex-col items-end gap-1.5 shrink-0">
-                    {onEdit && (
+                    {canEditWords && (
                       <button
                         onClick={() => {
                           setEditingWord(word);
                           setWordFormOpen(true);
                         }}
-                        className="p-1 rounded-md hover:bg-gray-200 text-gray-400 hover:text-indigo-500 transition-colors"
+                        className="inline-flex items-center gap-1 rounded-lg border border-indigo-100 bg-white px-2 py-1 text-[11px] font-medium text-indigo-600 transition-colors hover:border-indigo-200 hover:bg-indigo-50"
                         title="编辑单词"
                       >
                         <Edit3 className="w-3.5 h-3.5" />
+                        编辑
                       </button>
                     )}
                     {word.tags.length > 1 && (

@@ -22,10 +22,7 @@ import {
   Plus,
   Loader2,
   ArrowLeft,
-  ChevronRight,
-  FolderOpen,
   Layers,
-  GraduationCap,
 } from "lucide-react";
 
 type AdminTab = "tags" | "textbooks" | "words";
@@ -33,7 +30,6 @@ type AdminTab = "tags" | "textbooks" | "words";
 export default function AdminPage() {
   const { user, isLoading: authLoading } = useAuth({ redirectOnUnauthenticated: true });
   const navigate = useNavigate();
-  const utils = trpc.useUtils();
 
   // Redirect non-admin users
   if (!authLoading && user && user.role !== "admin") {
@@ -289,10 +285,6 @@ function TextbookManager() {
   const createUnit = trpc.wordGroup.create.useMutation({
     onSuccess: () => utils.textbook.list.invalidate(),
   });
-  const deleteUnit = trpc.wordGroup.delete.useMutation({
-    onSuccess: () => utils.textbook.list.invalidate(),
-  });
-
   const [unitDialogOpen, setUnitDialogOpen] = useState(false);
   const [unitForm, setUnitForm] = useState({ name: "", textbookId: null as number | null });
 

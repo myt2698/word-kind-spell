@@ -10,17 +10,6 @@
 const VOWELS = new Set(["a", "e", "i", "o", "u"]);
 const Y_VOWEL = new Set(["a", "e", "i", "o", "u", "y"]);
 
-/** Check if char is a vowel (a/e/i/o/u, not y unless at end) */
-function isVowel(ch: string, pos: number, total: number): boolean {
-  const lower = ch.toLowerCase();
-  if (VOWELS.has(lower)) return true;
-  // y acts as vowel at end of word or between consonants
-  if (lower === "y") {
-    return pos > 0 && pos === total - 1;
-  }
-  return false;
-}
-
 // ========== Priority 1: Indivisible Blocks ==========
 
 /** Vowel combinations (digraphs/diphthongs) - never split */
@@ -39,15 +28,63 @@ const CONSONANT_BLENDS = new Set([
   "ch", "sh", "th", "ph", "ck", "ng",
 ]);
 
+/**
+ * Reviewed multi-letter graphemes that must win over shorter combinations.
+ *
+ * For example, `share` is `sh + are`, not `sh + ar + e`, while `queen` is
+ * `qu + ee + n`, not `q + ue + e + n`. Keep this table longest-first so a
+ * shorter rule can never consume part of a reviewed grapheme.
+ */
+const PRIORITY_GRAPHEMES = [
+  { text: "eigh", type: "vowel_combo" },
+  { text: "ture", type: "vowel_combo" },
+  { text: "air", type: "vowel_combo" },
+  { text: "are", type: "vowel_combo" },
+  { text: "ear", type: "vowel_combo" },
+  { text: "ere", type: "vowel_combo" },
+  { text: "eir", type: "vowel_combo" },
+  { text: "ire", type: "vowel_combo" },
+  { text: "ore", type: "vowel_combo" },
+  { text: "our", type: "vowel_combo" },
+  { text: "oor", type: "vowel_combo" },
+  { text: "str", type: "consonant_blend" },
+  { text: "qu", type: "consonant_blend" },
+  { text: "nk", type: "consonant_blend" },
+] as const;
+
+type PriorityGraphemeMatch = {
+  text: string;
+  type: (typeof PRIORITY_GRAPHEMES)[number]["type"];
+  start: number;
+  end: number;
+};
+
+function findPriorityGraphemes(word: string): PriorityGraphemeMatch[] {
+  const lower = word.toLowerCase();
+  const matches: PriorityGraphemeMatch[] = [];
+  let index = 0;
+
+  while (index < lower.length) {
+    const grapheme = PRIORITY_GRAPHEMES.find(({ text }) =>
+      lower.startsWith(text, index),
+    );
+    if (!grapheme) {
+      index++;
+      continue;
+    }
+
+    matches.push({
+      ...grapheme,
+      start: index,
+      end: index + grapheme.text.length,
+    });
+    index += grapheme.text.length;
+  }
+
+  return matches;
+}
+
 // ========== Priority 2: Prefixes / Suffixes / Compound Words ==========
-
-const PREFIXES = new Set([
-  "un", "re", "dis", "mis", "pre", "over", "under", "out", "up", "down",
-]);
-
-const SUFFIXES = new Set([
-  "er", "or", "ar", "est", "ness", "less", "ful", "ment", "tion", "sion",
-]);
 
 /** Special endings that form their own syllable */
 const SPECIAL_ENDINGS = ["cle", "tle", "dle", "ckle", "gle", "ble", "ple", "fle", "kle", "zle"];
@@ -413,11 +450,33 @@ export interface PhonicsTag {
 export function detectPhonicsTags(word: string): PhonicsTag[] {
   const lower = word.toLowerCase();
   const tags: PhonicsTag[] = [];
+  const priorityMatches = findPriorityGraphemes(lower);
+  const priorityCovered = new Set(
+    priorityMatches.flatMap(({ start, end }) =>
+      Array.from({ length: end - start }, (_, offset) => start + offset),
+    ),
+  );
+
+  for (const match of priorityMatches) {
+    tags.push({
+      type: match.type,
+      text: match.text,
+      position: [match.start, match.end],
+      description:
+        match.type === "vowel_combo"
+          ? `元音或常见拼写组合 "${match.text}"`
+          : `辅音组合或辅音连缀 "${match.text}"`,
+    });
+  }
 
   // 1. Detect vowel combinations
   for (let i = 0; i < lower.length - 1; i++) {
     const bigram = lower.substring(i, i + 2);
-    if (VOWEL_COMBOS.has(bigram)) {
+    if (
+      VOWEL_COMBOS.has(bigram) &&
+      !priorityCovered.has(i) &&
+      !priorityCovered.has(i + 1)
+    ) {
       tags.push({
         type: "vowel_combo",
         text: bigram,
@@ -431,7 +490,11 @@ export function detectPhonicsTags(word: string): PhonicsTag[] {
   for (let i = 0; i < lower.length - 1; i++) {
     if (i < lower.length - 2) {
       const tri = lower.substring(i, i + 3);
-      if (CONSONANT_BLENDS.has(tri) && tri.length === 3) {
+      if (
+        CONSONANT_BLENDS.has(tri) &&
+        tri.length === 3 &&
+        ![i, i + 1, i + 2].some((position) => priorityCovered.has(position))
+      ) {
         tags.push({
           type: "consonant_blend",
           text: tri,
@@ -443,7 +506,11 @@ export function detectPhonicsTags(word: string): PhonicsTag[] {
       }
     }
     const bi = lower.substring(i, i + 2);
-    if (CONSONANT_BLENDS.has(bi)) {
+    if (
+      CONSONANT_BLENDS.has(bi) &&
+      !priorityCovered.has(i) &&
+      !priorityCovered.has(i + 1)
+    ) {
       const overlapping = tags.some(
         (t) =>
           t.type === "consonant_blend" &&
@@ -471,7 +538,8 @@ export function detectPhonicsTags(word: string): PhonicsTag[] {
       VOWELS.has(v1) &&
       e === "e" &&
       i + 2 === lower.length - 1 &&
-      isConsonant(mid)
+      isConsonant(mid) &&
+      ![i, i + 1, i + 2].some((position) => priorityCovered.has(position))
     ) {
       tags.push({
         type: "magic_e",
@@ -485,7 +553,13 @@ export function detectPhonicsTags(word: string): PhonicsTag[] {
   // 4. Detect r-controlled vowels only when the vowel and r remain in the
   // same reviewed/predicted syllable.
   for (const group of findVowelGroups(lower)) {
-    if (R_CONTROLLED.has(group.text)) {
+    if (
+      R_CONTROLLED.has(group.text) &&
+      !Array.from(
+        { length: group.end - group.start },
+        (_, offset) => group.start + offset,
+      ).some((position) => priorityCovered.has(position))
+    ) {
       tags.push({
         type: "r_controlled",
         text: group.text,
@@ -542,10 +616,19 @@ function explainStudyPattern(
 ): string {
   switch (type) {
     case "vowel_combo":
+      if (text === "ture") {
+        return `"ture" 是常见词尾拼写组合，通常整体读作 /tʃə(r)/，如 picture、future。`;
+      }
       return `"${text}" 是元音组合，通常作为一个发音单位整体认读，拼读时不要拆成两个独立元音。`;
     case "consonant_blend":
       if (text === "ph") {
         return `"ph" 是辅音字母组合，通常合起来发 /f/，拼读时不要拆开。`;
+      }
+      if (text === "qu") {
+        return `"qu" 是常见辅音组合，通常整体发 /kw/，如 queen、quick。`;
+      }
+      if (text === "nk") {
+        return `"nk" 是常见词尾辅音组合，通常整体发 /ŋk/，如 pink、drink。`;
       }
       return `"${text}" 是辅音组合或辅音连缀，拼读时要让相邻辅音自然衔接。`;
     case "magic_e":
@@ -631,9 +714,20 @@ export function generateLetterBlocks(word: string): Array<{
     return [{ id: "b0", letters: lower, isCombo: false }];
   }
 
-  const syllables = splitSyllables(word);
+  const reviewedSyllables = splitSyllables(word);
+  // Spoken abbreviations may use an expanded pronunciation (`Mr` → mis-ter).
+  // Letter blocks must always reconstruct the spelling shown to the learner.
+  const syllables =
+    reviewedSyllables.join("") === lower ? reviewedSyllables : [lower];
+  const priorityMatches = findPriorityGraphemes(lower);
+  const priorityCovered = new Set(
+    priorityMatches.flatMap(({ start, end }) =>
+      Array.from({ length: end - start }, (_, offset) => start + offset),
+    ),
+  );
   const blocks: Array<{ id: string; letters: string; isCombo: boolean; comboType?: string }> = [];
   let blockId = 0;
+  let syllableOffset = 0;
 
   // Split each syllable into letter blocks based on phonics combos
   for (const syl of syllables) {
@@ -641,14 +735,46 @@ export function generateLetterBlocks(word: string): Array<{
     const covered = new Set<number>();
     const sylBlocks: Array<{ letters: string; isCombo: boolean; comboType?: string; start: number }> = [];
 
+    // Apply reviewed longest-match graphemes first. A match may cross a
+    // syllable boundary (`mon-key` contains `nk`), but it is emitted once at
+    // its starting position and the remaining positions stay covered.
+    for (const match of priorityMatches) {
+      if (
+        match.start < syllableOffset ||
+        match.start >= syllableOffset + sylLower.length
+      ) {
+        continue;
+      }
+      for (let position = match.start; position < match.end; position++) {
+        if (
+          position >= syllableOffset &&
+          position < syllableOffset + sylLower.length
+        ) {
+          covered.add(position - syllableOffset);
+        }
+      }
+      sylBlocks.push({
+        letters: match.text,
+        isCombo: true,
+        comboType: match.type,
+        start: match.start - syllableOffset,
+      });
+    }
+
     // Find vowel combos in this syllable
     for (let i = 0; i < sylLower.length - 1; i++) {
-      if (covered.has(i)) continue;
+      const absoluteIndex = syllableOffset + i;
+      if (covered.has(i) || priorityCovered.has(absoluteIndex)) continue;
 
       // Check 3-letter combos
       if (i < sylLower.length - 2) {
         const tri = sylLower.substring(i, i + 3);
-        if (tri === "igh" || VOWEL_COMBOS.has(tri)) {
+        const triIsAvailable = [0, 1, 2].every(
+          (offset) =>
+            !covered.has(i + offset) &&
+            !priorityCovered.has(absoluteIndex + offset),
+        );
+        if (triIsAvailable && (tri === "igh" || VOWEL_COMBOS.has(tri))) {
           for (let j = i; j < i + 3; j++) covered.add(j);
           sylBlocks.push({ letters: tri, isCombo: true, comboType: "vowel_combo", start: i });
           continue;
@@ -657,14 +783,20 @@ export function generateLetterBlocks(word: string): Array<{
 
       // Check 2-letter combos
       const bi = sylLower.substring(i, i + 2);
-      if (VOWEL_COMBOS.has(bi) || R_CONTROLLED.has(bi)) {
+      const biIsAvailable =
+        !covered.has(i + 1) &&
+        !priorityCovered.has(absoluteIndex + 1);
+      if (
+        biIsAvailable &&
+        (VOWEL_COMBOS.has(bi) || R_CONTROLLED.has(bi))
+      ) {
         for (let j = i; j < i + 2; j++) covered.add(j);
         sylBlocks.push({ letters: bi, isCombo: true, comboType: "vowel_combo", start: i });
         continue;
       }
 
       // Check consonant blends
-      if (CONSONANT_BLENDS.has(bi)) {
+      if (biIsAvailable && CONSONANT_BLENDS.has(bi)) {
         for (let j = i; j < i + 2; j++) covered.add(j);
         sylBlocks.push({ letters: bi, isCombo: true, comboType: "consonant_blend", start: i });
         continue;
@@ -679,7 +811,9 @@ export function generateLetterBlocks(word: string): Array<{
       if (
         sylLower[lastIdx] === "e" &&
         isConsonant(sylLower[penult]) &&
-        !covered.has(penult) // consonant must not already be part of a blend (e.g. ff in "raffe")
+        !covered.has(penult) &&
+        !priorityCovered.has(syllableOffset + penult) &&
+        !priorityCovered.has(syllableOffset + lastIdx)
       ) {
         // Check that there is a vowel before the consonant
         let hasVowelBefore = false;
@@ -716,7 +850,10 @@ export function generateLetterBlocks(word: string): Array<{
 
     // Fill in single letters for uncovered positions
     for (let i = 0; i < sylLower.length; i++) {
-      if (!covered.has(i)) {
+      if (
+        !covered.has(i) &&
+        !priorityCovered.has(syllableOffset + i)
+      ) {
         sylBlocks.push({ letters: sylLower[i], isCombo: false, start: i });
       }
     }
@@ -733,6 +870,7 @@ export function generateLetterBlocks(word: string): Array<{
         comboType: b.comboType,
       });
     }
+    syllableOffset += sylLower.length;
   }
 
   return blocks;

@@ -69,6 +69,7 @@ internal fun TodayStudyMode(
     var index by rememberSaveable { mutableIntStateOf(0) }
     var selectedTag by remember { mutableStateOf<Tag?>(null) }
     val current = words.getOrNull(index)
+    val pageScrollState = rememberScrollState()
 
     if (current == null) {
         Column(
@@ -88,6 +89,7 @@ internal fun TodayStudyMode(
     }
 
     LaunchedEffect(current.id) {
+        pageScrollState.scrollTo(0)
         autoSpeakPracticeWordTwice(current.word, speak)
     }
 
@@ -99,7 +101,7 @@ internal fun TodayStudyMode(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .verticalScroll(rememberScrollState())
+            .verticalScroll(pageScrollState)
             .padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 28.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {

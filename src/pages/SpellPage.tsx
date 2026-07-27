@@ -5,7 +5,6 @@ import AppHeader from "@/components/AppHeader";
 import MobileNav from "@/components/MobileNav";
 import TagDetailDialog from "@/components/TagDetailDialog";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -29,10 +28,7 @@ import {
   Clock,
   CheckCircle2,
   XCircle,
-  Target,
   Lightbulb,
-  GraduationCap,
-  Sparkles,
   Delete,
   CalendarCheck,
   ListChecks,
@@ -238,7 +234,7 @@ export default function SpellPage() {
 // ============================================================
 function SpellHome({ onStart }: { onStart: (mode: SpellView) => void }) {
   const { user, isLoading: authLoading } = useAuth({ redirectOnUnauthenticated: true });
-  const { data: reviewQueue, isLoading } = trpc.spelling.getReviewQueue.useQuery();
+  const { data: reviewQueue } = trpc.spelling.getReviewQueue.useQuery();
   const { data: learningQueue } = trpc.spelling.getLearningQueue.useQuery();
   const { data: errorWords } = trpc.spelling.getErrorWords.useQuery();
   const utils = trpc.useUtils();
@@ -278,7 +274,6 @@ function SpellHome({ onStart }: { onStart: (mode: SpellView) => void }) {
   }
   if (!user) return null;
 
-  const dueCount = reviewQueue?.length ?? 0;
   const manualDue = reviewQueue?.filter((w) => w.source === "manual" && w.totalAttempts === 0) ?? [];
   const allDue = reviewQueue ?? [];
 
@@ -733,6 +728,10 @@ function TodayStudyMode({ words, onBack }: { words: any[]; onBack: () => void })
   const [selectedTagId, setSelectedTagId] = useState<number | null>(null);
   const currentWord = words[index];
   useAutoSpeakTwice(currentWord);
+
+  useEffect(() => {
+    window.scrollTo({ top: 0, left: 0, behavior: "smooth" });
+  }, [currentWord.id]);
 
   const phonics = currentWord.phonics ?? analyzeWordForStudy(currentWord.word);
 

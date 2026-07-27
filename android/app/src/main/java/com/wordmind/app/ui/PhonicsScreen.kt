@@ -70,6 +70,8 @@ internal fun PhonicsScreen(
     tags: List<Tag>,
     words: List<Word>,
     speak: (String) -> Unit,
+    canManage: Boolean,
+    onEditWord: (Word) -> Unit,
     onSecondaryPageChanged: (Boolean) -> Unit,
 ) {
     var view by rememberSaveable { mutableStateOf("home") }
@@ -104,6 +106,14 @@ internal fun PhonicsScreen(
             tag = tag,
             words = words.filter { word -> word.tags.any { it.id == tag.id } },
             speak = speak,
+            onEditWord = if (canManage) {
+                { word ->
+                    selectedTag = null
+                    onEditWord(word)
+                }
+            } else {
+                null
+            },
             onDismiss = { selectedTag = null },
         )
     }

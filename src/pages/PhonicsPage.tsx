@@ -94,6 +94,7 @@ export default function PhonicsPage() {
         tagId={selectedTagId}
         open={selectedTagId !== null}
         onClose={() => setSelectedTagId(null)}
+        canEditWords={user.role === "admin"}
       />
 
       <PhonemeDialog

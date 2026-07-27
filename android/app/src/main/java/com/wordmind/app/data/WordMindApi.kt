@@ -101,13 +101,12 @@ class WordMindApi(context: Context) {
             .put("definition", draft.definition.trim())
             .put("example", draft.example.trim())
             .put("notes", draft.notes.trim())
+            .put("groupIds", JSONArray(draft.groupIds))
             .put("tagIds", JSONArray(draft.tagIds))
         if (id == null) {
-            draft.groupId?.let { input.put("groupId", it) }
             mutate("word.create", input)
         } else {
             input.put("id", id)
-            input.put("groupId", draft.groupId ?: JSONObject.NULL)
             mutate("word.update", input)
         }
     }
