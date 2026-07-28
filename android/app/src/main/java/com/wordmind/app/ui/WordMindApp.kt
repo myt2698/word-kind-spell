@@ -597,6 +597,7 @@ private fun MainScreen(
                     Destination.Practice -> PracticeScreen(
                         api = api,
                         catalogWords = words,
+                        textbooks = textbooks,
                         speak = speak,
                         onMessage = onMessage,
                         onLearningChanged = onRefresh,

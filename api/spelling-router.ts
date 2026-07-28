@@ -19,6 +19,8 @@ import {
   spellingSessions,
   todayWordSelections,
   wordGroupLinks,
+  wordGroups,
+  textbooks,
   wordTags,
   tags,
 } from "@db/schema";
@@ -277,8 +279,41 @@ export const spellingRouter = createRouter({
       tagsByWord.set(tag.wordId, current);
     }
 
+    const groupRows = await db
+      .select({
+        wordId: wordGroupLinks.wordId,
+        groupId: wordGroups.id,
+        groupName: wordGroups.name,
+        textbookId: textbooks.id,
+        textbookName: textbooks.name,
+      })
+      .from(wordGroupLinks)
+      .innerJoin(wordGroups, eq(wordGroupLinks.groupId, wordGroups.id))
+      .innerJoin(textbooks, eq(wordGroups.textbookId, textbooks.id))
+      .where(inArray(wordGroupLinks.wordId, wordIds));
+    const groupsByWord = new Map<
+      number,
+      Array<{
+        groupId: number;
+        groupName: string;
+        textbookId: number;
+        textbookName: string;
+      }>
+    >();
+    for (const group of groupRows) {
+      const current = groupsByWord.get(group.wordId) ?? [];
+      current.push({
+        groupId: group.groupId,
+        groupName: group.groupName,
+        textbookId: group.textbookId,
+        textbookName: group.textbookName,
+      });
+      groupsByWord.set(group.wordId, current);
+    }
+
     return activeWords.map((w) => {
       const sp = spMap.get(w.id);
+      const memberships = groupsByWord.get(w.id) ?? [];
       return {
         id: w.id,
         word: w.word,
@@ -295,6 +330,8 @@ export const spellingRouter = createRouter({
         totalCorrect: sp?.totalCorrect ?? 0,
         source: sp?.source || "auto",
         tags: tagsByWord.get(w.id) ?? [],
+        groups: memberships,
+        groupIds: memberships.map((group) => group.groupId),
         phonics: analyzeWordForStudy(w.word),
       };
     });

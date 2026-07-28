@@ -35,6 +35,7 @@ import {
   BookOpen,
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
   Tag,
   Layers3,
   ShieldCheck,
@@ -690,10 +691,38 @@ function WordSelectionDialog({
   onClose: () => void;
   words: any[];
 }) {
-  const { selectedIds, toggleWord, selectAll, clearAll, isSelected } = useTodayWords();
+  const { selectedIds, toggleWord, selectAll, isSelected } = useTodayWords();
+  const { data: textbooks = [] } = trpc.textbook.list.useQuery();
+  const [selectedTextbookId, setSelectedTextbookId] = useState<number | null>(null);
+  const [selectedUnitId, setSelectedUnitId] = useState<number | null>(null);
 
-  const allWordIds = words.map((w) => w.id);
-  const allSelected = words.length > 0 && allWordIds.every((id) => isSelected(id));
+  const units =
+    textbooks.find((textbook) => textbook.id === selectedTextbookId)?.groups ?? [];
+  const filteredWords = words.filter((word) => {
+    const memberships = word.groups ?? [];
+    const matchesTextbook =
+      selectedTextbookId === null ||
+      word.textbookId === selectedTextbookId ||
+      memberships.some((group: any) => group.textbookId === selectedTextbookId);
+    const matchesUnit =
+      selectedUnitId === null ||
+      word.groupId === selectedUnitId ||
+      memberships.some((group: any) => group.groupId === selectedUnitId);
+    return matchesTextbook && matchesUnit;
+  });
+  const filteredWordIds = filteredWords.map((word) => word.id);
+  const filteredWordIdSet = new Set(filteredWordIds);
+  const allSelected =
+    filteredWordIds.length > 0 && filteredWordIds.every((id) => isSelected(id));
+  const hasFilters = selectedTextbookId !== null || selectedUnitId !== null;
+
+  const toggleSelectAll = () => {
+    if (allSelected) {
+      selectAll(selectedIds.filter((id) => !filteredWordIdSet.has(id)));
+      return;
+    }
+    selectAll([...new Set([...selectedIds, ...filteredWordIds])]);
+  };
 
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
@@ -707,24 +736,75 @@ function WordSelectionDialog({
           </DialogTitle>
         </DialogHeader>
 
-        {/* Actions */}
-        <div className="px-5 py-3 flex items-center justify-between shrink-0 border-b border-gray-50">
-          <button
-            onClick={() => allSelected ? clearAll() : selectAll(allWordIds)}
-            className="text-xs text-indigo-500 hover:text-indigo-600 font-medium"
-          >
-            {allSelected ? "取消全选" : "全选"}
-          </button>
-          <span className="text-xs text-gray-400">{words.length} 个单词</span>
+        {/* Textbook and unit filters */}
+        <div className="px-5 py-3 shrink-0 border-b border-gray-100 space-y-2.5">
+          <div className="grid grid-cols-2 gap-2">
+            <label className="relative min-w-0">
+              <BookOpen className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-indigo-400 pointer-events-none" />
+              <select
+                aria-label="筛选课本"
+                value={selectedTextbookId ?? ""}
+                onChange={(event) => {
+                  const value = event.target.value;
+                  setSelectedTextbookId(value ? Number(value) : null);
+                  setSelectedUnitId(null);
+                }}
+                className="w-full h-9 appearance-none rounded-lg border border-gray-200 bg-white pl-8 pr-7 text-xs text-gray-700 outline-none focus:border-indigo-300 focus:ring-2 focus:ring-indigo-100"
+              >
+                <option value="">全部课本</option>
+                {textbooks.map((textbook) => (
+                  <option key={textbook.id} value={textbook.id}>
+                    {textbook.name}
+                  </option>
+                ))}
+              </select>
+              <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 pointer-events-none" />
+            </label>
+            <label className="relative min-w-0">
+              <Layers3 className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-emerald-500 pointer-events-none" />
+              <select
+                aria-label="筛选单元"
+                value={selectedUnitId ?? ""}
+                disabled={selectedTextbookId === null}
+                onChange={(event) => {
+                  const value = event.target.value;
+                  setSelectedUnitId(value ? Number(value) : null);
+                }}
+                className="w-full h-9 appearance-none rounded-lg border border-gray-200 bg-white pl-8 pr-7 text-xs text-gray-700 outline-none focus:border-indigo-300 focus:ring-2 focus:ring-indigo-100 disabled:bg-gray-50 disabled:text-gray-400"
+              >
+                <option value="">全部单元</option>
+                {units.map((unit) => (
+                  <option key={unit.id} value={unit.id}>
+                    {unit.name}
+                  </option>
+                ))}
+              </select>
+              <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 pointer-events-none" />
+            </label>
+          </div>
+          <div className="flex items-center justify-between">
+            <button
+              onClick={toggleSelectAll}
+              disabled={filteredWordIds.length === 0}
+              className="text-xs text-indigo-500 hover:text-indigo-600 font-medium disabled:text-gray-300"
+            >
+              {allSelected ? "取消当前全选" : "全选当前结果"}
+            </button>
+            <span className="text-xs text-gray-400">
+              {hasFilters ? `${filteredWords.length} / ${words.length}` : words.length} 个单词
+            </span>
+          </div>
         </div>
 
         {/* Word List - flex-1 fills remaining space, overflow-y-auto for scrolling */}
         <div className="flex-1 overflow-y-auto px-5 py-3 min-h-0">
           <div className="space-y-1.5">
-            {words.length === 0 ? (
-              <div className="text-center py-8 text-gray-400 text-sm">暂无学习中的单词</div>
+            {filteredWords.length === 0 ? (
+              <div className="text-center py-8 text-gray-400 text-sm">
+                {hasFilters ? "该课本或单元下暂无学习中的单词" : "暂无学习中的单词"}
+              </div>
             ) : (
-              words.map((w) => (
+              filteredWords.map((w) => (
                 <label
                   key={w.id}
                   className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-all ${

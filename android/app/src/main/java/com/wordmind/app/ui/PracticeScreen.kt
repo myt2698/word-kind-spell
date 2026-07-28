@@ -26,6 +26,7 @@ import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.CheckBox
 import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Extension
 import androidx.compose.material.icons.filled.Headphones
 import androidx.compose.material.icons.filled.Keyboard
@@ -38,6 +39,8 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.OutlinedButton
@@ -64,6 +67,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import com.wordmind.app.data.PracticeWord
 import com.wordmind.app.data.SpellingStats
+import com.wordmind.app.data.Textbook
 import com.wordmind.app.data.Word
 import com.wordmind.app.data.WordMindApi
 import kotlinx.coroutines.async
@@ -102,6 +106,7 @@ private enum class PracticeSourceMode {
 internal fun PracticeScreen(
     api: WordMindApi,
     catalogWords: List<Word>,
+    textbooks: List<Textbook>,
     speak: (String) -> Unit,
     onMessage: (String) -> Unit,
     onLearningChanged: () -> Unit,
@@ -285,6 +290,8 @@ internal fun PracticeScreen(
     if (selectionOpen) {
         PracticeWordSelectionDialog(
             words = learningWords,
+            catalogWords = catalogWords,
+            textbooks = textbooks,
             initialSelected = selectedIds,
             saving = savingSelection,
             onDismiss = { selectionOpen = false },
@@ -816,14 +823,37 @@ private fun PracticeModeCard(
 @Composable
 private fun PracticeWordSelectionDialog(
     words: List<PracticeWord>,
+    catalogWords: List<Word>,
+    textbooks: List<Textbook>,
     initialSelected: Set<Int>,
     saving: Boolean,
     onDismiss: () -> Unit,
     onConfirm: (Set<Int>) -> Unit,
 ) {
-    var selected by remember { mutableStateOf(initialSelected) }
-    val allIds = remember(words) { words.mapTo(mutableSetOf()) { it.id } }
-    val allSelected = words.isNotEmpty() && selected.containsAll(allIds)
+    var selected by remember(initialSelected) { mutableStateOf(initialSelected) }
+    var selectedTextbookId by remember { mutableStateOf<Int?>(null) }
+    var selectedUnitId by remember { mutableStateOf<Int?>(null) }
+    val units = remember(textbooks, selectedTextbookId) {
+        textbooks.firstOrNull { it.id == selectedTextbookId }?.groups.orEmpty()
+    }
+    val catalogById = remember(catalogWords) { catalogWords.associateBy { it.id } }
+    val filteredWords = remember(words, catalogById, selectedTextbookId, selectedUnitId) {
+        words.filter { practiceWord ->
+            val catalogWord = catalogById[practiceWord.id]
+            val matchesTextbook = selectedTextbookId == null ||
+                catalogWord?.textbookId == selectedTextbookId ||
+                catalogWord?.groups?.any { it.textbookId == selectedTextbookId } == true
+            val matchesUnit = selectedUnitId == null ||
+                catalogWord?.groupId == selectedUnitId ||
+                catalogWord?.groups?.any { it.groupId == selectedUnitId } == true
+            matchesTextbook && matchesUnit
+        }
+    }
+    val filteredIds = remember(filteredWords) {
+        filteredWords.mapTo(mutableSetOf()) { it.id }
+    }
+    val allSelected = filteredWords.isNotEmpty() && selected.containsAll(filteredIds)
+    val hasFilters = selectedTextbookId != null || selectedUnitId != null
 
     Dialog(onDismissRequest = onDismiss) {
         Card(
@@ -859,28 +889,78 @@ private fun PracticeWordSelectionDialog(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
+                        .padding(horizontal = 14.dp, vertical = 10.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    PracticeFilterDropdown(
+                        allLabel = "全部课本",
+                        selectedId = selectedTextbookId,
+                        options = textbooks.map { it.id to it.name },
+                        modifier = Modifier.weight(1f),
+                        onSelect = {
+                            selectedTextbookId = it
+                            selectedUnitId = null
+                        },
+                    )
+                    PracticeFilterDropdown(
+                        allLabel = "全部单元",
+                        selectedId = selectedUnitId,
+                        options = units.map { it.id to it.name },
+                        modifier = Modifier.weight(1f),
+                        enabled = selectedTextbookId != null,
+                        onSelect = { selectedUnitId = it },
+                    )
+                }
+                HorizontalDivider()
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
                         .padding(horizontal = 14.dp, vertical = 4.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     TextButton(
                         onClick = {
-                            selected = if (allSelected) emptySet() else allIds
+                            selected = if (allSelected) {
+                                selected - filteredIds
+                            } else {
+                                selected + filteredIds
+                            }
                         },
+                        enabled = filteredIds.isNotEmpty(),
                     ) {
-                        Text(if (allSelected) "取消全选" else "全选", fontSize = 12.sp)
+                        Text(
+                            if (allSelected) "取消当前全选" else "全选当前结果",
+                            fontSize = 12.sp,
+                        )
                     }
                     Spacer(Modifier.weight(1f))
-                    Text("${words.size} 个单词", color = PracticeMuted, fontSize = 11.sp)
+                    Text(
+                        if (hasFilters) {
+                            "${filteredWords.size} / ${words.size} 个单词"
+                        } else {
+                            "${words.size} 个单词"
+                        },
+                        color = PracticeMuted,
+                        fontSize = 11.sp,
+                    )
                 }
                 HorizontalDivider()
-                if (words.isEmpty()) {
+                if (filteredWords.isEmpty()) {
                     Box(
                         modifier = Modifier
                             .weight(1f)
                             .fillMaxWidth(),
                         contentAlignment = Alignment.Center,
                     ) {
-                        Text("暂无学习中的单词", color = PracticeMuted, fontSize = 13.sp)
+                        Text(
+                            if (hasFilters) {
+                                "该课本或单元下暂无学习中的单词"
+                            } else {
+                                "暂无学习中的单词"
+                            },
+                            color = PracticeMuted,
+                            fontSize = 13.sp,
+                        )
                     }
                 } else {
                     LazyColumn(
@@ -888,7 +968,7 @@ private fun PracticeWordSelectionDialog(
                         contentPadding = PaddingValues(12.dp),
                         verticalArrangement = Arrangement.spacedBy(7.dp),
                     ) {
-                        items(words, key = { it.id }) { word ->
+                        items(filteredWords, key = { it.id }) { word ->
                             val checked = word.id in selected
                             Card(
                                 onClick = {
@@ -987,6 +1067,71 @@ private fun PracticeWordSelectionDialog(
                         }
                     }
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun PracticeFilterDropdown(
+    allLabel: String,
+    selectedId: Int?,
+    options: List<Pair<Int, String>>,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    onSelect: (Int?) -> Unit,
+) {
+    var expanded by remember { mutableStateOf(false) }
+    val selectedLabel = options.firstOrNull { it.first == selectedId }?.second ?: allLabel
+
+    Box(modifier) {
+        OutlinedButton(
+            onClick = { expanded = true },
+            enabled = enabled,
+            modifier = Modifier.fillMaxWidth(),
+            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp),
+            shape = RoundedCornerShape(10.dp),
+        ) {
+            Text(
+                selectedLabel,
+                modifier = Modifier.weight(1f),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                fontSize = 12.sp,
+                textAlign = TextAlign.Start,
+            )
+            Icon(
+                Icons.Default.ArrowDropDown,
+                contentDescription = null,
+                modifier = Modifier.size(18.dp),
+            )
+        }
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false },
+        ) {
+            DropdownMenuItem(
+                text = { Text(allLabel, fontSize = 13.sp) },
+                onClick = {
+                    expanded = false
+                    onSelect(null)
+                },
+            )
+            options.forEach { (id, label) ->
+                DropdownMenuItem(
+                    text = {
+                        Text(
+                            label,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            fontSize = 13.sp,
+                        )
+                    },
+                    onClick = {
+                        expanded = false
+                        onSelect(id)
+                    },
+                )
             }
         }
     }
