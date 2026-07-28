@@ -19,8 +19,8 @@ const requiredTags = {
     "ear 在 hear、near、clear 等词中，英式英语常发双元音 /ɪə/；美式英语通常读作 /ɪr/。",
   "ear /ɜː/":
     "ear 在 learn、earth、early 等词中，英式英语通常发 /ɜː/；美式英语通常读作 /ɝː/。",
-  "our/ə/":
-    "our 在 colour、favour、favourite 等词的非重读音节中，英式英语常弱读为 /ə/；美式英语通常带卷舌音。",
+  "-our /ə/（colour）":
+    "colour、colourful、favourite 中的非重读 our 在英式英语里通常弱读为 /ə/；美式英语通常带卷舌音。",
   "nk /ŋk/":
     "nk 通常对应两个连续辅音 /ŋk/：先用鼻腔发 /ŋ/，再发 /k/，如 bank、pink、drink。",
   "eigh /eɪ/":
@@ -31,15 +31,18 @@ const requiredTags = {
     "ere、eir 在 where、there、their 中，英式英语通常发 /eə/，美式英语通常带卷舌音。",
   "wh /w/":
     "wh 在 which、why、where 等词首通常发 /w/；who、whose 是发 /h/ 的常见特例。",
+  "th /θ/":
+    "th 在 both、mouth、birthday、thanks、thing、three、throw 等词中通常发清辅音 /θ/，发音时舌尖轻触上下齿。",
 };
 
 const additions = {
   clear: ["ear /ɪə/"],
-  colourful: ["our/ə/"],
+  colourful: ["-our /ə/（colour）"],
   drink: ["nk /ŋk/"],
   eight: ["eigh /eɪ/"],
   learn: ["ear /ɜː/"],
   monkey: ["nk /ŋk/"],
+  mouth: ["th /θ/"],
   neighbour: ["eigh /eɪ/"],
   pink: ["nk /ŋk/"],
   straw: ["str"],
@@ -50,6 +53,13 @@ const additions = {
 
 const removals = {
   clear: ["ea/iː/"],
+  colourful: [
+    "or 在非重读音节/ər/",
+    "or/ɔː/",
+    "our /aʊə/",
+    "our/ə/",
+  ],
+  mouth: ["th", "th /ð/"],
   why: ["wh /h/"],
 };
 

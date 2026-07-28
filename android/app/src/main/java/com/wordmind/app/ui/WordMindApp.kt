@@ -953,23 +953,34 @@ private fun WordsScreen(
                 }
             }
             item {
-                Row(
+                Column(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically,
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    Text(
-                        "共 ${filtered.size} 个单词",
-                        modifier = Modifier.weight(1f),
-                        color = Muted,
-                        fontSize = 13.sp,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
                     Row(
+                        modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(6.dp),
                     ) {
+                        Text(
+                            "共 ${filtered.size} 个单词",
+                            modifier = Modifier.weight(1f),
+                            color = Muted,
+                            fontSize = 13.sp,
+                            maxLines = 1,
+                        )
+                        if (hasFilters) {
+                            TextButton(
+                                onClick = {
+                                    textbookId = null
+                                    unitId = null
+                                    leaveSelectionMode()
+                                },
+                                contentPadding = PaddingValues(horizontal = 7.dp, vertical = 0.dp),
+                            ) {
+                                Text("清除筛选", fontSize = 12.sp)
+                            }
+                        }
                         if (selectionMode) {
                             TextButton(
                                 onClick = { leaveSelectionMode() },
@@ -978,39 +989,48 @@ private fun WordsScreen(
                                 Text("完成", fontSize = 12.sp)
                             }
                         } else {
-                            if (hasFilters) {
-                                TextButton(
-                                    onClick = {
-                                        textbookId = null
-                                        unitId = null
-                                        leaveSelectionMode()
-                                    },
-                                    contentPadding = PaddingValues(horizontal = 7.dp, vertical = 0.dp),
-                                ) {
-                                    Text("清除", fontSize = 12.sp)
-                                }
-                            }
                             WordSortDropdown(
                                 selected = sort,
                                 onSelect = { sort = it },
                             )
+                        }
+                    }
+                    if (!selectionMode) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        ) {
                             Surface(
+                                onClick = {
+                                    leaveSelectionMode()
+                                    searchOpen = true
+                                },
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(38.dp),
                                 shape = RoundedCornerShape(10.dp),
                                 color = Color.White,
                                 border = BorderStroke(1.dp, Border),
                             ) {
-                                IconButton(
-                                    onClick = {
-                                        leaveSelectionMode()
-                                        searchOpen = true
-                                    },
-                                    modifier = Modifier.size(38.dp),
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .padding(horizontal = 12.dp),
+                                    horizontalArrangement = Arrangement.Center,
+                                    verticalAlignment = Alignment.CenterVertically,
                                 ) {
                                     Icon(
                                         Icons.Default.Search,
                                         contentDescription = "搜索单词",
-                                        modifier = Modifier.size(19.dp),
+                                        modifier = Modifier.size(18.dp),
                                         tint = Color(0xFF475569),
+                                    )
+                                    Spacer(Modifier.width(6.dp))
+                                    Text(
+                                        "搜索单词",
+                                        color = Color(0xFF475569),
+                                        fontSize = 12.sp,
                                     )
                                 }
                             }
@@ -1132,6 +1152,8 @@ private fun WordsScreen(
                         onEdit = { onEditWord(word) },
                         onDelete = { onDeleteWord(word) },
                         onTagClick = { detailTagId = it.id },
+                        preferredGroupId = unitId,
+                        preferredTextbookId = textbookId,
                         selectionMode = selectionMode,
                         selected = word.id in selectedWordIds,
                         selectionEnabled = word.id in selectableWordIds,
@@ -1370,6 +1392,8 @@ private fun WordCard(
     onEdit: () -> Unit,
     onDelete: () -> Unit,
     onTagClick: (Tag) -> Unit,
+    preferredGroupId: Int? = null,
+    preferredTextbookId: Int? = null,
     selectionMode: Boolean = false,
     selected: Boolean = false,
     selectionEnabled: Boolean = true,
@@ -1377,6 +1401,21 @@ private fun WordCard(
 ) {
     var expanded by rememberSaveable(word.id) { mutableStateOf(false) }
     val isLearning = word.learningStatus != "idle"
+    val preferredMembership = remember(
+        word.groups,
+        preferredGroupId,
+        preferredTextbookId,
+    ) {
+        word.groups.firstOrNull { membership ->
+            preferredGroupId != null && membership.groupId == preferredGroupId
+        } ?: word.groups.firstOrNull { membership ->
+            preferredGroupId == null &&
+                preferredTextbookId != null &&
+                membership.textbookId == preferredTextbookId
+        }
+    }
+    val displayTextbookName = preferredMembership?.textbookName ?: word.textbookName
+    val displayGroupName = preferredMembership?.groupName ?: word.groupName
 
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -1490,8 +1529,8 @@ private fun WordCard(
                 WordMetadataBadge(
                     icon = Icons.Default.Folder,
                     text = buildString {
-                        append(word.textbookName)
-                        word.groupName?.let { append(" > ").append(it) }
+                        append(displayTextbookName)
+                        displayGroupName?.let { append(" > ").append(it) }
                     },
                 )
                 word.tags.forEach { tag ->

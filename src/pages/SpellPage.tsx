@@ -37,6 +37,8 @@ import {
   ChevronRight,
   Tag,
   Layers3,
+  ShieldCheck,
+  Flame,
 } from "lucide-react";
 import {
   generateLetterBlocks,
@@ -189,6 +191,7 @@ function TodayWordsProvider({ children, allWords }: { children: React.ReactNode;
 // Types
 // ============================================================
 type SpellView = "home" | "study" | "blocks" | "fillblank" | "flash" | "dictation";
+type PracticeSourceMode = "challenge" | "revenge";
 
 // ============================================================
 // Main Component
@@ -197,6 +200,8 @@ export default function SpellPage() {
   const [searchParams] = useSearchParams();
   const modeParam = searchParams.get("mode");
   const [view, setView] = useState<SpellView>((modeParam as SpellView) || "home");
+  const [practiceSource, setPracticeSource] =
+    useState<PracticeSourceMode>("challenge");
 
   // Fetch all active learning words for the provider
   const { data: learningQueue, isLoading: learningLoading } = trpc.spelling.getLearningQueue.useQuery();
@@ -219,10 +224,27 @@ export default function SpellPage() {
     <div className="min-h-screen bg-gray-50/50">
       <AppHeader />
       <TodayWordsProvider allWords={allWords}>
-        {view === "home" && <SpellHome onStart={(v) => setView(v)} />}
+        {view === "home" && (
+          <SpellHome
+            practiceSource={practiceSource}
+            onPracticeSourceChange={setPracticeSource}
+            onStart={(v) => setView(v)}
+          />
+        )}
         {view === "study" && <TodayStudyWrapper onBack={() => setView("home")} />}
-        {view !== "home" && view !== "study" && view !== "dictation" && <PracticeModeWrapper mode={view} onBack={() => setView("home")} />}
-        {view === "dictation" && <DictationWrapper onBack={() => setView("home")} />}
+        {view !== "home" && view !== "study" && view !== "dictation" && (
+          <PracticeModeWrapper
+            mode={view}
+            source={practiceSource}
+            onBack={() => setView("home")}
+          />
+        )}
+        {view === "dictation" && (
+          <DictationWrapper
+            source={practiceSource}
+            onBack={() => setView("home")}
+          />
+        )}
       </TodayWordsProvider>
       {view === "home" && <MobileNav activeTab="spell" />}
     </div>
@@ -232,7 +254,15 @@ export default function SpellPage() {
 // ============================================================
 // Spell Home - Review Queue + Mode Selection
 // ============================================================
-function SpellHome({ onStart }: { onStart: (mode: SpellView) => void }) {
+function SpellHome({
+  practiceSource,
+  onPracticeSourceChange,
+  onStart,
+}: {
+  practiceSource: PracticeSourceMode;
+  onPracticeSourceChange: (source: PracticeSourceMode) => void;
+  onStart: (mode: SpellView) => void;
+}) {
   const { user, isLoading: authLoading } = useAuth({ redirectOnUnauthenticated: true });
   const { data: reviewQueue } = trpc.spelling.getReviewQueue.useQuery();
   const { data: learningQueue } = trpc.spelling.getLearningQueue.useQuery();
@@ -276,10 +306,29 @@ function SpellHome({ onStart }: { onStart: (mode: SpellView) => void }) {
 
   const manualDue = reviewQueue?.filter((w) => w.source === "manual" && w.totalAttempts === 0) ?? [];
   const allDue = reviewQueue ?? [];
+  const practiceWordCount =
+    practiceSource === "challenge"
+      ? selectedIds.length
+      : errorWords?.length ?? 0;
+  const canPractice = practiceWordCount > 0;
+  const emptyPracticeText =
+    practiceSource === "challenge"
+      ? "请先选择今日练习单词"
+      : "错题本里还没有需要复习的单词";
 
   const openDialog = (type: string) => {
     setDialogType(type);
     setDialogOpen(true);
+  };
+
+  const startPractice = (mode: SpellView) => {
+    if (canPractice) {
+      onStart(mode);
+    } else if (practiceSource === "challenge") {
+      setSelectDialogOpen(true);
+    } else {
+      openDialog("errors");
+    }
   };
 
   // Data for dialog
@@ -518,11 +567,51 @@ function SpellHome({ onStart }: { onStart: (mode: SpellView) => void }) {
           )}
       </div>
 
-      {/* Mode Selection */}
-      <h2 className="text-sm font-semibold text-gray-700 mb-3">选择练习模式</h2>
+      {/* Practice source */}
+      <div className="flex items-center justify-between gap-3 mb-3">
+        <h2 className="text-sm font-semibold text-gray-700">选择练习模式</h2>
+        <span className="text-xs text-gray-400">{practiceWordCount} 个单词</span>
+      </div>
+      <div className="grid grid-cols-2 gap-2 mb-4">
+        <button
+          type="button"
+          onClick={() => onPracticeSourceChange("challenge")}
+          className={`rounded-xl border p-3 text-left transition-all ${
+            practiceSource === "challenge"
+              ? "border-indigo-300 bg-indigo-50 shadow-sm"
+              : "border-gray-100 bg-white hover:border-indigo-200"
+          }`}
+        >
+          <div className="flex items-center gap-2 mb-1">
+            <ShieldCheck className="w-4 h-4 text-indigo-500" />
+            <span className="text-sm font-bold text-gray-900">闯关模式</span>
+          </div>
+          <p className="text-[11px] leading-relaxed text-gray-500">
+            准备好接受今天的挑战了吗？
+          </p>
+        </button>
+        <button
+          type="button"
+          onClick={() => onPracticeSourceChange("revenge")}
+          className={`rounded-xl border p-3 text-left transition-all ${
+            practiceSource === "revenge"
+              ? "border-rose-300 bg-rose-50 shadow-sm"
+              : "border-gray-100 bg-white hover:border-rose-200"
+          }`}
+        >
+          <div className="flex items-center gap-2 mb-1">
+            <Flame className="w-4 h-4 text-rose-500" />
+            <span className="text-sm font-bold text-gray-900">复仇之战</span>
+          </div>
+          <p className="text-[11px] leading-relaxed text-gray-500">
+            把曾经难倒你的单词通通拿下！
+          </p>
+        </button>
+      </div>
+
       <div className="space-y-3">
         <button
-          onClick={() => selectedIds.length > 0 ? onStart("blocks") : setSelectDialogOpen(true)}
+          onClick={() => startPractice("blocks")}
           className="w-full flex items-center gap-4 p-4 bg-white rounded-xl border border-gray-100 hover:border-indigo-200 hover:shadow-md transition-all text-left"
         >
           <div className="w-12 h-12 rounded-xl bg-indigo-50 flex items-center justify-center shrink-0">
@@ -531,14 +620,14 @@ function SpellHome({ onStart }: { onStart: (mode: SpellView) => void }) {
           <div className="flex-1">
             <h3 className="text-base font-semibold text-gray-900">积木拼拼乐</h3>
             <p className="text-xs text-gray-500">
-              {selectedIds.length > 0 ? "点击字母积木拼出正确单词" : "请先选择今日练习单词"}
+              {canPractice ? "点击字母积木拼出正确单词" : emptyPracticeText}
             </p>
           </div>
-          <Play className={`w-5 h-5 ${selectedIds.length > 0 ? "text-indigo-400" : "text-gray-300"}`} />
+          <Play className={`w-5 h-5 ${canPractice ? "text-indigo-400" : "text-gray-300"}`} />
         </button>
 
         <button
-          onClick={() => selectedIds.length > 0 ? onStart("fillblank") : setSelectDialogOpen(true)}
+          onClick={() => startPractice("fillblank")}
           className="w-full flex items-center gap-4 p-4 bg-white rounded-xl border border-gray-100 hover:border-emerald-200 hover:shadow-md transition-all text-left"
         >
           <div className="w-12 h-12 rounded-xl bg-emerald-50 flex items-center justify-center shrink-0">
@@ -547,14 +636,14 @@ function SpellHome({ onStart }: { onStart: (mode: SpellView) => void }) {
           <div className="flex-1">
             <h3 className="text-base font-semibold text-gray-900">单词消消乐</h3>
             <p className="text-xs text-gray-500">
-              {selectedIds.length > 0 ? "根据提示填写缺失的字母" : "请先选择今日练习单词"}
+              {canPractice ? "根据提示填写缺失的字母" : emptyPracticeText}
             </p>
           </div>
-          <Play className={`w-5 h-5 ${selectedIds.length > 0 ? "text-emerald-400" : "text-gray-300"}`} />
+          <Play className={`w-5 h-5 ${canPractice ? "text-emerald-400" : "text-gray-300"}`} />
         </button>
 
         <button
-          onClick={() => selectedIds.length > 0 ? onStart("flash") : setSelectDialogOpen(true)}
+          onClick={() => startPractice("flash")}
           className="w-full flex items-center gap-4 p-4 bg-white rounded-xl border border-gray-100 hover:border-amber-200 hover:shadow-md transition-all text-left"
         >
           <div className="w-12 h-12 rounded-xl bg-amber-50 flex items-center justify-center shrink-0">
@@ -563,14 +652,14 @@ function SpellHome({ onStart }: { onStart: (mode: SpellView) => void }) {
           <div className="flex-1">
             <h3 className="text-base font-semibold text-gray-900">极速闪电战</h3>
             <p className="text-xs text-gray-500">
-              {selectedIds.length > 0 ? "限时快速拼写挑战" : "请先选择今日练习单词"}
+              {canPractice ? "限时快速拼写挑战" : emptyPracticeText}
             </p>
           </div>
-          <Play className={`w-5 h-5 ${selectedIds.length > 0 ? "text-amber-400" : "text-gray-300"}`} />
+          <Play className={`w-5 h-5 ${canPractice ? "text-amber-400" : "text-gray-300"}`} />
         </button>
 
         <button
-          onClick={() => selectedIds.length > 0 ? onStart("dictation") : setSelectDialogOpen(true)}
+          onClick={() => startPractice("dictation")}
           className="w-full flex items-center gap-4 p-4 bg-white rounded-xl border border-gray-100 hover:border-purple-200 hover:shadow-md transition-all text-left"
         >
           <div className="w-12 h-12 rounded-xl bg-purple-50 flex items-center justify-center shrink-0">
@@ -579,10 +668,10 @@ function SpellHome({ onStart }: { onStart: (mode: SpellView) => void }) {
           <div className="flex-1">
             <h3 className="text-base font-semibold text-gray-900">听写模式</h3>
             <p className="text-xs text-gray-500">
-              {selectedIds.length > 0 ? "每个单词读两遍，听音写词" : "请先选择今日练习单词"}
+              {canPractice ? "每个单词读两遍，听音写词" : emptyPracticeText}
             </p>
           </div>
-          <Play className={`w-5 h-5 ${selectedIds.length > 0 ? "text-purple-400" : "text-gray-300"}`} />
+          <Play className={`w-5 h-5 ${canPractice ? "text-purple-400" : "text-gray-300"}`} />
         </button>
       </div>
     </main>
@@ -945,58 +1034,104 @@ function HighlightedStudyExample({
 }
 
 // ============================================================
-// Dictation Wrapper - passes todayWords to DictationMode
+// Dictation Wrapper - uses the selected challenge/revenge word source
 // ============================================================
-function DictationWrapper({ onBack }: { onBack: () => void }) {
+function DictationWrapper({
+  source,
+  onBack,
+}: {
+  source: PracticeSourceMode;
+  onBack: () => void;
+}) {
   const { todayWords, selectedIds } = useTodayWords();
+  const { data: errorWords, isLoading: errorsLoading } =
+    trpc.spelling.getErrorWords.useQuery(undefined, {
+      enabled: source === "revenge",
+    });
+  const words = source === "revenge" ? errorWords ?? [] : todayWords;
+  const isEmpty =
+    source === "revenge" ? !errorsLoading && words.length === 0 : selectedIds.length === 0;
 
-  if (selectedIds.length === 0) {
+  if (isEmpty) {
     return (
       <main className="max-w-lg mx-auto px-4 py-6 pb-24 min-h-screen flex flex-col items-center justify-center">
         <div className="text-center">
           <ListChecks className="w-12 h-12 text-gray-300 mx-auto mb-4" />
-          <p className="text-gray-500 mb-1">还没有选择今日练习单词</p>
-          <p className="text-xs text-gray-400 mb-4">请先返回首页选择要练习的单词</p>
+          <p className="text-gray-500 mb-1">
+            {source === "revenge" ? "错题本里还没有单词" : "还没有选择今日练习单词"}
+          </p>
+          <p className="text-xs text-gray-400 mb-4">
+            {source === "revenge"
+              ? "出现错题后，就可以回来发起复仇之战"
+              : "请先返回首页选择要练习的单词"}
+          </p>
           <Button className="bg-gradient-to-r from-indigo-500 to-blue-600" onClick={onBack}>
             <ArrowLeft className="w-4 h-4 mr-1" />
-            返回选词
+            返回
           </Button>
         </div>
       </main>
     );
   }
 
-  return <DictationMode words={todayWords} onBack={onBack} />;
+  if (errorsLoading) {
+    return (
+      <main className="min-h-screen flex items-center justify-center">
+        <Loader2 className="w-8 h-8 animate-spin text-rose-500" />
+      </main>
+    );
+  }
+
+  return <DictationMode words={words} onBack={onBack} />;
 }
 
 // ============================================================
-// Practice Mode Wrapper - loads today's selected words
+// Practice Mode Wrapper - loads challenge or revenge words
 // ============================================================
-function PracticeModeWrapper({ mode, onBack }: { mode: SpellView; onBack: () => void }) {
+function PracticeModeWrapper({
+  mode,
+  source,
+  onBack,
+}: {
+  mode: SpellView;
+  source: PracticeSourceMode;
+  onBack: () => void;
+}) {
   const { todayWords, selectedIds } = useTodayWords();
+  const { data: errorWords, isLoading: errorsLoading } =
+    trpc.spelling.getErrorWords.useQuery(undefined, {
+      enabled: source === "revenge",
+    });
+  const words = source === "revenge" ? errorWords ?? [] : todayWords;
+  const isEmpty =
+    source === "revenge" ? !errorsLoading && words.length === 0 : selectedIds.length === 0;
 
-  // No words selected
-  if (selectedIds.length === 0) {
+  if (isEmpty) {
     return (
       <main className="max-w-lg mx-auto px-4 py-6 pb-24 min-h-screen flex flex-col items-center justify-center">
         <div className="text-center">
           <ListChecks className="w-12 h-12 text-gray-300 mx-auto mb-4" />
-          <p className="text-gray-500 mb-1">还没有选择今日练习单词</p>
-          <p className="text-xs text-gray-400 mb-4">请先返回首页选择要练习的单词</p>
+          <p className="text-gray-500 mb-1">
+            {source === "revenge" ? "错题本里还没有单词" : "还没有选择今日练习单词"}
+          </p>
+          <p className="text-xs text-gray-400 mb-4">
+            {source === "revenge"
+              ? "出现错题后，就可以回来发起复仇之战"
+              : "请先返回首页选择要练习的单词"}
+          </p>
           <Button
             className="bg-gradient-to-r from-indigo-500 to-blue-600"
             onClick={onBack}
           >
             <ArrowLeft className="w-4 h-4 mr-1" />
-            返回选词
+            返回
           </Button>
         </div>
       </main>
     );
   }
 
-  // Not enough words
-  if (todayWords.length === 0) {
+  if (errorsLoading || words.length === 0) {
     return (
       <main className="max-w-lg mx-auto px-4 py-6 pb-24 min-h-screen flex flex-col items-center justify-center">
         <div className="text-center">
@@ -1009,11 +1144,11 @@ function PracticeModeWrapper({ mode, onBack }: { mode: SpellView; onBack: () => 
 
   switch (mode) {
     case "blocks":
-      return <BlocksMode onBack={onBack} words={todayWords} />;
+      return <BlocksMode onBack={onBack} words={words} />;
     case "fillblank":
-      return <FillBlankMode onBack={onBack} words={todayWords} />;
+      return <FillBlankMode onBack={onBack} words={words} />;
     case "flash":
-      return <FlashMode onBack={onBack} words={todayWords} />;
+      return <FlashMode onBack={onBack} words={words} />;
     default:
       return null;
   }
@@ -1025,7 +1160,12 @@ function PracticeModeWrapper({ mode, onBack }: { mode: SpellView; onBack: () => 
 function BlocksMode({ onBack, words }: { onBack: () => void; words: any[] }) {
   const utils = trpc.useUtils();
   const submitResult = trpc.spelling.submitResult.useMutation({
-    onSuccess: () => utils.spelling.getReviewQueue.invalidate(),
+    onSuccess: () => {
+      void utils.spelling.getReviewQueue.invalidate();
+      void utils.spelling.getErrorWords.invalidate();
+      void utils.spelling.getErrorBook.invalidate();
+      void utils.spelling.getStats.invalidate();
+    },
   });
 
   const [index, setIndex] = useState(0);
@@ -1251,7 +1391,12 @@ function BlocksMode({ onBack, words }: { onBack: () => void; words: any[] }) {
 function FillBlankMode({ onBack, words }: { onBack: () => void; words: any[] }) {
   const utils = trpc.useUtils();
   const submitResult = trpc.spelling.submitResult.useMutation({
-    onSuccess: () => utils.spelling.getReviewQueue.invalidate(),
+    onSuccess: () => {
+      void utils.spelling.getReviewQueue.invalidate();
+      void utils.spelling.getErrorWords.invalidate();
+      void utils.spelling.getErrorBook.invalidate();
+      void utils.spelling.getStats.invalidate();
+    },
   });
 
   const [index, setIndex] = useState(0);
@@ -1537,7 +1682,12 @@ function FillBlankMode({ onBack, words }: { onBack: () => void; words: any[] }) 
 function FlashMode({ onBack, words }: { onBack: () => void; words: any[] }) {
   const utils = trpc.useUtils();
   const submitResult = trpc.spelling.submitResult.useMutation({
-    onSuccess: () => utils.spelling.getReviewQueue.invalidate(),
+    onSuccess: () => {
+      void utils.spelling.getReviewQueue.invalidate();
+      void utils.spelling.getErrorWords.invalidate();
+      void utils.spelling.getErrorBook.invalidate();
+      void utils.spelling.getStats.invalidate();
+    },
   });
 
   const [index, setIndex] = useState(0);

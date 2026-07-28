@@ -28,6 +28,10 @@ const CONSONANT_BLENDS = new Set([
   "ch", "sh", "th", "ph", "ck", "ng",
 ]);
 
+function isSilentTInSt(word: string, index: number): boolean {
+  return word === "listen" && index === 2;
+}
+
 /**
  * Reviewed multi-letter graphemes that must win over shorter combinations.
  *
@@ -36,7 +40,9 @@ const CONSONANT_BLENDS = new Set([
  * shorter rule can never consume part of a reviewed grapheme.
  */
 const PRIORITY_GRAPHEMES = [
+  { text: "eau", type: "vowel_combo" },
   { text: "eigh", type: "vowel_combo" },
+  { text: "igh", type: "vowel_combo" },
   { text: "ture", type: "vowel_combo" },
   { text: "air", type: "vowel_combo" },
   { text: "are", type: "vowel_combo" },
@@ -101,16 +107,19 @@ const CURATED_WORD_DIVISIONS: Record<string, string[]> = {
   "about": ["a", "bout"],
   "among": ["a", "mong"],
   "apple": ["ap", "ple"],
+  "afternoon": ["af", "ter", "noon"],
   "baby": ["ba", "by"],
   "banana": ["ba", "na", "na"],
   "basketball": ["bas", "ket", "ball"],
   "body": ["bod", "y"],
+  "beautiful": ["beau", "ti", "ful"],
   "busy": ["bus", "y"],
   "buy": ["buy"],
   "canada": ["can", "a", "da"],
   "china": ["chi", "na"],
   "chinese": ["chi", "nese"],
   "classmate": ["class", "mate"],
+  "children": ["chil", "dren"],
   "closed": ["closed"],
   "colour": ["col", "our"],
   "colourful": ["col", "our", "ful"],
@@ -138,6 +147,7 @@ const CURATED_WORD_DIVISIONS: Record<string, string[]> = {
   "firefighter": ["fire", "fight", "er"],
   "flavour": ["fla", "vour"],
   "giraffe": ["gi", "raffe"],
+  "goodbye": ["good", "bye"],
   "grandfather": ["grand", "fa", "ther"],
   "grandma": ["grand", "ma"],
   "grandmother": ["grand", "mo", "ther"],
@@ -152,15 +162,18 @@ const CURATED_WORD_DIVISIONS: Record<string, string[]> = {
   "library": ["li", "brar", "y"],
   "lion": ["li", "on"],
   "listen": ["lis", "ten"],
+  "lovely": ["love", "ly"],
   "many": ["man", "y"],
   "monkey": ["mon", "key"],
   "morning": ["morn", "ing"],
   "mr": ["mis", "ter"],
+  "mrs": ["mis", "iz"],
   "neighbour": ["neigh", "bour"],
   "nineteen": ["nine", "teen"],
   "office": ["of", "fice"],
   "orange": ["or", "ange"],
   "paper": ["pa", "per"],
+  "painting": ["paint", "ing"],
   "pe": ["p", "e"],
   "people": ["peo", "ple"],
   "police": ["po", "lice"],
@@ -174,6 +187,7 @@ const CURATED_WORD_DIVISIONS: Record<string, string[]> = {
   "sister": ["sis", "ter"],
   "snowman": ["snow", "man"],
   "student": ["stu", "dent"],
+  "sugar": ["sug", "ar"],
   "summer": ["sum", "mer"],
   "sunny": ["sun", "ny"],
   "sweater": ["sweat", "er"],
@@ -198,6 +212,7 @@ const CURATED_WORD_DIVISIONS: Record<string, string[]> = {
   "worker": ["work", "er"],
   "year": ["year"],
   "yellow": ["yel", "low"],
+  "yes": ["yes"],
   "your": ["your"],
   "yummy": ["yum", "my"],
   "every": ["ev", "ery"],
@@ -450,6 +465,13 @@ export interface PhonicsTag {
 export function detectPhonicsTags(word: string): PhonicsTag[] {
   const lower = word.toLowerCase();
   const tags: PhonicsTag[] = [];
+  const syllables = splitSyllables(word);
+  const syllableBoundaries = new Set<number>();
+  let syllableOffset = 0;
+  for (const syllable of syllables.slice(0, -1)) {
+    syllableOffset += syllable.length;
+    syllableBoundaries.add(syllableOffset);
+  }
   const priorityMatches = findPriorityGraphemes(lower);
   const priorityCovered = new Set(
     priorityMatches.flatMap(({ start, end }) =>
@@ -474,6 +496,7 @@ export function detectPhonicsTags(word: string): PhonicsTag[] {
     const bigram = lower.substring(i, i + 2);
     if (
       VOWEL_COMBOS.has(bigram) &&
+      !syllableBoundaries.has(i + 1) &&
       !priorityCovered.has(i) &&
       !priorityCovered.has(i + 1)
     ) {
@@ -508,6 +531,7 @@ export function detectPhonicsTags(word: string): PhonicsTag[] {
     const bi = lower.substring(i, i + 2);
     if (
       CONSONANT_BLENDS.has(bi) &&
+      !(bi === "st" && isSilentTInSt(lower, i)) &&
       !priorityCovered.has(i) &&
       !priorityCovered.has(i + 1)
     ) {
@@ -570,7 +594,6 @@ export function detectPhonicsTags(word: string): PhonicsTag[] {
   }
 
   // 5. Mark syllable boundaries
-  const syllables = splitSyllables(word);
   let pos = 0;
   for (const syl of syllables) {
     tags.push({
@@ -616,6 +639,9 @@ function explainStudyPattern(
 ): string {
   switch (type) {
     case "vowel_combo":
+      if (text === "eau") {
+        return `"eau" 在 beautiful 中整体对应 /juː/，拼读时不要拆成 ea 和 au。`;
+      }
       if (text === "ture") {
         return `"ture" 是常见词尾拼写组合，通常整体读作 /tʃə(r)/，如 picture、future。`;
       }
@@ -796,7 +822,11 @@ export function generateLetterBlocks(word: string): Array<{
       }
 
       // Check consonant blends
-      if (biIsAvailable && CONSONANT_BLENDS.has(bi)) {
+      if (
+        biIsAvailable &&
+        CONSONANT_BLENDS.has(bi) &&
+        !(bi === "st" && isSilentTInSt(lower, absoluteIndex))
+      ) {
         for (let j = i; j < i + 2; j++) covered.add(j);
         sylBlocks.push({ letters: bi, isCombo: true, comboType: "consonant_blend", start: i });
         continue;

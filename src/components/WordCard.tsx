@@ -65,6 +65,8 @@ interface WordCardProps {
   selected?: boolean;
   selectionDisabled?: boolean;
   onSelectionChange?: (selected: boolean) => void;
+  preferredGroupId?: number | null;
+  preferredTextbookId?: number | null;
 }
 
 export default function WordCard({
@@ -76,6 +78,8 @@ export default function WordCard({
   selected = false,
   selectionDisabled = false,
   onSelectionChange,
+  preferredGroupId,
+  preferredTextbookId,
 }: WordCardProps) {
   const [expanded, setExpanded] = useState(false);
   const [localStatus, setLocalStatus] = useState<WordCardData["learningStatus"] | null>(null);
@@ -119,6 +123,16 @@ export default function WordCard({
   const isActive = effectiveStatus === "active";
   const isPaused = effectiveStatus === "paused";
   const isIdle = effectiveStatus === "idle";
+  const preferredMembership =
+    word.groups?.find((group) => preferredGroupId != null && group.groupId === preferredGroupId) ??
+    word.groups?.find(
+      (group) =>
+        preferredGroupId == null &&
+        preferredTextbookId != null &&
+        group.textbookId === preferredTextbookId,
+    );
+  const displayTextbookName = preferredMembership?.textbookName ?? word.textbookName;
+  const displayGroupName = preferredMembership?.groupName ?? word.groupName;
 
   return (
     <>
@@ -162,14 +176,14 @@ export default function WordCard({
 
             {/* Group and Tags */}
             <div className="flex flex-wrap items-center gap-1.5 mt-2">
-              {word.textbookName && (
+              {displayTextbookName && (
                 <Badge
                   variant="outline"
                   className="text-xs px-2 py-0.5 bg-gray-50 text-gray-500 border-gray-200 cursor-default"
                 >
                   <Folder className="w-3 h-3 mr-1" />
-                  {word.textbookName}
-                  {word.groupName ? ` > ${word.groupName}` : ""}
+                  {displayTextbookName}
+                  {displayGroupName ? ` > ${displayGroupName}` : ""}
                 </Badge>
               )}
               {word.tags.map((tag) => (

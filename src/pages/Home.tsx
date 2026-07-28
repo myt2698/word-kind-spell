@@ -333,50 +333,59 @@ export default function Home({ searchMode = false }: { searchMode?: boolean }) {
               </div>
             )}
 
-            <div className="flex items-center justify-between mb-3">
-              <p className="text-xs text-gray-500">共 {filteredWords.length} 个单词</p>
-              <div className="flex items-center gap-2">
+            <div className="mb-3 space-y-2">
+              <div className="flex min-h-8 items-center justify-between gap-3">
+                <p className="shrink-0 text-xs text-gray-500">
+                  共 {filteredWords.length} 个单词
+                </p>
                 {selectionMode ? (
-                  <Button type="button" variant="ghost" onClick={leaveSelectionMode} className="h-9 px-3 text-xs">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    onClick={leaveSelectionMode}
+                    className="h-8 px-3 text-xs"
+                  >
                     完成
                   </Button>
                 ) : (
-                  <>
-                    <FilterBar sortBy={sortBy} onSortChange={setSortBy} />
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="icon"
-                      onClick={() => navigate("/search")}
-                      className="h-9 w-9 rounded-lg bg-white"
-                      aria-label="搜索单词"
-                    >
-                      <Search className="w-4 h-4" />
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={() => setSelectionMode(true)}
-                      className="h-9 px-3 text-xs bg-white"
-                    >
-                      <CheckSquare2 className="w-4 h-4 mr-1" />
-                      选择
-                    </Button>
-                    {canManageCatalog && (
-                      <Button
-                        onClick={() => {
-                          setEditWord(null);
-                          setShowWordForm(true);
-                        }}
-                        className="bg-gradient-to-r from-indigo-500 to-blue-600 hover:from-indigo-600 hover:to-blue-700 shadow-lg shadow-indigo-200 shrink-0 h-9"
-                      >
-                        <Plus className="w-4 h-4 mr-1" />
-                        添加
-                      </Button>
-                    )}
-                  </>
+                  <FilterBar sortBy={sortBy} onSortChange={setSortBy} />
                 )}
               </div>
+
+              {!selectionMode && (
+                <div className="flex items-center gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => navigate("/search")}
+                    className="h-9 min-w-0 flex-1 justify-start rounded-lg bg-white px-3 text-xs text-gray-600"
+                  >
+                    <Search className="mr-2 h-4 w-4 shrink-0" />
+                    <span className="truncate">搜索单词</span>
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => setSelectionMode(true)}
+                    className="h-9 shrink-0 bg-white px-3 text-xs"
+                  >
+                    <CheckSquare2 className="mr-1 h-4 w-4" />
+                    选择
+                  </Button>
+                  {canManageCatalog && (
+                    <Button
+                      onClick={() => {
+                        setEditWord(null);
+                        setShowWordForm(true);
+                      }}
+                      className="h-9 shrink-0 bg-gradient-to-r from-indigo-500 to-blue-600 px-3 shadow-lg shadow-indigo-200 hover:from-indigo-600 hover:to-blue-700"
+                    >
+                      <Plus className="mr-1 h-4 w-4" />
+                      添加
+                    </Button>
+                  )}
+                </div>
+              )}
             </div>
 
             {selectionMode && (
@@ -433,6 +442,8 @@ export default function Home({ searchMode = false }: { searchMode?: boolean }) {
                 selectionMode={!searchMode && selectionMode}
                 selected={selectedWordIds.has(word.id)}
                 selectionDisabled={(word.learningStatus || "idle") !== "idle"}
+                preferredGroupId={!searchMode ? selectedUnitId : null}
+                preferredTextbookId={!searchMode ? selectedTextbookId : null}
                 onSelectionChange={(selected) => {
                   setSelectedWordIds((current) => {
                     const next = new Set(current);

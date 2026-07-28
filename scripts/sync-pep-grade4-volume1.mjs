@@ -128,8 +128,8 @@ const tagDescriptions = {
     "pl 是辅音连缀，p 和 l 各自保留发音并快速连读，如 play、place。",
   "辅+y多音节":
     "多音节词末尾的“辅音字母 + y”中，y 通常发 /i/，如 busy、story、windy。",
-  "辅+y 单音节":
-    "单音节词末尾的 y 通常发 /aɪ/，如 why、fly。",
+  "辅音+y 单音节 /aɪ/":
+    "单音节词末尾的“辅音字母 + y”通常发 /aɪ/，如 my、why、dry、fly；bye、goodbye 末尾的 y 也归入这一长音类别。",
   "双写辅音，保护短元音":
     "两个相同辅音通常提示前一个重读音节保持短元音；拆音节时常从双辅音中间分开，如 sun-ny、sum-mer。",
   "ple":
@@ -219,7 +219,7 @@ const entries = [
 
   // Unit 4
   { units: ["Unit 4"], word: "firefighter", phonetic: "/ˈfaɪəfaɪtə(r)/", definition: "消防队员", example: "Our neighbour is a firefighter. He often helps people.", split: "fire-fight-er（复合词，3个音节）", tags: ["ire", "igh", "复合词"] },
-  { units: ["Unit 4"], word: "why", phonetic: "/waɪ/", definition: "为什么", example: "Liu Jia's father is also very nice. Why?", split: "why（1个音节）", tags: ["wh /w/", "辅+y 单音节"] },
+  { units: ["Unit 4"], word: "why", phonetic: "/waɪ/", definition: "为什么", example: "Liu Jia's father is also very nice. Why?", split: "why（1个音节）", tags: ["wh /w/", "辅音+y 单音节 /aɪ/"] },
   { units: ["Unit 4"], word: "driver", phonetic: "/ˈdraɪvə(r)/", definition: "司机", example: "He's a school bus driver. He takes us to school every day.", split: "driv-er（2个音节）", tags: ["i_e /aɪ/"] },
   { units: ["Unit 4"], word: "cleaner", phonetic: "/ˈkliːnə(r)/", definition: "清洁工", example: "He's a cleaner. He cleans the community.", split: "clean-er（2个音节）", tags: ["ea/iː/"] },
   { units: ["Unit 4"], word: "delivery worker", phonetic: "/dɪˈlɪvəri ˈwɜːkə(r)/", definition: "快递员", example: "delivery worker", split: "de-liv-er-y work-er（复合名词）", tags: ["辅+y多音节", "wor /wɜː/", "复合词"] },
@@ -250,7 +250,7 @@ const entries = [
   { units: ["Unit 5"], word: "closed", phonetic: "/kləʊzd/", definition: "关闭的", example: "But it's closed now.", split: "closed（1个音节）", tags: ["VCe o_e /əʊ/"] },
   { units: ["Unit 5"], word: "film", phonetic: "/fɪlm/", definition: "电影", example: "Let's go and see a film.", split: "film（1个音节）", tags: ["闭音节 i /ɪ/"] },
   { units: ["Unit 5"], word: "idea", phonetic: "/aɪˈdɪə/", definition: "想法；主意", example: "That's a good idea!", split: "i-de-a（3个音节）", tags: ["ea /ɪə/"] },
-  { units: ["Unit 5"], word: "fly", phonetic: "/flaɪ/", definition: "操纵（飞行器等）；飞", example: "I fly a kite and I play.", split: "fly（1个音节）", tags: ["辅+y 单音节"] },
+  { units: ["Unit 5"], word: "fly", phonetic: "/flaɪ/", definition: "操纵（飞行器等）；飞", example: "I fly a kite and I play.", split: "fly（1个音节）", tags: ["辅音+y 单音节 /aɪ/"] },
   { units: ["Unit 5"], word: "kite", phonetic: "/kaɪt/", definition: "风筝", example: "I fly a kite and I play.", split: "kite（1个音节）", tags: ["i_e /aɪ/"] },
   { units: ["Unit 5"], word: "snowman", phonetic: "/ˈsnəʊmæn/", definition: "雪人", example: "I make a snowman and I play.", split: "snow-man（复合词，2个音节）", tags: ["ow/əʊ/", "闭音节 a /æ/", "复合词"] },
   { units: ["Unit 5"], word: "fun", phonetic: "/fʌn/", definition: "享乐；乐趣", example: "It's fun to go to the park with my new friends.", split: "fun（1个音节）", tags: ["闭音节 u /ʌ/"] },

@@ -29,8 +29,10 @@ import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Extension
 import androidx.compose.material.icons.filled.Headphones
 import androidx.compose.material.icons.filled.Keyboard
+import androidx.compose.material.icons.filled.EmojiEvents
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.School
+import androidx.compose.material.icons.filled.Whatshot
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -91,6 +93,11 @@ private enum class StatDialogType {
     Errors,
 }
 
+private enum class PracticeSourceMode {
+    Challenge,
+    Revenge,
+}
+
 @Composable
 internal fun PracticeScreen(
     api: WordMindApi,
@@ -110,6 +117,9 @@ internal fun PracticeScreen(
     var selectionOpen by remember { mutableStateOf(false) }
     var statDialog by remember { mutableStateOf<StatDialogType?>(null) }
     var view by rememberSaveable { mutableStateOf(PracticeView.Home) }
+    var practiceSource by rememberSaveable {
+        mutableStateOf(PracticeSourceMode.Challenge)
+    }
     val scope = rememberCoroutineScope()
 
     LaunchedEffect(view) {
@@ -164,12 +174,18 @@ internal fun PracticeScreen(
     val selectedWords = remember(learningWords, selectedIds) {
         learningWords.filter { it.id in selectedIds }
     }
+    val practiceWords = when (practiceSource) {
+        PracticeSourceMode.Challenge -> selectedWords
+        PracticeSourceMode.Revenge -> errorWords
+    }
 
     fun openMode(mode: PracticeView) {
-        if (selectedWords.isEmpty()) {
+        if (practiceWords.isNotEmpty()) {
+            view = mode
+        } else if (practiceSource == PracticeSourceMode.Challenge) {
             selectionOpen = true
         } else {
-            view = mode
+            statDialog = StatDialogType.Errors
         }
     }
 
@@ -229,6 +245,8 @@ internal fun PracticeScreen(
             errorWords = errorWords,
             selectedWords = selectedWords,
             stats = stats,
+            practiceSource = practiceSource,
+            onPracticeSourceChange = { practiceSource = it },
             onSelectWords = { selectionOpen = true },
             onMode = ::openMode,
             onStat = { statDialog = it },
@@ -240,25 +258,25 @@ internal fun PracticeScreen(
             onBack = ::returnHome,
         )
         PracticeView.Blocks -> BlocksPracticeMode(
-            words = selectedWords,
+            words = practiceWords,
             speak = speak,
             onBack = ::returnHome,
             onSubmit = ::submitResult,
         )
         PracticeView.FillBlank -> FillBlankPracticeMode(
-            words = selectedWords,
+            words = practiceWords,
             speak = speak,
             onBack = ::returnHome,
             onSubmit = ::submitResult,
         )
         PracticeView.Flash -> FlashPracticeMode(
-            words = selectedWords,
+            words = practiceWords,
             speak = speak,
             onBack = ::returnHome,
             onSubmit = ::submitResult,
         )
         PracticeView.Dictation -> DictationPracticeMode(
-            words = selectedWords,
+            words = practiceWords,
             speak = speak,
             onBack = ::returnHome,
         )
@@ -336,10 +354,22 @@ private fun PracticeHome(
     errorWords: List<PracticeWord>,
     selectedWords: List<PracticeWord>,
     stats: SpellingStats?,
+    practiceSource: PracticeSourceMode,
+    onPracticeSourceChange: (PracticeSourceMode) -> Unit,
     onSelectWords: () -> Unit,
     onMode: (PracticeView) -> Unit,
     onStat: (StatDialogType) -> Unit,
 ) {
+    val practiceWordCount = when (practiceSource) {
+        PracticeSourceMode.Challenge -> selectedWords.size
+        PracticeSourceMode.Revenge -> errorWords.size
+    }
+    val hasPracticeWords = practiceWordCount > 0
+    val emptyPracticeText = when (practiceSource) {
+        PracticeSourceMode.Challenge -> "请先选择今日练习单词"
+        PracticeSourceMode.Revenge -> "错题本里还没有需要复习的单词"
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -547,63 +577,162 @@ private fun PracticeHome(
         }
         Spacer(Modifier.height(20.dp))
 
-        Text("选择练习模式", color = Color(0xFF334155), fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                "选择练习模式",
+                modifier = Modifier.weight(1f),
+                color = Color(0xFF334155),
+                fontSize = 14.sp,
+                fontWeight = FontWeight.SemiBold,
+            )
+            Text("$practiceWordCount 个单词", color = Color(0xFF94A3B8), fontSize = 11.sp)
+        }
+        Spacer(Modifier.height(10.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            PracticeSourceCard(
+                title = "闯关模式",
+                description = "准备好接受今天的挑战了吗？",
+                count = selectedWords.size,
+                icon = Icons.Default.EmojiEvents,
+                color = PracticeIndigo,
+                background = Color(0xFFEEF2FF),
+                selected = practiceSource == PracticeSourceMode.Challenge,
+                onClick = {
+                    onPracticeSourceChange(PracticeSourceMode.Challenge)
+                },
+                modifier = Modifier.weight(1f),
+            )
+            PracticeSourceCard(
+                title = "复仇之战",
+                description = "把曾经难倒你的单词通通拿下！",
+                count = errorWords.size,
+                icon = Icons.Default.Whatshot,
+                color = Color(0xFFE11D48),
+                background = Color(0xFFFFF1F2),
+                selected = practiceSource == PracticeSourceMode.Revenge,
+                onClick = {
+                    onPracticeSourceChange(PracticeSourceMode.Revenge)
+                },
+                modifier = Modifier.weight(1f),
+            )
+        }
         Spacer(Modifier.height(10.dp))
         PracticeModeCard(
             title = "积木拼拼乐",
-            description = if (selectedWords.isEmpty()) {
-                "请先选择今日练习单词"
+            description = if (!hasPracticeWords) {
+                emptyPracticeText
             } else {
                 "点击字母积木拼出正确单词"
             },
             icon = Icons.Default.Extension,
             color = PracticeIndigo,
             background = Color(0xFFEEF2FF),
-            enabled = selectedWords.isNotEmpty(),
+            enabled = hasPracticeWords,
             onClick = { onMode(PracticeView.Blocks) },
         )
         Spacer(Modifier.height(10.dp))
         PracticeModeCard(
             title = "单词消消乐",
-            description = if (selectedWords.isEmpty()) {
-                "请先选择今日练习单词"
+            description = if (!hasPracticeWords) {
+                emptyPracticeText
             } else {
                 "根据提示填写缺失的字母"
             },
             icon = Icons.Default.Keyboard,
             color = PracticeSuccess,
             background = Color(0xFFECFDF5),
-            enabled = selectedWords.isNotEmpty(),
+            enabled = hasPracticeWords,
             onClick = { onMode(PracticeView.FillBlank) },
         )
         Spacer(Modifier.height(10.dp))
         PracticeModeCard(
             title = "极速闪电战",
-            description = if (selectedWords.isEmpty()) {
-                "请先选择今日练习单词"
+            description = if (!hasPracticeWords) {
+                emptyPracticeText
             } else {
                 "限时快速拼写挑战"
             },
             icon = Icons.Default.Bolt,
             color = PracticeAmber,
             background = Color(0xFFFFFBEB),
-            enabled = selectedWords.isNotEmpty(),
+            enabled = hasPracticeWords,
             onClick = { onMode(PracticeView.Flash) },
         )
         Spacer(Modifier.height(10.dp))
         PracticeModeCard(
             title = "听写模式",
-            description = if (selectedWords.isEmpty()) {
-                "请先选择今日练习单词"
+            description = if (!hasPracticeWords) {
+                emptyPracticeText
             } else {
                 "每个单词读两遍，听音写词"
             },
             icon = Icons.Default.Headphones,
             color = PracticePurple,
             background = Color(0xFFFAF5FF),
-            enabled = selectedWords.isNotEmpty(),
+            enabled = hasPracticeWords,
             onClick = { onMode(PracticeView.Dictation) },
         )
+    }
+}
+
+@Composable
+private fun PracticeSourceCard(
+    title: String,
+    description: String,
+    count: Int,
+    icon: ImageVector,
+    color: Color,
+    background: Color,
+    selected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Card(
+        onClick = onClick,
+        modifier = modifier,
+        shape = RoundedCornerShape(14.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = if (selected) background else Color.White,
+        ),
+        border = androidx.compose.foundation.BorderStroke(
+            1.dp,
+            if (selected) color.copy(alpha = 0.45f) else Color(0xFFE2E8F0),
+        ),
+    ) {
+        Column(Modifier.padding(horizontal = 12.dp, vertical = 11.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    icon,
+                    contentDescription = null,
+                    tint = color,
+                    modifier = Modifier.size(18.dp),
+                )
+                Spacer(Modifier.width(6.dp))
+                Text(
+                    title,
+                    modifier = Modifier.weight(1f),
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1,
+                )
+                Text("$count", color = color, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+            }
+            Spacer(Modifier.height(5.dp))
+            Text(
+                description,
+                color = PracticeMuted,
+                fontSize = 10.sp,
+                lineHeight = 14.sp,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
     }
 }
 

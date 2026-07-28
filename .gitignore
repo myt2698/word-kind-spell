@@ -44,3 +44,4 @@ coverage/
 
 # Local extraction and rendering artifacts
 tmp/
+output/pdf/*.pdf

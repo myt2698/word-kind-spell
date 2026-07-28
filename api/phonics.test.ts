@@ -16,11 +16,13 @@ const CATALOG_WORD_DIVISIONS = [
   ["animal", "an-i-mal"],
   ["annoy", "an-noy"],
   ["apple", "ap-ple"],
+  ["afternoon", "af-ter-noon"],
   ["autumn", "au-tumn"],
   ["baby", "ba-by"],
   ["banana", "ba-na-na"],
   ["basketball", "bas-ket-ball"],
   ["before", "be-fore"],
+  ["beautiful", "beau-ti-ful"],
   ["body", "bod-y"],
   ["breakfast", "break-fast"],
   ["brother", "bro-ther"],
@@ -29,6 +31,7 @@ const CATALOG_WORD_DIVISIONS = [
   ["candy", "can-dy"],
   ["China", "chi-na"],
   ["Chinese", "chi-nese"],
+  ["children", "chil-dren"],
   ["classmate", "class-mate"],
   ["cleaner", "clean-er"],
   ["cloudy", "cloud-y"],
@@ -66,6 +69,7 @@ const CATALOG_WORD_DIVISIONS = [
   ["future", "fu-ture"],
   ["garden", "gar-den"],
   ["giraffe", "gi-raffe"],
+  ["goodbye", "good-bye"],
   ["grandfather", "grand-fa-ther"],
   ["grandma", "grand-ma"],
   ["grandmother", "grand-mo-ther"],
@@ -81,6 +85,7 @@ const CATALOG_WORD_DIVISIONS = [
   ["library", "li-brar-y"],
   ["lion", "li-on"],
   ["listen", "lis-ten"],
+  ["lovely", "love-ly"],
   ["many", "man-y"],
   ["monkey", "mon-key"],
   ["morning", "morn-ing"],
@@ -92,6 +97,7 @@ const CATALOG_WORD_DIVISIONS = [
   ["over", "o-ver"],
   ["panda", "pan-da"],
   ["paper", "pa-per"],
+  ["painting", "paint-ing"],
   ["PE", "p-e"],
   ["pencil", "pen-cil"],
   ["people", "peo-ple"],
@@ -113,6 +119,7 @@ const CATALOG_WORD_DIVISIONS = [
   ["snowy", "snow-y"],
   ["story", "sto-ry"],
   ["student", "stu-dent"],
+  ["sugar", "sug-ar"],
   ["summer", "sum-mer"],
   ["sunny", "sun-ny"],
   ["sweater", "sweat-er"],
@@ -138,6 +145,7 @@ const CATALOG_WORD_DIVISIONS = [
   ["winter", "win-ter"],
   ["woman", "wom-an"],
   ["yellow", "yel-low"],
+  ["yes", "yes"],
   ["yummy", "yum-my"],
 ] as const;
 
@@ -188,13 +196,19 @@ describe("catalog syllable divisions", () => {
   it("expands Mr to its spoken syllables", () => {
     expect(splitSyllables("Mr")).toEqual(["mis", "ter"]);
   });
+
+  it("expands Mrs to its spoken syllables", () => {
+    expect(splitSyllables("Mrs")).toEqual(["mis", "iz"]);
+  });
 });
 
 describe("phonics analysis", () => {
   it.each([
     ["share", ["sh", "are"], "are"],
     ["queen", ["qu", "ee", "n"], "qu"],
+    ["beautiful", ["b", "eau", "t", "i", "f", "u", "l"], "eau"],
     ["eight", ["eigh", "t"], "eigh"],
+    ["light", ["l", "igh", "t"], "igh"],
     ["picture", ["p", "i", "c", "ture"], "ture"],
     ["monkey", ["m", "o", "nk", "e", "y"], "nk"],
   ])(
@@ -219,6 +233,32 @@ describe("phonics analysis", () => {
     );
     expect(analysis.patterns).not.toContainEqual(
       expect.objectContaining({ type: "magic_e" }),
+    );
+  });
+
+  it("does not treat the silent t in listen as an st blend", () => {
+    const analysis = analyzeWordForStudy("listen");
+
+    expect(analysis.patterns).not.toContainEqual(
+      expect.objectContaining({ text: "st" }),
+    );
+    expect(analysis.blocks.map((block) => block.letters).join("")).toBe(
+      "listen",
+    );
+  });
+
+  it("does not join ie across the syllable boundary in quiet", () => {
+    const analysis = analyzeWordForStudy("quiet");
+
+    expect(analysis.syllables).toEqual(["qui", "et"]);
+    expect(analysis.blocks.map((block) => block.letters)).toEqual([
+      "qu",
+      "i",
+      "e",
+      "t",
+    ]);
+    expect(analysis.patterns).not.toContainEqual(
+      expect.objectContaining({ text: "ie" }),
     );
   });
 

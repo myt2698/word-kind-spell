@@ -25,6 +25,11 @@ import {
 import { eq, and, gte, lte, desc, count, inArray } from "drizzle-orm";
 import { getCatalogOwnerId } from "./catalog";
 import { analyzeWordForStudy } from "../src/utils/phonics";
+import {
+  calculateErrorBookStreak,
+  ERROR_BOOK_CLEAR_STREAK,
+  type SpellingAttemptAction,
+} from "./spelling-progress";
 
 // Review intervals in minutes for each level
 const REVIEW_INTERVALS: Record<number, number[]> = {
@@ -432,35 +437,80 @@ export const spellingRouter = createRouter({
       }
 
       const nextReview = calculateNextReview(newLevel, newStreak);
+      const recentAttempts = await db
+        .select({ action: wordLogs.action })
+        .from(wordLogs)
+        .where(
+          and(
+            eq(wordLogs.wordId, input.wordId),
+            eq(wordLogs.userId, ctx.user.id),
+            inArray(wordLogs.action, ["test_pass", "test_fail"]),
+          ),
+        )
+        .orderBy(desc(wordLogs.id))
+        .limit(ERROR_BOOK_CLEAR_STREAK - 1);
+      const errorCorrectStreak = calculateErrorBookStreak(
+        input.isCorrect,
+        recentAttempts.map(
+          ({ action }) => action as SpellingAttemptAction,
+        ),
+      );
+      const removedFromErrorBook =
+        input.isCorrect && errorCorrectStreak >= ERROR_BOOK_CLEAR_STREAK;
 
-      await db
-        .update(wordSpellings)
-        .set({
-          level: newLevel,
-          streak: newStreak,
-          nextReviewAt: nextReview,
-          lastReviewAt: new Date(),
-          totalAttempts: record.totalAttempts + 1,
-          totalCorrect: record.totalCorrect + (input.isCorrect ? 1 : 0),
-          errorCount: record.errorCount + (input.isCorrect ? 0 : 1),
-        })
-        .where(eq(wordSpellings.id, record.id));
+      await db.transaction(async (tx) => {
+        await tx
+          .update(wordSpellings)
+          .set({
+            level: newLevel,
+            streak: newStreak,
+            nextReviewAt: nextReview,
+            lastReviewAt: new Date(),
+            totalAttempts: record.totalAttempts + 1,
+            totalCorrect: record.totalCorrect + (input.isCorrect ? 1 : 0),
+            errorCount: removedFromErrorBook
+              ? 0
+              : record.errorCount + (input.isCorrect ? 0 : 1),
+          })
+          .where(eq(wordSpellings.id, record.id));
 
-      if (!input.isCorrect && input.userInput) {
-        await db.insert(spellingErrors).values({
+        await tx.insert(wordLogs).values({
           wordId: input.wordId,
           userId: ctx.user.id,
-          userInput: input.userInput,
-          errorType: "wrong_letter",
-          practiceMode: input.practiceMode,
+          action: input.isCorrect ? "test_pass" : "test_fail",
+          notes: JSON.stringify({
+            practiceMode: input.practiceMode,
+            duration: input.duration ?? null,
+          }),
         });
-      }
+
+        if (!input.isCorrect) {
+          await tx.insert(spellingErrors).values({
+            wordId: input.wordId,
+            userId: ctx.user.id,
+            userInput: input.userInput ?? "",
+            errorType: "wrong_letter",
+            practiceMode: input.practiceMode,
+          });
+        } else if (removedFromErrorBook) {
+          await tx
+            .delete(spellingErrors)
+            .where(
+              and(
+                eq(spellingErrors.wordId, input.wordId),
+                eq(spellingErrors.userId, ctx.user.id),
+              ),
+            );
+        }
+      });
 
       return {
         isCorrect: input.isCorrect,
         newLevel,
         newStreak,
         nextReviewAt: nextReview,
+        errorCorrectStreak,
+        removedFromErrorBook,
       };
     }),
 

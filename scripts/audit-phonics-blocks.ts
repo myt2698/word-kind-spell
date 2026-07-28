@@ -28,6 +28,7 @@ const highConfidencePatterns = [
 
 const tagPatterns: Record<string, string[]> = {
   "-ful /fl/": ["ful"],
+  "-ous /əs/": ["ous"],
   "Ms /mɪz/": ["ms"],
   air: ["air"],
   al: ["al"],
@@ -45,6 +46,7 @@ const tagPatterns: Record<string, string[]> = {
   dr: ["dr"],
   "ea /ɪə/": ["ea"],
   "ea/e/": ["ea"],
+  "ea/eɪ/": ["ea"],
   "ea/iː/": ["ea"],
   "ear /eə/": ["ear"],
   "ear /ɪə/": ["ear"],
@@ -54,6 +56,7 @@ const tagPatterns: Record<string, string[]> = {
   "eo /iː/": ["eo"],
   er: ["er"],
   "ere/eir /eə/": ["ere", "eir"],
+  "ere /ɪə/": ["ere"],
   ese: ["ese"],
   "ew/juː/": ["ew"],
   "gh不发音": ["gh"],
@@ -83,7 +86,7 @@ const tagPatterns: Record<string, string[]> = {
   "our/ə/": ["our"],
   "ow/aʊ/": ["ow"],
   "ow/əʊ/": ["ow"],
-  "oy/ɔɪ/": ["oy"],
+  "oy /ɔɪ/": ["oy"],
   ph: ["ph"],
   pl: ["pl"],
   ple: ["ple"],
