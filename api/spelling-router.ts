@@ -577,12 +577,31 @@ export const spellingRouter = createRouter({
       .where(and(eq(words.userId, catalogOwnerId), inArray(words.id, wordIds)));
 
     const wordMap = new Map(wordList.map((w) => [w.id, w]));
+    const spellingLevels = await db
+      .select({
+        wordId: wordSpellings.wordId,
+        level: wordSpellings.level,
+      })
+      .from(wordSpellings)
+      .where(
+        and(
+          eq(wordSpellings.userId, ctx.user.id),
+          inArray(wordSpellings.wordId, wordIds),
+        ),
+      );
+    const levelMap = new Map(
+      spellingLevels.map((spelling) => [
+        spelling.wordId,
+        spelling.level as 1 | 2 | 3,
+      ]),
+    );
 
     return errors.map((e) => ({
       ...e,
       word: wordMap.get(e.wordId)?.word || "",
       phonetic: wordMap.get(e.wordId)?.phonetic || null,
       definition: wordMap.get(e.wordId)?.definition || "",
+      level: levelMap.get(e.wordId) ?? 1,
     }));
   }),
 

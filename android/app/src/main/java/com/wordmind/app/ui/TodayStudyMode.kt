@@ -90,7 +90,7 @@ internal fun TodayStudyMode(
 
     LaunchedEffect(current.id) {
         pageScrollState.scrollTo(0)
-        autoSpeakPracticeWordTwice(current.word, speak)
+        autoSpeakPracticeWordTwice(current.word, speak, current.example)
     }
 
     val phonics = remember(current.id, current.phonics) {

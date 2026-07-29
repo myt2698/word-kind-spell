@@ -128,6 +128,7 @@ data class SpellingErrorEntry(
     val word: String,
     val phonetic: String?,
     val definition: String,
+    val level: Int,
     val userInput: String,
     val errorType: String,
     val practiceMode: String,

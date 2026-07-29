@@ -562,24 +562,55 @@ private fun ProfileErrorsContent(
                         Spacer(Modifier.width(7.dp))
                         Text(
                             error.word,
+                            modifier = Modifier.weight(1f),
                             color = Color(0xFF111827),
                             fontSize = 14.sp,
                             fontWeight = FontWeight.Bold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
                         )
                         Spacer(Modifier.width(8.dp))
                         Surface(
-                            color = Color(0xFFFEF2F2),
+                            color = when (error.level) {
+                                1 -> Color(0xFFFEE2E2)
+                                2 -> Color(0xFFFEF3C7)
+                                else -> Color(0xFFD1FAE5)
+                            },
                             shape = CircleShape,
                         ) {
                             Text(
-                                "你写的：${error.userInput}",
-                                modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp),
-                                color = ProfileDanger,
+                                when (error.level) {
+                                    1 -> "Lv.1 陌生"
+                                    2 -> "Lv.2 熟悉"
+                                    else -> "Lv.3 掌握"
+                                },
+                                modifier = Modifier.padding(
+                                    horizontal = 8.dp,
+                                    vertical = 4.dp,
+                                ),
+                                color = when (error.level) {
+                                    1 -> ProfileDanger
+                                    2 -> ProfileAmber
+                                    else -> ProfileSuccess
+                                },
                                 fontSize = 10.sp,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
+                                fontWeight = FontWeight.SemiBold,
                             )
                         }
+                    }
+                    Spacer(Modifier.height(7.dp))
+                    Surface(
+                        color = Color(0xFFFEF2F2),
+                        shape = CircleShape,
+                    ) {
+                        Text(
+                            "你写的：${error.userInput}",
+                            modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp),
+                            color = ProfileDanger,
+                            fontSize = 10.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
                     }
                     error.phonetic?.takeIf { it.isNotBlank() }?.let { phonetic ->
                         Spacer(Modifier.height(7.dp))

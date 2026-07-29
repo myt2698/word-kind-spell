@@ -226,6 +226,17 @@ async function main() {
           reason: "clear uses the ear spelling for /ɪə/ in the configured British pronunciation",
         }];
       }
+      if (
+        word.word === "different" &&
+        word.tagList.some((tag) => tag.startsWith("ere"))
+      ) {
+        return [{
+          word: word.word,
+          currentTag: word.tagList.find((tag) => tag.startsWith("ere")),
+          expectedTag: null,
+          reason: "the letters ere cross the reviewed dif-fer-ent syllable boundary",
+        }];
+      }
       return [];
     });
 

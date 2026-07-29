@@ -232,9 +232,24 @@ export default function ProfilePage() {
             ) : (
               errors.map((err) => (
                 <div key={err.id} className="bg-white rounded-xl border border-gray-100 p-4">
-                  <div className="flex items-center gap-2 mb-2">
+                  <div className="mb-2 flex flex-wrap items-center gap-2">
                     <XCircle className="w-4 h-4 text-red-500 shrink-0" />
                     <span className="text-sm font-semibold">{err.word}</span>
+                    <span
+                      className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                        err.level === 1
+                          ? "bg-red-100 text-red-600"
+                          : err.level === 2
+                            ? "bg-amber-100 text-amber-700"
+                            : "bg-emerald-100 text-emerald-700"
+                      }`}
+                    >
+                      {err.level === 1
+                        ? "Lv.1 陌生"
+                        : err.level === 2
+                          ? "Lv.2 熟悉"
+                          : "Lv.3 掌握"}
+                    </span>
                     <span className="text-xs text-red-500 bg-red-50 px-2 py-0.5 rounded-full">你写的：{err.userInput}</span>
                   </div>
                   {err.phonetic && <p className="text-xs text-gray-400 font-mono mb-1">{err.phonetic}</p>}

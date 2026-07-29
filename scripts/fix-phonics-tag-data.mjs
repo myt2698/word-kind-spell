@@ -59,6 +59,7 @@ const removals = {
     "our /aʊə/",
     "our/ə/",
   ],
+  different: ["ere/eir /eə/", "ere /ɪə/"],
   mouth: ["th", "th /ð/"],
   why: ["wh /h/"],
 };
@@ -70,7 +71,9 @@ const query = async (sql, values = []) => {
 };
 
 try {
-  const targetWords = Object.keys(additions);
+  const targetWords = [
+    ...new Set([...Object.keys(additions), ...Object.keys(removals)]),
+  ];
   const words = await query(
     `SELECT id, userId, word
        FROM words

@@ -68,12 +68,24 @@ type PriorityGraphemeMatch = {
 function findPriorityGraphemes(word: string): PriorityGraphemeMatch[] {
   const lower = word.toLowerCase();
   const matches: PriorityGraphemeMatch[] = [];
+  const reviewedSyllables = CURATED_WORD_DIVISIONS[lower];
+  const reviewedBoundaries = new Set<number>();
+  let reviewedOffset = 0;
+  for (const syllable of reviewedSyllables?.slice(0, -1) ?? []) {
+    reviewedOffset += syllable.length;
+    reviewedBoundaries.add(reviewedOffset);
+  }
   let index = 0;
 
   while (index < lower.length) {
-    const grapheme = PRIORITY_GRAPHEMES.find(({ text }) =>
-      lower.startsWith(text, index),
-    );
+    const grapheme = PRIORITY_GRAPHEMES.find(({ text, type }) => {
+      if (!lower.startsWith(text, index)) return false;
+      if (type === "consonant_blend") return true;
+      const end = index + text.length;
+      return ![...reviewedBoundaries].some(
+        (boundary) => boundary > index && boundary < end,
+      );
+    });
     if (!grapheme) {
       index++;
       continue;
@@ -915,11 +927,31 @@ export function generateFillBlank(word: string): {
   hint: string;
 } {
   const lower = word.toLowerCase();
-  if (lower.length <= 3) {
+  const letterPositions = [...lower]
+    .map((character, index) => /[a-z]/.test(character) ? index : -1)
+    .filter((index) => index >= 0);
+  const firstLetterPosition = letterPositions[0];
+  const lastLetterPosition = letterPositions[letterPositions.length - 1];
+
+  if (letterPositions.length === 0) {
     return {
-      display: lower[0] + "_".repeat(lower.length - 1),
-      answerPositions: Array.from({ length: lower.length - 1 }, (_, i) => i + 1),
-      hint: `首字母 ${lower[0]}`,
+      display: lower,
+      answerPositions: [],
+      hint: "没有需要填写的字母",
+    };
+  }
+
+  if (letterPositions.length <= 3) {
+    const answerPositions = letterPositions.slice(1);
+    const answerPositionSet = new Set(answerPositions);
+    return {
+      display: [...lower]
+        .map((character, index) =>
+          answerPositionSet.has(index) ? "_" : character,
+        )
+        .join(""),
+      answerPositions,
+      hint: `首字母 ${lower[firstLetterPosition]}`,
     };
   }
 
@@ -935,33 +967,44 @@ export function generateFillBlank(word: string): {
   }
 
   const show: boolean[] = new Array(lower.length).fill(false);
-  show[0] = true;
-  show[lower.length - 1] = true;
+  show[firstLetterPosition] = true;
+  show[lastLetterPosition] = true;
 
   const answerPositions: number[] = [];
-  for (let i = 1; i < lower.length - 1; i++) {
+  for (const i of letterPositions.slice(1, -1)) {
     if (vowelComboPositions.has(i)) {
       answerPositions.push(i);
     } else if (!show[i]) {
-      if (lower.length > 6 && (i === 2 || i === lower.length - 2)) {
+      if (
+        letterPositions.length > 6 &&
+        (i === letterPositions[2] ||
+          i === letterPositions[letterPositions.length - 2])
+      ) {
         answerPositions.push(i);
       }
     }
   }
 
   if (answerPositions.length === 0) {
-    const hideStart = Math.floor(lower.length * 0.3);
-    const hideEnd = Math.ceil(lower.length * 0.7);
-    for (let i = hideStart; i < hideEnd && i < lower.length - 1; i++) {
-      if (i > 0) answerPositions.push(i);
+    const hideStart = Math.floor(letterPositions.length * 0.3);
+    const hideEnd = Math.ceil(letterPositions.length * 0.7);
+    for (
+      let letterIndex = hideStart;
+      letterIndex < hideEnd && letterIndex < letterPositions.length - 1;
+      letterIndex++
+    ) {
+      if (letterIndex > 0) {
+        answerPositions.push(letterPositions[letterIndex]);
+      }
     }
   }
 
+  const answerPositionSet = new Set(answerPositions);
   let display = "";
   for (let i = 0; i < lower.length; i++) {
-    if (show[i]) {
+    if (!/[a-z]/.test(lower[i]) || show[i]) {
       display += lower[i];
-    } else if (answerPositions.includes(i)) {
+    } else if (answerPositionSet.has(i)) {
       display += "_";
     } else {
       display += lower[i];
@@ -971,7 +1014,7 @@ export function generateFillBlank(word: string): {
   return {
     display,
     answerPositions: [...new Set(answerPositions)].sort((a, b) => a - b),
-    hint: `首字母 ${lower[0]}，尾字母 ${lower[lower.length - 1]}`,
+    hint: `首字母 ${lower[firstLetterPosition]}，尾字母 ${lower[lastLetterPosition]}`,
   };
 }
 

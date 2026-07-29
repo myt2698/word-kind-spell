@@ -190,6 +190,7 @@ class WordMindApi(context: Context) {
                         word = item.optString("word"),
                         phonetic = item.nullableString("phonetic"),
                         definition = item.optString("definition"),
+                        level = item.optInt("level", 1),
                         userInput = item.optString("userInput"),
                         errorType = item.optString("errorType", "other"),
                         practiceMode = item.optString("practiceMode"),

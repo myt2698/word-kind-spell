@@ -1,6 +1,7 @@
 package com.wordmind.app.ui
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -56,9 +57,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.wordmind.app.data.PracticeWord
@@ -75,6 +80,16 @@ private typealias PracticeSubmit = (
     durationMs: Long,
 ) -> Unit
 
+private val PracticeExtraKeys = listOf(
+    ' ' to "空格",
+    ',' to ",",
+    '?' to "?",
+    '.' to ".",
+    '!' to "!",
+    '"' to "\"",
+    '\'' to "'",
+)
+
 private data class LetterToken(
     val id: Int,
     val letter: Char,
@@ -86,10 +101,15 @@ internal fun practiceSpeechRepeatDelay(word: String): Long =
 internal suspend fun autoSpeakPracticeWordTwice(
     word: String,
     speak: (String) -> Unit,
+    example: String? = null,
 ) {
     speak(word)
     delay(practiceSpeechRepeatDelay(word))
     speak(word)
+    selectPracticeExample(example, word)?.let { practiceExample ->
+        delay(practiceSpeechRepeatDelay(word))
+        speak(practiceExample)
+    }
 }
 
 internal data class SessionWordResult(
@@ -108,6 +128,8 @@ internal fun BlocksPracticeMode(
     var index by remember { mutableIntStateOf(0) }
     var pool by remember { mutableStateOf<List<LetterToken>>(emptyList()) }
     var slots by remember { mutableStateOf<List<Int?>>(emptyList()) }
+    var activeSlotIndex by remember { mutableIntStateOf(0) }
+    var highlightedPoolTokenId by remember { mutableStateOf<Int?>(null) }
     var result by remember { mutableStateOf<Boolean?>(null) }
     var score by remember { mutableIntStateOf(0) }
     var sessionResults by remember { mutableStateOf<List<SessionWordResult>>(emptyList()) }
@@ -119,13 +141,18 @@ internal fun BlocksPracticeMode(
 
     LaunchedEffect(current?.id, retryToken) {
         if (current != null) {
-            pool = target.mapIndexed { tokenIndex, char ->
+            val targetTokens = target.mapIndexed { tokenIndex, char ->
                 LetterToken(tokenIndex, char)
-            }.shuffled()
-            slots = List(target.length) { null }
+            }
+            pool = targetTokens.shuffled()
+            slots = target.mapIndexed { tokenIndex, character ->
+                if (character.isWhitespace()) tokenIndex else null
+            }
+            activeSlotIndex = target.indexOfFirst { !it.isWhitespace() }.coerceAtLeast(0)
+            highlightedPoolTokenId = null
             result = null
             startedAt = System.currentTimeMillis()
-            autoSpeakPracticeWordTwice(current.word, speak)
+            autoSpeakPracticeWordTwice(current.word, speak, current.example)
         }
     }
 
@@ -154,6 +181,10 @@ internal fun BlocksPracticeMode(
     val answer = slots.mapNotNull { tokenId ->
         pool.firstOrNull { it.id == tokenId }?.letter
     }.joinToString("")
+    val contextAnswer = slots.map { tokenId ->
+        pool.firstOrNull { it.id == tokenId }?.letter ?: ' '
+    }.joinToString("").trimEnd()
+    val hasContextExample = selectPracticeExample(current.example, current.word) != null
 
     Column(
         modifier = Modifier
@@ -173,43 +204,76 @@ internal fun BlocksPracticeMode(
             word = current,
             speak = speak,
             accent = PracticeIndigo,
-            result = result,
+        )
+        PracticeExampleCard(
+            word = current,
+            accent = PracticeIndigo,
+            speak = speak,
+            reveal = result != null,
+            answer = contextAnswer,
+            activeInputIndex = activeSlotIndex,
+            onInputBlockClick = if (result == null) {
+                { characterIndex ->
+                    activeSlotIndex = characterIndex
+                    val tokenId = slots.getOrNull(characterIndex)
+                    highlightedPoolTokenId = tokenId
+                    if (tokenId != null) {
+                        slots = slots.toMutableList().also {
+                            it[characterIndex] = null
+                        }
+                    }
+                }
+            } else {
+                null
+            },
         )
         Spacer(Modifier.height(15.dp))
 
-        FlowRow(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.Center,
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            slots.forEachIndexed { slotIndex, tokenId ->
-                val token = pool.firstOrNull { it.id == tokenId }
-                val correctAtPosition = token?.letter == target.getOrNull(slotIndex)
-                LetterBox(
-                    text = token?.letter?.toString().orEmpty(),
-                    color = when {
-                        result == true -> PracticeSuccess
-                        result == false && correctAtPosition -> PracticeSuccess
-                        result == false -> PracticeDanger
-                        token != null -> PracticeIndigo
-                        else -> Color(0xFFCBD5E1)
-                    },
-                    filled = token != null,
-                    dashed = token == null,
-                    onClick = {
-                        if (result == null && tokenId != null) {
-                            slots = slots.toMutableList().also { it[slotIndex] = null }
-                        }
-                    },
-                )
-                Spacer(Modifier.width(7.dp))
+        if (!hasContextExample) {
+            FlowRow(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.Center,
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                slots.forEachIndexed { slotIndex, tokenId ->
+                    val token = pool.firstOrNull { it.id == tokenId }
+                    val correctAtPosition = token?.letter == target.getOrNull(slotIndex)
+                    LetterBox(
+                        text = token?.letter?.toString().orEmpty(),
+                        color = when {
+                            result == true -> PracticeSuccess
+                            result == false && correctAtPosition -> PracticeSuccess
+                            result == false -> PracticeDanger
+                            token != null -> PracticeIndigo
+                            else -> Color(0xFFCBD5E1)
+                        },
+                        filled = token != null,
+                        dashed = token == null,
+                        onClick = {
+                            if (result == null) {
+                                activeSlotIndex = slotIndex
+                                if (tokenId != null) {
+                                    highlightedPoolTokenId = tokenId
+                                    slots = slots.toMutableList().also { it[slotIndex] = null }
+                                } else {
+                                    highlightedPoolTokenId = null
+                                }
+                            }
+                        },
+                    )
+                    Spacer(Modifier.width(7.dp))
+                }
             }
+            Spacer(Modifier.height(22.dp))
         }
-        Spacer(Modifier.height(22.dp))
 
         if (result == null) {
             Text(
-                "点击字母积木，按顺序拼出单词",
+                if (hasContextExample) {
+                    "点击字母积木填入例句，再次点击已选字母可撤回"
+                } else {
+                    "点击字母积木，按顺序拼出单词"
+                },
                 modifier = Modifier.fillMaxWidth(),
                 color = PracticeMuted,
                 fontSize = 12.sp,
@@ -221,19 +285,50 @@ internal fun BlocksPracticeMode(
                 horizontalArrangement = Arrangement.Center,
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                pool.forEach { token ->
+                pool.filterNot { it.letter.isWhitespace() }.forEach { token ->
                     val used = token.id in slots
                     LetterBox(
                         text = token.letter.toString(),
-                        color = if (used) Color(0xFFCBD5E1) else PracticeIndigo,
+                        color = when {
+                            used -> Color(0xFFCBD5E1)
+                            token.id == highlightedPoolTokenId -> Color(0xFFF59E0B)
+                            else -> PracticeIndigo
+                        },
                         filled = !used,
                         dashed = false,
-                        enabled = !used,
                         onClick = {
-                            val firstEmpty = slots.indexOfFirst { it == null }
-                            if (firstEmpty >= 0) {
-                                slots = slots.toMutableList().also {
-                                    it[firstEmpty] = token.id
+                            if (used) {
+                                val usedSlot = slots.indexOf(token.id)
+                                if (usedSlot >= 0) {
+                                    activeSlotIndex = usedSlot
+                                    highlightedPoolTokenId = token.id
+                                    slots = slots.toMutableList().also {
+                                        it[usedSlot] = null
+                                    }
+                                }
+                            } else {
+                                val destination = activeSlotIndex
+                                    .takeIf { it in slots.indices }
+                                    ?: slots.indexOfFirst { it == null }
+                                if (destination >= 0) {
+                                    highlightedPoolTokenId = null
+                                    val nextSlots = slots.toMutableList().also {
+                                        it[destination] = token.id
+                                    }
+                                    slots = nextSlots
+                                    val nextEmptyAfter = ((destination + 1)..nextSlots.lastIndex)
+                                        .firstOrNull { nextSlots[it] == null }
+                                        ?: -1
+                                    val nextEmpty = if (nextEmptyAfter >= 0) {
+                                        nextEmptyAfter
+                                    } else {
+                                        nextSlots.indexOfFirst { it == null }
+                                    }
+                                    activeSlotIndex = if (nextEmpty >= 0) {
+                                        nextEmpty
+                                    } else {
+                                        destination
+                                    }
                                 }
                             }
                         },
@@ -317,7 +412,7 @@ internal fun FillBlankPracticeMode(
             activeBlankIndex = 0
             result = null
             startedAt = System.currentTimeMillis()
-            autoSpeakPracticeWordTwice(current.word, speak)
+            autoSpeakPracticeWordTwice(current.word, speak, current.example)
         }
     }
 
@@ -347,6 +442,10 @@ internal fun FillBlankPracticeMode(
     val answer = target.mapIndexed { charIndex, char ->
         answers[charIndex] ?: char
     }.joinToString("")
+    val contextAnswer = target.mapIndexed { charIndex, char ->
+        if (charIndex in hiddenPositions) answers[charIndex] ?: ' ' else char
+    }.joinToString("").trimEnd()
+    val hasContextExample = selectPracticeExample(current.example, current.word) != null
 
     Column(
         modifier = Modifier
@@ -367,80 +466,99 @@ internal fun FillBlankPracticeMode(
             speak = speak,
             accent = PracticeSuccess,
         )
+        PracticeExampleCard(
+            word = current,
+            accent = PracticeSuccess,
+            speak = speak,
+            reveal = result != null,
+            answer = contextAnswer,
+            activeInputIndex = activePosition,
+            onInputBlockClick = if (result == null) {
+                { characterIndex ->
+                    val blankIndex = hiddenPositions.indexOf(characterIndex)
+                    if (blankIndex >= 0) activeBlankIndex = blankIndex
+                }
+            } else {
+                null
+            },
+        )
         Spacer(Modifier.height(14.dp))
 
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(16.dp),
-            colors = CardDefaults.cardColors(containerColor = Color.White),
-            border = CardDefaults.outlinedCardBorder(),
-        ) {
-            Column(Modifier.padding(14.dp)) {
-                Text(
-                    "点击虚线框，选择字母填入",
-                    modifier = Modifier.fillMaxWidth(),
-                    color = PracticeMuted,
-                    fontSize = 11.sp,
-                    textAlign = TextAlign.Center,
-                )
-                Spacer(Modifier.height(12.dp))
-                FlowRow(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.Center,
-                    verticalArrangement = Arrangement.spacedBy(7.dp),
-                ) {
-                    target.forEachIndexed { charIndex, char ->
-                        val blankListIndex = hiddenPositions.indexOf(charIndex)
-                        if (blankListIndex >= 0) {
-                            val answerChar = answers[charIndex]
-                            LetterBox(
-                                text = answerChar?.toString() ?: "?",
-                                color = when {
-                                    result == true -> PracticeSuccess
-                                    result == false && answerChar == char -> PracticeSuccess
-                                    result == false -> PracticeDanger
-                                    activePosition == charIndex -> PracticeSuccess
-                                    else -> Color(0xFF6EE7B7)
-                                },
-                                filled = answerChar != null,
-                                dashed = answerChar == null,
-                                onClick = {
-                                    if (result == null) activeBlankIndex = blankListIndex
-                                },
-                            )
-                        } else {
-                            LetterBox(
-                                text = char.toString(),
-                                color = Color(0xFF475569),
-                                filled = true,
-                                dashed = false,
-                                enabled = false,
-                                onClick = {},
-                            )
+        if (!hasContextExample) {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = Color.White),
+                border = CardDefaults.outlinedCardBorder(),
+            ) {
+                Column(Modifier.padding(14.dp)) {
+                    Text(
+                        "点击虚线框，选择字母填入",
+                        modifier = Modifier.fillMaxWidth(),
+                        color = PracticeMuted,
+                        fontSize = 11.sp,
+                        textAlign = TextAlign.Center,
+                    )
+                    Spacer(Modifier.height(12.dp))
+                    FlowRow(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.Center,
+                        verticalArrangement = Arrangement.spacedBy(7.dp),
+                    ) {
+                        target.forEachIndexed { charIndex, char ->
+                            val blankListIndex = hiddenPositions.indexOf(charIndex)
+                            if (blankListIndex >= 0) {
+                                val answerChar = answers[charIndex]
+                                LetterBox(
+                                    text = answerChar?.toString() ?: "?",
+                                    color = when {
+                                        result == true -> PracticeSuccess
+                                        result == false && answerChar == char -> PracticeSuccess
+                                        result == false -> PracticeDanger
+                                        activePosition == charIndex -> PracticeSuccess
+                                        else -> Color(0xFF6EE7B7)
+                                    },
+                                    filled = answerChar != null,
+                                    dashed = answerChar == null,
+                                    onClick = {
+                                        if (result == null) activeBlankIndex = blankListIndex
+                                    },
+                                )
+                            } else {
+                                LetterBox(
+                                    text = char.toString(),
+                                    color = Color(0xFF475569),
+                                    filled = true,
+                                    dashed = false,
+                                    enabled = false,
+                                    onClick = {},
+                                )
+                            }
+                            Spacer(Modifier.width(5.dp))
                         }
-                        Spacer(Modifier.width(5.dp))
                     }
+                    Spacer(Modifier.height(9.dp))
+                    Text(
+                        if (target.length > 1) {
+                            "首字母 ${target.first()}，尾字母 ${target.last()}"
+                        } else {
+                            "填写缺失字母"
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        color = PracticeMuted,
+                        fontSize = 10.sp,
+                        textAlign = TextAlign.Center,
+                    )
                 }
-                Spacer(Modifier.height(9.dp))
-                Text(
-                    if (target.length > 1) {
-                        "首字母 ${target.first()}，尾字母 ${target.last()}"
-                    } else {
-                        "填写缺失字母"
-                    },
-                    modifier = Modifier.fillMaxWidth(),
-                    color = PracticeMuted,
-                    fontSize = 10.sp,
-                    textAlign = TextAlign.Center,
-                )
             }
+            Spacer(Modifier.height(14.dp))
         }
-        Spacer(Modifier.height(14.dp))
 
         if (result == null) {
             PracticeKeyboard(
                 accent = PracticeSuccess,
                 canSubmit = allFilled,
+                includeSpace = false,
                 onLetter = { letter ->
                     val position = activePosition ?: return@PracticeKeyboard
                     answers = answers + (position to letter)
@@ -514,6 +632,7 @@ internal fun FlashPracticeMode(
     var index by remember { mutableIntStateOf(0) }
     var phase by remember { mutableStateOf(FlashPhase.Show) }
     var input by remember { mutableStateOf("") }
+    var activeInputIndex by remember { mutableIntStateOf(0) }
     var timeLeft by remember { mutableIntStateOf(3) }
     var score by remember { mutableIntStateOf(0) }
     var sessionResults by remember { mutableStateOf<List<SessionWordResult>>(emptyList()) }
@@ -527,9 +646,10 @@ internal fun FlashPracticeMode(
         if (current != null && phase == FlashPhase.Show) {
             startedAt = System.currentTimeMillis()
             input = ""
+            activeInputIndex = 0
             timeLeft = 3
             launch {
-                autoSpeakPracticeWordTwice(current.word, speak)
+                autoSpeakPracticeWordTwice(current.word, speak, current.example)
             }
             repeat(3) {
                 delay(1_000)
@@ -560,6 +680,7 @@ internal fun FlashPracticeMode(
         EmptyPracticeMode(onBack)
         return
     }
+    val hasContextExample = selectPracticeExample(current.example, current.word) != null
 
     Column(
         modifier = Modifier
@@ -578,56 +699,64 @@ internal fun FlashPracticeMode(
 
         when (phase) {
             FlashPhase.Show -> {
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.cardColors(containerColor = Color.White),
-                    border = CardDefaults.outlinedCardBorder(),
-                ) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 22.dp, vertical = 30.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally,
+                Column {
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(16.dp),
+                        colors = CardDefaults.cardColors(containerColor = Color.White),
+                        border = CardDefaults.outlinedCardBorder(),
                     ) {
-                        Text("记住这个单词！", color = PracticeMuted, fontSize = 13.sp)
-                        Spacer(Modifier.height(12.dp))
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(current.word, fontSize = 30.sp, fontWeight = FontWeight.Bold)
-                            IconButton(onClick = { speak(current.word) }) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 22.dp, vertical = 30.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                        ) {
+                            Text("记住这个单词！", color = PracticeMuted, fontSize = 13.sp)
+                            Spacer(Modifier.height(12.dp))
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(current.word, fontSize = 30.sp, fontWeight = FontWeight.Bold)
+                                IconButton(onClick = { speak(current.word) }) {
+                                    Icon(
+                                        Icons.AutoMirrored.Filled.VolumeUp,
+                                        contentDescription = "重听发音",
+                                        tint = PracticeAmber,
+                                    )
+                                }
+                            }
+                            current.phonetic?.let {
+                                Text(it, color = PracticeMuted, fontSize = 12.sp)
+                            }
+                            Spacer(Modifier.height(9.dp))
+                            Text(
+                                current.definition,
+                                color = Color(0xFF475569),
+                                fontSize = 14.sp,
+                                textAlign = TextAlign.Center,
+                            )
+                            Spacer(Modifier.height(20.dp))
+                            Row(verticalAlignment = Alignment.CenterVertically) {
                                 Icon(
-                                    Icons.AutoMirrored.Filled.VolumeUp,
-                                    contentDescription = "重听发音",
+                                    Icons.Default.AccessTime,
+                                    contentDescription = null,
                                     tint = PracticeAmber,
+                                )
+                                Spacer(Modifier.width(7.dp))
+                                Text(
+                                    "$timeLeft",
+                                    color = PracticeAmber,
+                                    fontSize = 25.sp,
+                                    fontWeight = FontWeight.Bold,
                                 )
                             }
                         }
-                        current.phonetic?.let {
-                            Text(it, color = PracticeMuted, fontSize = 12.sp)
-                        }
-                        Spacer(Modifier.height(9.dp))
-                        Text(
-                            current.definition,
-                            color = Color(0xFF475569),
-                            fontSize = 14.sp,
-                            textAlign = TextAlign.Center,
-                        )
-                        Spacer(Modifier.height(20.dp))
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(
-                                Icons.Default.AccessTime,
-                                contentDescription = null,
-                                tint = PracticeAmber,
-                            )
-                            Spacer(Modifier.width(7.dp))
-                            Text(
-                                "$timeLeft",
-                                color = PracticeAmber,
-                                fontSize = 25.sp,
-                                fontWeight = FontWeight.Bold,
-                            )
-                        }
                     }
+                    PracticeExampleCard(
+                        word = current,
+                        accent = PracticeAmber,
+                        speak = speak,
+                        reveal = true,
+                    )
                 }
             }
             FlashPhase.Input -> {
@@ -655,32 +784,67 @@ internal fun FlashPracticeMode(
                         )
                     }
                 }
-                Spacer(Modifier.height(18.dp))
-                Surface(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(58.dp),
-                    shape = RoundedCornerShape(14.dp),
-                    color = Color.White,
-                    border = BorderStroke(2.dp, Color(0xFFFCD34D)),
-                ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Text(
-                            input.ifBlank { "点击键盘输入单词" },
-                            color = if (input.isBlank()) Color(0xFFCBD5E1) else Color(0xFF0F172A),
-                            fontSize = if (input.isBlank()) 13.sp else 21.sp,
-                            fontFamily = FontFamily.Monospace,
-                            fontWeight = FontWeight.Bold,
-                            letterSpacing = if (input.isBlank()) 0.sp else 4.sp,
-                        )
+                PracticeExampleCard(
+                    word = current,
+                    accent = PracticeAmber,
+                    speak = speak,
+                    answer = input,
+                    activeInputIndex = activeInputIndex,
+                    onInputBlockClick = { characterIndex ->
+                        activeInputIndex = characterIndex
+                    },
+                )
+                if (!hasContextExample) {
+                    Spacer(Modifier.height(18.dp))
+                    Surface(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(58.dp),
+                        shape = RoundedCornerShape(14.dp),
+                        color = Color.White,
+                        border = BorderStroke(2.dp, Color(0xFFFCD34D)),
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Text(
+                                input.ifBlank { "点击键盘输入单词" },
+                                color = if (input.isBlank()) Color(0xFFCBD5E1) else Color(0xFF0F172A),
+                                fontSize = if (input.isBlank()) 13.sp else 21.sp,
+                                fontFamily = FontFamily.Monospace,
+                                fontWeight = FontWeight.Bold,
+                                letterSpacing = if (input.isBlank()) 0.sp else 4.sp,
+                            )
+                        }
                     }
                 }
                 Spacer(Modifier.height(16.dp))
                 PracticeKeyboard(
                     accent = PracticeAmber,
                     canSubmit = input.isNotBlank(),
-                    onLetter = { input += it },
-                    onDelete = { input = input.dropLast(1) },
+                    onLetter = { character ->
+                        val characters = input.toMutableList()
+                        while (characters.size <= activeInputIndex) {
+                            characters += '\u00A0'
+                        }
+                        characters[activeInputIndex] = character
+                        input = characters.joinToString("")
+                        val nextEmpty = ((activeInputIndex + 1)..characters.lastIndex)
+                            .firstOrNull {
+                                characters[it] == '\u00A0' || characters[it] == ' '
+                            }
+                            ?: -1
+                        activeInputIndex = if (nextEmpty >= 0) {
+                            nextEmpty
+                        } else {
+                            (activeInputIndex + 1).coerceAtMost(target.lastIndex.coerceAtLeast(0))
+                        }
+                    },
+                    onDelete = {
+                        if (activeInputIndex in input.indices) {
+                            input = input.toMutableList().also {
+                                it[activeInputIndex] = '\u00A0'
+                            }.joinToString("").trimEnd()
+                        }
+                    },
                     onSubmit = {
                         val correct = input.equals(target, ignoreCase = true)
                         phase = FlashPhase.Result
@@ -1055,7 +1219,6 @@ private fun PracticePromptCard(
     word: PracticeWord,
     speak: (String) -> Unit,
     accent: Color,
-    result: Boolean? = null,
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -1091,18 +1254,82 @@ private fun PracticePromptCard(
                 textAlign = TextAlign.Center,
                 lineHeight = 21.sp,
             )
-            if (result != null && !word.example.isNullOrBlank()) {
-                Spacer(Modifier.height(11.dp))
-                Surface(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(10.dp),
-                    color = accent.copy(alpha = 0.08f),
+        }
+    }
+}
+
+@Composable
+private fun PracticeExampleCard(
+    word: PracticeWord,
+    accent: Color,
+    speak: (String) -> Unit,
+    reveal: Boolean = false,
+    answer: String = "",
+    activeInputIndex: Int? = null,
+    onInputBlockClick: ((Int) -> Unit)? = null,
+) {
+    val example = selectPracticeExample(word.example, word.word) ?: return
+    val exampleBackground = when (accent) {
+        PracticeIndigo -> Color(0xFFF3F2FF)
+        PracticeSuccess -> Color(0xFFECFDF5)
+        PracticeAmber -> Color(0xFFFFF8E6)
+        else -> Color(0xFFF8FAFC)
+    }
+    val exampleBorder = when (accent) {
+        PracticeIndigo -> Color(0xFFC7C3FF)
+        PracticeSuccess -> Color(0xFFA7F3D0)
+        PracticeAmber -> Color(0xFFFDE68A)
+        else -> Color(0xFFE2E8F0)
+    }
+
+    Spacer(Modifier.height(10.dp))
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(13.dp),
+        color = exampleBackground,
+        border = BorderStroke(1.dp, exampleBorder),
+        shadowElevation = 1.dp,
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 10.dp, vertical = 12.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            if (reveal) {
+                Text(
+                    highlightPracticeWord(example, word.word, accent),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 38.dp),
+                    color = Color(0xFF334155),
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Medium,
+                    lineHeight = 30.sp,
+                    textAlign = TextAlign.Center,
+                )
+            } else {
+                PracticeExampleInputBlocks(
+                    example = example,
+                    word = word.word,
+                    answer = answer,
+                    activeInputIndex = activeInputIndex,
+                    onInputBlockClick = onInputBlockClick,
+                )
+            }
+            if (reveal) {
+                IconButton(
+                    onClick = { speak(example) },
+                    modifier = Modifier
+                        .align(Alignment.CenterEnd)
+                        .size(34.dp),
                 ) {
-                    Column(Modifier.padding(10.dp)) {
-                        Text("例句", color = accent, fontSize = 10.sp, fontWeight = FontWeight.Medium)
-                        Spacer(Modifier.height(3.dp))
-                        Text(word.example, color = Color(0xFF475569), fontSize = 12.sp)
-                    }
+                    Icon(
+                        Icons.AutoMirrored.Filled.VolumeUp,
+                        contentDescription = "朗读完整例句",
+                        tint = accent,
+                        modifier = Modifier.size(20.dp),
+                    )
                 }
             }
         }
@@ -1159,7 +1386,7 @@ private fun PracticeAnswerResult(
             }
             Spacer(Modifier.height(6.dp))
             Text(word.definition, color = Color(0xFF475569), fontSize = 13.sp)
-            word.example?.takeIf { it.isNotBlank() }?.let {
+            selectPracticeExample(word.example, word.word)?.let {
                 Spacer(Modifier.height(9.dp))
                 Surface(
                     modifier = Modifier.fillMaxWidth(),
@@ -1168,13 +1395,208 @@ private fun PracticeAnswerResult(
                 ) {
                     Column(Modifier.padding(9.dp)) {
                         Text("例句", color = accent, fontSize = 10.sp)
-                        Text(it, color = Color(0xFF475569), fontSize = 12.sp)
+                        Text(
+                            highlightPracticeWord(it, word.word, accent),
+                            color = Color(0xFF475569),
+                            fontSize = 11.sp,
+                        )
                     }
                 }
             }
             if (!correct) {
                 Spacer(Modifier.height(7.dp))
                 Text("你的输入：$userInput", color = PracticeMuted, fontSize = 11.sp)
+            }
+        }
+    }
+}
+
+private fun selectPracticeExample(example: String?, word: String): String? {
+    val candidates = example
+        ?.lineSequence()
+        ?.map { it.trim() }
+        ?.filter { it.isNotEmpty() }
+        ?.toList()
+        .orEmpty()
+    if (candidates.isEmpty()) return null
+
+    val target = word.trim()
+    if (target.isEmpty()) return null
+    val targetPattern = Regex(
+        "(?i)(?<![a-z])${Regex.escape(target)}(?![a-z])",
+    )
+    return candidates.firstOrNull { targetPattern.containsMatchIn(it) }
+}
+
+private fun highlightPracticeWord(
+    example: String,
+    word: String,
+    accent: Color,
+): AnnotatedString {
+    val target = word.trim()
+    if (target.isEmpty()) return AnnotatedString(example)
+
+    val targetPattern = Regex(
+        "(?i)(?<![a-z])${Regex.escape(target)}(?![a-z])",
+    )
+    val matches = targetPattern.findAll(example).toList()
+    if (matches.isEmpty()) return AnnotatedString(example)
+
+    return buildAnnotatedString {
+        var cursor = 0
+        matches.forEach { match ->
+            append(example.substring(cursor, match.range.first))
+            withStyle(SpanStyle(color = accent, fontWeight = FontWeight.Bold)) {
+                append(match.value)
+            }
+            cursor = match.range.last + 1
+        }
+        if (cursor < example.length) {
+            append(example.substring(cursor))
+        }
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun PracticeExampleInputBlocks(
+    example: String,
+    word: String,
+    answer: String,
+    activeInputIndex: Int?,
+    onInputBlockClick: ((Int) -> Unit)?,
+) {
+    val target = word.trim()
+    val targetPattern = Regex(
+        "(?i)(?<![a-z])${Regex.escape(target)}(?![a-z])",
+    )
+    val match = target.takeIf { it.isNotEmpty() }?.let { targetPattern.find(example) }
+    if (match == null) {
+        Text(
+            example,
+            modifier = Modifier.fillMaxWidth(),
+            color = Color(0xFF334155),
+            fontSize = 16.sp,
+            fontWeight = FontWeight.Medium,
+            lineHeight = 24.sp,
+            textAlign = TextAlign.Center,
+        )
+        return
+    }
+
+    val prefix = example.substring(0, match.range.first)
+    val suffix = example.substring(match.range.last + 1)
+    val compactLayout = match.value.count { !it.isWhitespace() } <= 7 &&
+        example.length <= 34
+
+    if (compactLayout) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.Center,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            PracticeExampleText(prefix)
+            PracticeInputBlockSequence(
+                expected = match.value,
+                answer = answer,
+                activeInputIndex = activeInputIndex,
+                onInputBlockClick = onInputBlockClick,
+            )
+            PracticeExampleText(suffix)
+        }
+    } else {
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            prefix.trimEnd().takeIf { it.isNotEmpty() }?.let {
+                PracticeExampleText(it, Modifier.fillMaxWidth())
+                Spacer(Modifier.height(6.dp))
+            }
+            FlowRow(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.Center,
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                PracticeInputBlockSequence(
+                    expected = match.value,
+                    answer = answer,
+                    activeInputIndex = activeInputIndex,
+                    onInputBlockClick = onInputBlockClick,
+                )
+                suffix.trimStart().takeIf { it.isNotEmpty() }?.let {
+                    PracticeExampleText(it)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun PracticeExampleText(
+    text: String,
+    modifier: Modifier = Modifier,
+) {
+    Text(
+        text,
+        modifier = modifier,
+        color = Color(0xFF334155),
+        fontSize = 16.sp,
+        fontWeight = FontWeight.Medium,
+        lineHeight = 30.sp,
+        textAlign = TextAlign.Center,
+    )
+}
+
+@Composable
+private fun PracticeInputBlockSequence(
+    expected: String,
+    answer: String,
+    activeInputIndex: Int?,
+    onInputBlockClick: ((Int) -> Unit)?,
+) {
+    expected.forEachIndexed { characterIndex, expectedCharacter ->
+        if (expectedCharacter.isWhitespace()) {
+            Spacer(Modifier.width(7.dp))
+        } else {
+            val enteredCharacter = answer.getOrNull(characterIndex)
+            val hasInput = enteredCharacter != null &&
+                !enteredCharacter.isWhitespace() &&
+                enteredCharacter != '\u00A0'
+            val isActive = characterIndex == activeInputIndex
+            val baseModifier = Modifier
+                .padding(horizontal = 1.5.dp)
+                .size(width = 27.dp, height = 32.dp)
+            val blockModifier = if (onInputBlockClick != null) {
+                baseModifier.clickable {
+                    onInputBlockClick(characterIndex)
+                }
+            } else {
+                baseModifier
+            }
+            Surface(
+                modifier = blockModifier,
+                shape = RoundedCornerShape(6.dp),
+                color = when {
+                    isActive -> Color(0xFFFFE0A3)
+                    hasInput -> Color(0xFFFFFBEB)
+                    else -> Color.White
+                },
+                border = BorderStroke(
+                    if (isActive) 2.5.dp else 1.5.dp,
+                    if (isActive) Color(0xFFD97706) else Color(0xFFF59E0B),
+                ),
+                shadowElevation = if (isActive) 4.dp else 0.dp,
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Text(
+                        text = if (hasInput) enteredCharacter.toString() else "",
+                        color = Color(0xFFF59E0B),
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold,
+                        textAlign = TextAlign.Center,
+                    )
+                }
             }
         }
     }
@@ -1213,6 +1635,7 @@ private fun LetterBox(
 private fun PracticeKeyboard(
     accent: Color,
     canSubmit: Boolean,
+    includeSpace: Boolean = true,
     onLetter: (Char) -> Unit,
     onDelete: () -> Unit,
     onSubmit: () -> Unit,
@@ -1228,6 +1651,20 @@ private fun PracticeKeyboard(
         ) {
             KeyboardRow("qwertyuiop", accent, onLetter)
             KeyboardRow("asdfghjkl", accent, onLetter)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                PracticeExtraKeys
+                    .filter { (value, _) -> includeSpace || value != ' ' }
+                    .forEach { (value, label) ->
+                    KeyboardTextKey(
+                        label = label,
+                        onClick = { onLetter(value) },
+                        modifier = Modifier.weight(if (value == ' ') 2f else 1f),
+                    )
+                }
+            }
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(4.dp),
@@ -1306,6 +1743,19 @@ private fun KeyboardLetterKey(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    KeyboardTextKey(
+        label = letter.toString(),
+        onClick = onClick,
+        modifier = modifier,
+    )
+}
+
+@Composable
+private fun KeyboardTextKey(
+    label: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
     Surface(
         onClick = onClick,
         modifier = modifier.height(42.dp),
@@ -1315,9 +1765,9 @@ private fun KeyboardLetterKey(
     ) {
         Box(contentAlignment = Alignment.Center) {
             Text(
-                letter.toString(),
+                label,
                 color = Color(0xFF334155),
-                fontSize = 14.sp,
+                fontSize = if (label == "空格") 11.sp else 14.sp,
                 fontWeight = FontWeight.SemiBold,
             )
         }
@@ -1492,16 +1942,28 @@ private fun EmptyPracticeMode(onBack: () -> Unit) {
 }
 
 private fun practiceTarget(word: String): String =
-    word.lowercase().filter { it in 'a'..'z' }
+    word
+        .lowercase()
+        .replace('’', '\'')
+        .replace('‘', '\'')
+        .replace('“', '"')
+        .replace('”', '"')
+        .filter { it in 'a'..'z' || it in " ,?.!\"'" }
+        .trim()
 
 private fun fillBlankPositions(word: String): List<Int> {
-    if (word.isEmpty()) return emptyList()
-    if (word.length <= 3) return (1 until word.length).toList().ifEmpty { listOf(0) }
+    val letterPositions = word.indices.filter { word[it].isLetter() }
+    if (letterPositions.isEmpty()) return emptyList()
+    if (letterPositions.size <= 3) {
+        return letterPositions.drop(1).ifEmpty { listOf(letterPositions.first()) }
+    }
 
-    val start = floor(word.length * 0.3).toInt().coerceAtLeast(1)
-    val end = ceil(word.length * 0.7).toInt().coerceAtMost(word.lastIndex)
-    return (start until end).toList().ifEmpty {
-        listOf((word.length / 2).coerceIn(1, word.lastIndex - 1))
+    val start = floor(letterPositions.size * 0.3).toInt().coerceAtLeast(1)
+    val end = ceil(letterPositions.size * 0.7)
+        .toInt()
+        .coerceAtMost(letterPositions.lastIndex)
+    return (start until end).map { letterPositions[it] }.ifEmpty {
+        listOf(letterPositions[letterPositions.size / 2])
     }
 }
 

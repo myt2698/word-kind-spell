@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   analyzeWordForStudy,
   formatSyllableDivision,
+  generateFillBlank,
   splitSyllables,
 } from "../src/utils/phonics";
 
@@ -262,6 +263,18 @@ describe("phonics analysis", () => {
     );
   });
 
+  it("does not join ere across syllables in different", () => {
+    const analysis = analyzeWordForStudy("different");
+
+    expect(analysis.syllables).toEqual(["dif", "fer", "ent"]);
+    expect(analysis.blocks.map((block) => block.letters).join("")).toBe(
+      "different",
+    );
+    expect(analysis.patterns).not.toContainEqual(
+      expect.objectContaining({ text: "ere" }),
+    );
+  });
+
   it("keeps spelling blocks faithful for spoken abbreviations", () => {
     const analysis = analyzeWordForStudy("Mr");
 
@@ -292,5 +305,30 @@ describe("phonics analysis", () => {
       "ge",
       "ther",
     ]);
+  });
+});
+
+describe("fill-in-the-blank practice", () => {
+  it("keeps spaces structural in phrases", () => {
+    const pattern = generateFillBlank("swimming pool");
+
+    expect(pattern.display[8]).toBe(" ");
+    expect(pattern.answerPositions).not.toContain(8);
+    expect(
+      pattern.answerPositions.every(
+        (position) => /[a-z]/.test("swimming pool"[position]),
+      ),
+    ).toBe(true);
+  });
+
+  it("keeps punctuation structural", () => {
+    const phrase = "say \"Hi!\"";
+    const pattern = generateFillBlank(phrase);
+
+    expect(
+      pattern.answerPositions.every(
+        (position) => /[a-z]/i.test(phrase[position]),
+      ),
+    ).toBe(true);
   });
 });

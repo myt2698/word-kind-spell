@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -833,11 +834,18 @@ private fun PracticeWordSelectionDialog(
     var selected by remember(initialSelected) { mutableStateOf(initialSelected) }
     var selectedTextbookId by remember { mutableStateOf<Int?>(null) }
     var selectedUnitId by remember { mutableStateOf<Int?>(null) }
+    var selectedLevel by remember { mutableStateOf<Int?>(null) }
     val units = remember(textbooks, selectedTextbookId) {
         textbooks.firstOrNull { it.id == selectedTextbookId }?.groups.orEmpty()
     }
     val catalogById = remember(catalogWords) { catalogWords.associateBy { it.id } }
-    val filteredWords = remember(words, catalogById, selectedTextbookId, selectedUnitId) {
+    val filteredWords = remember(
+        words,
+        catalogById,
+        selectedTextbookId,
+        selectedUnitId,
+        selectedLevel,
+    ) {
         words.filter { practiceWord ->
             val catalogWord = catalogById[practiceWord.id]
             val matchesTextbook = selectedTextbookId == null ||
@@ -846,14 +854,16 @@ private fun PracticeWordSelectionDialog(
             val matchesUnit = selectedUnitId == null ||
                 catalogWord?.groupId == selectedUnitId ||
                 catalogWord?.groups?.any { it.groupId == selectedUnitId } == true
-            matchesTextbook && matchesUnit
+            val matchesLevel = selectedLevel == null || practiceWord.level == selectedLevel
+            matchesTextbook && matchesUnit && matchesLevel
         }
     }
     val filteredIds = remember(filteredWords) {
         filteredWords.mapTo(mutableSetOf()) { it.id }
     }
     val allSelected = filteredWords.isNotEmpty() && selected.containsAll(filteredIds)
-    val hasFilters = selectedTextbookId != null || selectedUnitId != null
+    val hasFilters =
+        selectedTextbookId != null || selectedUnitId != null || selectedLevel != null
 
     Dialog(onDismissRequest = onDismiss) {
         Card(
@@ -886,29 +896,42 @@ private fun PracticeWordSelectionDialog(
                     Text("${selected.size} 已选", color = PracticeMuted, fontSize = 11.sp)
                 }
                 HorizontalDivider()
-                Row(
+                Column(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(horizontal = 14.dp, vertical = 10.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        PracticeFilterDropdown(
+                            allLabel = "全部课本",
+                            selectedId = selectedTextbookId,
+                            options = textbooks.map { it.id to it.name },
+                            modifier = Modifier.weight(1f),
+                            onSelect = {
+                                selectedTextbookId = it
+                                selectedUnitId = null
+                            },
+                        )
+                        PracticeFilterDropdown(
+                            allLabel = "全部单元",
+                            selectedId = selectedUnitId,
+                            options = units.map { it.id to it.name },
+                            modifier = Modifier.weight(1f),
+                            enabled = selectedTextbookId != null,
+                            onSelect = { selectedUnitId = it },
+                        )
+                    }
                     PracticeFilterDropdown(
-                        allLabel = "全部课本",
-                        selectedId = selectedTextbookId,
-                        options = textbooks.map { it.id to it.name },
-                        modifier = Modifier.weight(1f),
-                        onSelect = {
-                            selectedTextbookId = it
-                            selectedUnitId = null
-                        },
-                    )
-                    PracticeFilterDropdown(
-                        allLabel = "全部单元",
-                        selectedId = selectedUnitId,
-                        options = units.map { it.id to it.name },
-                        modifier = Modifier.weight(1f),
-                        enabled = selectedTextbookId != null,
-                        onSelect = { selectedUnitId = it },
+                        allLabel = "全部等级",
+                        selectedId = selectedLevel,
+                        options = listOf(
+                            1 to "Lv.1 新学",
+                            2 to "Lv.2 复习中",
+                            3 to "Lv.3 已熟悉",
+                        ),
+                        modifier = Modifier.fillMaxWidth(),
+                        onSelect = { selectedLevel = it },
                     )
                 }
                 HorizontalDivider()
@@ -954,7 +977,7 @@ private fun PracticeWordSelectionDialog(
                     ) {
                         Text(
                             if (hasFilters) {
-                                "该课本或单元下暂无学习中的单词"
+                                "当前筛选条件下暂无学习中的单词"
                             } else {
                                 "暂无学习中的单词"
                             },
@@ -1195,6 +1218,30 @@ private fun PracticeWordListDialog(
                                         }
                                     }
                                     if (allowErrorRemoval) {
+                                        Surface(
+                                            color = when (word.level) {
+                                                1 -> Color(0xFFFEE2E2)
+                                                2 -> Color(0xFFFEF3C7)
+                                                else -> Color(0xFFD1FAE5)
+                                            },
+                                            shape = CircleShape,
+                                        ) {
+                                            Text(
+                                                "Lv.${word.level}",
+                                                modifier = Modifier.padding(
+                                                    horizontal = 8.dp,
+                                                    vertical = 4.dp,
+                                                ),
+                                                color = when (word.level) {
+                                                    1 -> PracticeDanger
+                                                    2 -> Color(0xFFD97706)
+                                                    else -> PracticeSuccess
+                                                },
+                                                fontSize = 10.sp,
+                                                fontWeight = FontWeight.SemiBold,
+                                            )
+                                        }
+                                        Spacer(Modifier.width(4.dp))
                                         TextButton(onClick = { onRemoveError(word) }) {
                                             Text("移除", color = PracticeDanger, fontSize = 11.sp)
                                         }

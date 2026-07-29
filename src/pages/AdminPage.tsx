@@ -27,6 +27,30 @@ import {
 
 type AdminTab = "tags" | "textbooks" | "words";
 
+const tagNameCollator = new Intl.Collator("en", {
+  sensitivity: "base",
+  numeric: true,
+});
+
+function sortTagsAlphabetically<T extends { id: number; name: string }>(
+  tags: T[],
+): T[] {
+  return [...tags].sort((left, right) => {
+    const leftName = left.name.trim();
+    const rightName = right.name.trim();
+    const leftStartsWithLetter = /^[a-z]/i.test(leftName);
+    const rightStartsWithLetter = /^[a-z]/i.test(rightName);
+    if (leftStartsWithLetter !== rightStartsWithLetter) {
+      return leftStartsWithLetter ? -1 : 1;
+    }
+    return (
+      tagNameCollator.compare(leftName, rightName) ||
+      leftName.localeCompare(rightName) ||
+      left.id - right.id
+    );
+  });
+}
+
 export default function AdminPage() {
   const { user, isLoading: authLoading } = useAuth({ redirectOnUnauthenticated: true });
   const navigate = useNavigate();
@@ -168,7 +192,7 @@ function TagManager() {
             暂无标签，点击上方按钮创建
           </div>
         ) : (
-          allTags?.map((tag) => (
+          sortTagsAlphabetically(allTags ?? []).map((tag) => (
             <div
               key={tag.id}
               className="flex items-center gap-3 px-4 py-3 hover:bg-gray-50/50 transition-colors"

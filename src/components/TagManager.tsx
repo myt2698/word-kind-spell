@@ -16,6 +16,30 @@ interface TagManagerProps {
   onClose: () => void;
 }
 
+const tagNameCollator = new Intl.Collator("en", {
+  sensitivity: "base",
+  numeric: true,
+});
+
+function sortTagsAlphabetically<T extends { id: number; name: string }>(
+  tags: T[],
+): T[] {
+  return [...tags].sort((left, right) => {
+    const leftName = left.name.trim();
+    const rightName = right.name.trim();
+    const leftStartsWithLetter = /^[a-z]/i.test(leftName);
+    const rightStartsWithLetter = /^[a-z]/i.test(rightName);
+    if (leftStartsWithLetter !== rightStartsWithLetter) {
+      return leftStartsWithLetter ? -1 : 1;
+    }
+    return (
+      tagNameCollator.compare(leftName, rightName) ||
+      leftName.localeCompare(rightName) ||
+      left.id - right.id
+    );
+  });
+}
+
 export default function TagManager({ open, onClose }: TagManagerProps) {
   const utils = trpc.useUtils();
   const { data: tags } = trpc.tag.listWithCount.useQuery();
@@ -95,7 +119,7 @@ export default function TagManager({ open, onClose }: TagManagerProps) {
         <div className="mt-4 space-y-2">
           <p className="text-xs text-gray-400 font-medium">已有标签</p>
           {tags?.length === 0 && <p className="text-sm text-gray-400 text-center py-4">暂无标签</p>}
-          {tags?.map((tag) => (
+          {sortTagsAlphabetically(tags ?? []).map((tag) => (
             <div key={tag.id} className="flex items-center gap-2 p-2.5 rounded-lg bg-gray-50 group hover:bg-gray-100 transition-colors">
               <span className="text-sm font-medium text-gray-800 truncate flex-1">{tag.name}</span>
               <span className="text-xs text-gray-400">{tag.wordCount} 词</span>

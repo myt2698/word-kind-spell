@@ -51,9 +51,19 @@ import com.wordmind.app.data.Textbook
 import com.wordmind.app.data.UnitGroup
 import com.wordmind.app.data.WordMindApi
 import kotlinx.coroutines.launch
+import java.util.Locale
 
 private val AdminMuted = Color(0xFF64748B)
 private val AdminIndigo = Color(0xFF4F46E5)
+private val AdminTagComparator = compareBy<Tag>(
+    { tag ->
+        val firstCharacter = tag.name.trim().firstOrNull()
+        if (firstCharacter in 'a'..'z' || firstCharacter in 'A'..'Z') 0 else 1
+    },
+    { tag -> tag.name.trim().lowercase(Locale.ROOT) },
+    { tag -> tag.name.trim() },
+    { tag -> tag.id },
+)
 
 private sealed interface DeleteTarget {
     data class Book(val textbook: Textbook) : DeleteTarget
@@ -172,7 +182,10 @@ internal fun AdminScreen(
             if (tags.isEmpty()) {
                 item { EmptyAdmin("暂无标签") }
             } else {
-                items(tags.sortedBy { it.name }, key = { it.id }) { tag ->
+                items(
+                    tags.sortedWith(AdminTagComparator),
+                    key = { it.id },
+                ) { tag ->
                     AdminTagCard(
                         tag = tag,
                         onEdit = {

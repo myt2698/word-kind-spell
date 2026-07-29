@@ -53,17 +53,29 @@ import { speakWord, preloadAudio } from "@/utils/speech";
 import DictationMode from "@/components/DictationMode";
 
 const AUTO_SPEAK_BASE_DELAY_MS = 1100;
+const PRACTICE_EXTRA_KEYS = [
+  { value: " ", label: "空格", wide: true },
+  { value: ",", label: ",", wide: false },
+  { value: "?", label: "?", wide: false },
+  { value: ".", label: ".", wide: false },
+  { value: "!", label: "!", wide: false },
+  { value: '"', label: '"', wide: false },
+  { value: "'", label: "'", wide: false },
+] as const;
 
 function autoSpeakDelay(word: string) {
   return Math.min(2200, AUTO_SPEAK_BASE_DELAY_MS + word.trim().length * 70);
 }
 
 function useAutoSpeakTwice(
-  word?: { id: number; word: string },
+  word?: { id: number; word: string; example?: string | null },
   retryToken = 0,
 ) {
   const wordId = word?.id;
   const wordText = word?.word;
+  const practiceExample = wordText
+    ? pickPracticeExample(word?.example, wordText)
+    : null;
 
   useEffect(() => {
     if (!wordId || !wordText) return;
@@ -76,12 +88,196 @@ function useAutoSpeakTwice(
     const secondReadTimer = window.setTimeout(() => {
       speakWord(wordText, wordId);
     }, autoSpeakDelay(wordText));
+    const exampleReadTimer = practiceExample
+      ? window.setTimeout(() => {
+          speakWord(practiceExample);
+        }, autoSpeakDelay(wordText) * 2)
+      : null;
 
     return () => {
       window.clearTimeout(firstReadTimer);
       window.clearTimeout(secondReadTimer);
+      if (exampleReadTimer !== null) {
+        window.clearTimeout(exampleReadTimer);
+      }
     };
-  }, [wordId, wordText, retryToken]);
+  }, [wordId, wordText, practiceExample, retryToken]);
+}
+
+function pickPracticeExample(
+  example: string | null | undefined,
+  word: string,
+): string | null {
+  const candidates =
+    example
+      ?.split(/\r?\n+/)
+      .map((line) => line.trim())
+      .filter(Boolean) ?? [];
+  if (candidates.length === 0) return null;
+
+  const target = word.trim();
+  if (!target) return null;
+  const escaped = target.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const exactWordPattern = new RegExp(`\\b${escaped}\\b`, "i");
+  return (
+    candidates.find((candidate) => exactWordPattern.test(candidate)) ??
+    null
+  );
+}
+
+function normalizePracticeAnswer(value: string): string {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/[’‘]/g, "'")
+    .replace(/[“”]/g, '"');
+}
+
+function PracticeExampleLine({
+  currentWord,
+  tone,
+  reveal = false,
+  answer = "",
+  activeCharacterIndexes = [],
+  onCharacterSelect,
+}: {
+  currentWord: any;
+  tone: "indigo" | "emerald" | "amber";
+  reveal?: boolean;
+  answer?: string;
+  activeCharacterIndexes?: number[];
+  onCharacterSelect?: (characterIndex: number) => void;
+}) {
+  const example = pickPracticeExample(
+    currentWord.example,
+    currentWord.word,
+  );
+  if (!example) return null;
+
+  const toneClasses = {
+    indigo: "text-indigo-700",
+    emerald: "text-emerald-700",
+    amber: "text-amber-700",
+  }[tone];
+  const surfaceClasses = {
+    indigo: "border-indigo-200 bg-indigo-50/80",
+    emerald: "border-emerald-200 bg-emerald-50/80",
+    amber: "border-amber-200 bg-amber-50/80",
+  }[tone];
+
+  const targetWord = currentWord.word.trim();
+  const escaped = targetWord.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const pieces = example.split(new RegExp(`\\b(${escaped})\\b`, "gi"));
+
+  return (
+    <div className={`relative mb-4 mt-3 flex items-center justify-center rounded-xl border px-4 py-3 text-center shadow-sm ${surfaceClasses} ${toneClasses}`}>
+      <p className="w-full min-w-0 px-8 text-center text-base font-medium leading-10">
+        {pieces.map((piece, pieceIndex) =>
+          piece.toLowerCase() === targetWord.toLowerCase() ? (
+            <strong
+              key={pieceIndex}
+              className={
+                reveal
+                  ? "font-semibold text-emerald-600"
+                  : "font-mono font-bold tracking-wide text-[#F59E0B]"
+              }
+            >
+              {reveal ? (
+                piece
+              ) : (
+                <span
+                  className="mx-1 inline-flex max-w-full flex-wrap justify-center gap-x-1 gap-y-2 align-middle"
+                  aria-label={`填写 ${targetWord}`}
+                >
+                  {[...piece].map((expectedCharacter, characterIndex) => {
+                    if (/\s/.test(expectedCharacter)) {
+                      return (
+                        <span
+                          key={characterIndex}
+                          className="inline-block w-2"
+                          aria-hidden="true"
+                        />
+                      );
+                    }
+                    const enteredCharacter = [...answer][characterIndex];
+                    const hasInput = Boolean(
+                      enteredCharacter &&
+                        enteredCharacter !== " " &&
+                        enteredCharacter !== "\u00a0",
+                    );
+                    const isActive = activeCharacterIndexes.includes(characterIndex);
+                    return (
+                      <button
+                        type="button"
+                        key={characterIndex}
+                        onClick={() => onCharacterSelect?.(characterIndex)}
+                        disabled={!onCharacterSelect}
+                        className={`inline-flex h-8 min-w-7 items-center justify-center rounded-md px-1 text-base font-bold text-[#F59E0B] transition-all ${
+                          isActive
+                            ? "border-[3px] border-amber-600 bg-amber-200 shadow-md ring-2 ring-amber-300"
+                            : `border-2 border-[#F59E0B] ${
+                                hasInput ? "bg-amber-50" : "bg-white/70"
+                              }`
+                        }`}
+                        aria-label={`第 ${characterIndex + 1} 个字母${isActive ? "，正在输入" : ""}`}
+                      >
+                        {hasInput ? enteredCharacter : "\u00a0"}
+                      </button>
+                    );
+                  })}
+                </span>
+              )}
+            </strong>
+          ) : (
+            <span key={pieceIndex}>{piece}</span>
+          ),
+        )}
+      </p>
+      {reveal && (
+        <button
+          type="button"
+          onClick={() => speakWord(example)}
+          className="absolute right-3 top-1/2 -translate-y-1/2 rounded-lg p-1.5 opacity-70 hover:bg-white/70 hover:opacity-100"
+          aria-label="朗读完整例句"
+        >
+          <Volume2 className="h-5 w-5" />
+        </button>
+      )}
+    </div>
+  );
+}
+
+function PracticeExtraKeyboardRow({
+  onKey,
+  tone,
+  includeSpace = true,
+}: {
+  onKey: (key: string) => void;
+  tone: "emerald" | "amber";
+  includeSpace?: boolean;
+}) {
+  const hoverClass =
+    tone === "emerald"
+      ? "hover:border-emerald-300 hover:bg-emerald-50"
+      : "hover:border-amber-300 hover:bg-amber-50";
+
+  return (
+    <div className="mb-1 flex justify-center gap-1 sm:gap-1.5 md:mb-2 md:gap-2">
+      {PRACTICE_EXTRA_KEYS.filter(
+        (key) => includeSpace || key.value !== " ",
+      ).map((key) => (
+        <button
+          type="button"
+          key={key.value}
+          onClick={() => onKey(key.value)}
+          className={`${key.wide ? "min-w-16 flex-[2]" : "min-w-8 flex-1"} h-9 max-w-20 rounded-lg border border-gray-200 bg-white text-sm font-semibold text-gray-700 active:scale-95 ${hoverClass}`}
+          aria-label={key.wide ? "输入空格" : `输入符号 ${key.label}`}
+        >
+          {key.label}
+        </button>
+      ))}
+    </div>
+  );
 }
 
 // ============================================================
@@ -443,6 +639,17 @@ function SpellHome({
                     {w.phonetic && <span className="text-xs text-gray-400 font-mono">{w.phonetic}</span>}
                     {dialogType === "errors" && (
                       <>
+                        <span
+                          className={`shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${
+                            (w.level ?? 1) === 1
+                              ? "bg-red-100 text-red-600"
+                              : (w.level ?? 1) === 2
+                                ? "bg-amber-100 text-amber-700"
+                                : "bg-emerald-100 text-emerald-700"
+                          }`}
+                        >
+                          Lv.{w.level ?? 1}
+                        </span>
                         {w.errorCount ? (
                           <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${c.badge}`}>错{w.errorCount}次</span>
                         ) : null}
@@ -695,6 +902,7 @@ function WordSelectionDialog({
   const { data: textbooks = [] } = trpc.textbook.list.useQuery();
   const [selectedTextbookId, setSelectedTextbookId] = useState<number | null>(null);
   const [selectedUnitId, setSelectedUnitId] = useState<number | null>(null);
+  const [selectedLevel, setSelectedLevel] = useState<number | null>(null);
 
   const units =
     textbooks.find((textbook) => textbook.id === selectedTextbookId)?.groups ?? [];
@@ -708,13 +916,17 @@ function WordSelectionDialog({
       selectedUnitId === null ||
       word.groupId === selectedUnitId ||
       memberships.some((group: any) => group.groupId === selectedUnitId);
-    return matchesTextbook && matchesUnit;
+    const matchesLevel = selectedLevel === null || word.level === selectedLevel;
+    return matchesTextbook && matchesUnit && matchesLevel;
   });
   const filteredWordIds = filteredWords.map((word) => word.id);
   const filteredWordIdSet = new Set(filteredWordIds);
   const allSelected =
     filteredWordIds.length > 0 && filteredWordIds.every((id) => isSelected(id));
-  const hasFilters = selectedTextbookId !== null || selectedUnitId !== null;
+  const hasFilters =
+    selectedTextbookId !== null ||
+    selectedUnitId !== null ||
+    selectedLevel !== null;
 
   const toggleSelectAll = () => {
     if (allSelected) {
@@ -782,6 +994,24 @@ function WordSelectionDialog({
               <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 pointer-events-none" />
             </label>
           </div>
+          <label className="relative block min-w-0">
+            <ShieldCheck className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-amber-500 pointer-events-none" />
+            <select
+              aria-label="筛选学习等级"
+              value={selectedLevel ?? ""}
+              onChange={(event) => {
+                const value = event.target.value;
+                setSelectedLevel(value ? Number(value) : null);
+              }}
+              className="h-9 w-full appearance-none rounded-lg border border-gray-200 bg-white pl-8 pr-7 text-xs text-gray-700 outline-none focus:border-indigo-300 focus:ring-2 focus:ring-indigo-100"
+            >
+              <option value="">全部等级</option>
+              <option value="1">Lv.1 新学</option>
+              <option value="2">Lv.2 复习中</option>
+              <option value="3">Lv.3 已熟悉</option>
+            </select>
+            <ChevronDown className="absolute right-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-gray-400 pointer-events-none" />
+          </label>
           <div className="flex items-center justify-between">
             <button
               onClick={toggleSelectAll}
@@ -1251,6 +1481,8 @@ function BlocksMode({ onBack, words }: { onBack: () => void; words: any[] }) {
   const [index, setIndex] = useState(0);
   const [slots, setSlots] = useState<Array<{ letter: string; poolId: string } | null>>([]);
   const [pool, setPool] = useState<Array<{ id: string; letter: string; comboType?: string; used: boolean }>>([]);
+  const [activeSlotIndex, setActiveSlotIndex] = useState(0);
+  const [highlightedPoolId, setHighlightedPoolId] = useState<string | null>(null);
   const [result, setResult] = useState<"correct" | "wrong" | null>(null);
   const [score, setScore] = useState(0);
   const [showSummary, setShowSummary] = useState(false);
@@ -1258,43 +1490,141 @@ function BlocksMode({ onBack, words }: { onBack: () => void; words: any[] }) {
   const [retryToken, setRetryToken] = useState(0);
 
   const currentWord = words?.[index];
+  const practiceTarget = currentWord
+    ? normalizePracticeAnswer(currentWord.word)
+    : "";
   useAutoSpeakTwice(currentWord, retryToken);
 
   const [letterBlocks, setLetterBlocks] = useState<Array<{ id: string; letters: string; comboType?: string }>>([]);
+  const blockCharacterRanges = letterBlocks.map((block, blockIndex) => {
+    const start = letterBlocks
+      .slice(0, blockIndex)
+      .reduce((total, item) => total + item.letters.length, 0);
+    return { start, end: start + block.letters.length };
+  });
+  const activeCharacterIndexes =
+    blockCharacterRanges[activeSlotIndex]
+      ? Array.from(
+          {
+            length:
+              blockCharacterRanges[activeSlotIndex].end -
+              blockCharacterRanges[activeSlotIndex].start,
+          },
+          (_, offset) => blockCharacterRanges[activeSlotIndex].start + offset,
+        )
+      : [];
+  const currentAnswer = slots.map((slot) => slot?.letter ?? "").join("");
+  const contextAnswer = slots
+    .map((slot, slotIndex) =>
+      slot?.letter ??
+      "\u00a0".repeat(letterBlocks[slotIndex]?.letters.length ?? 1),
+    )
+    .join("")
+    .trimEnd();
+  const hasContextExample = Boolean(
+    currentWord &&
+      pickPracticeExample(currentWord.example, currentWord.word),
+  );
 
   useEffect(() => {
     if (currentWord) {
-      const blocks = generateLetterBlocks(currentWord.word);
+      let practiceBlockIndex = 0;
+      const blocks = (practiceTarget.match(/[a-z]+|[^a-z]+/gi) ?? [])
+        .flatMap((segment) => {
+          if (/^[a-z]+$/i.test(segment)) {
+            return generateLetterBlocks(segment).map((block) => ({
+              ...block,
+              id: `practice-${practiceBlockIndex++}`,
+            }));
+          }
+          return [...segment].map((character) => ({
+            id: `practice-${practiceBlockIndex++}`,
+            letters: character,
+            isCombo: false,
+            comboType: "separator",
+          }));
+        });
       setLetterBlocks(blocks);
       // Scramble pool
-      const poolItems = blocks.map((b) => ({ id: b.id, letter: b.letters, comboType: b.comboType, used: false }));
+      const poolItems = blocks
+        .filter((block) => !/^\s+$/.test(block.letters))
+        .map((block) => ({
+          id: block.id,
+          letter: block.letters,
+          comboType: block.comboType,
+          used: false,
+        }));
       poolItems.sort(() => Math.random() - 0.5);
       setPool(poolItems);
-      setSlots(new Array(blocks.length).fill(null));
+      setSlots(
+        blocks.map((block) =>
+          /^\s+$/.test(block.letters)
+            ? { letter: block.letters, poolId: block.id }
+            : null,
+        ),
+      );
+      setActiveSlotIndex(
+        blocks.findIndex((block) => !/^\s+$/.test(block.letters)),
+      );
+      setHighlightedPoolId(null);
       setResult(null);
     }
-  }, [currentWord?.id, retryToken]);
+  }, [currentWord?.id, practiceTarget, retryToken]);
 
   const handleSlotClick = (slotIdx: number) => {
-    if (!slots[slotIdx] || result) return;
+    if (result) return;
+    if (/^\s+$/.test(letterBlocks[slotIdx]?.letters ?? "")) return;
+    setActiveSlotIndex(slotIdx);
+    if (!slots[slotIdx]) {
+      setHighlightedPoolId(null);
+      return;
+    }
     const { poolId } = slots[slotIdx]!;
+    setHighlightedPoolId(poolId);
     setSlots((s) => { const n = [...s]; n[slotIdx] = null; return n; });
     setPool((p) => p.map((item) => item.id === poolId ? { ...item, used: false } : item));
   };
 
   const handlePoolClick = (poolIdx: number) => {
-    if (pool[poolIdx].used || result) return;
-    const emptySlot = slots.findIndex((s) => !s);
-    if (emptySlot === -1) return;
+    if (result) return;
+    if (pool[poolIdx].used) {
+      const slotIndex = slots.findIndex(
+        (slot) => slot?.poolId === pool[poolIdx].id,
+      );
+      if (slotIndex >= 0) handleSlotClick(slotIndex);
+      return;
+    }
+    const destination =
+      activeSlotIndex >= 0 && activeSlotIndex < slots.length
+        ? activeSlotIndex
+        : slots.findIndex((slot) => !slot);
+    if (destination === -1) return;
     const { letter, id: poolId } = pool[poolIdx];
-    setSlots((s) => { const n = [...s]; n[emptySlot] = { letter, poolId }; return n; });
-    setPool((p) => p.map((item, i) => i === poolIdx ? { ...item, used: true } : item));
+    setHighlightedPoolId(null);
+    const replacedPoolId = slots[destination]?.poolId;
+    const nextSlots = [...slots];
+    nextSlots[destination] = { letter, poolId };
+    setSlots(nextSlots);
+    setPool((items) =>
+      items.map((item, itemIndex) => {
+        if (itemIndex === poolIdx) return { ...item, used: true };
+        if (item.id === replacedPoolId) return { ...item, used: false };
+        return item;
+      }),
+    );
+    const nextEmptyAfter = nextSlots.findIndex(
+      (slot, slotIndex) => slotIndex > destination && !slot,
+    );
+    const nextEmpty = nextEmptyAfter >= 0
+      ? nextEmptyAfter
+      : nextSlots.findIndex((slot) => !slot);
+    setActiveSlotIndex(nextEmpty >= 0 ? nextEmpty : destination);
   };
 
   const checkAnswer = () => {
     if (!currentWord) return;
-    const userAnswer = slots.map((s) => s?.letter ?? "").join("");
-    const correct = userAnswer.toLowerCase() === currentWord.word.toLowerCase();
+    const correct =
+      normalizePracticeAnswer(currentAnswer) === practiceTarget;
     setResult(correct ? "correct" : "wrong");
     setSessionResults((r) => [...r, { word: currentWord.word, correct }]);
     if (correct) setScore((s) => s + 1);
@@ -1302,7 +1632,7 @@ function BlocksMode({ onBack, words }: { onBack: () => void; words: any[] }) {
     submitResult.mutate({
       wordId: currentWord.id,
       isCorrect: correct,
-      userInput: userAnswer,
+      userInput: currentAnswer,
       practiceMode: "blocks",
     });
   };
@@ -1335,7 +1665,7 @@ function BlocksMode({ onBack, words }: { onBack: () => void; words: any[] }) {
       </div>
 
       {/* Word Info */}
-      <div className="bg-white rounded-xl border border-gray-100 p-4 mb-4 text-center">
+      <div className="bg-white rounded-xl border border-gray-100 p-4 text-center">
         <button
           onClick={() => speakWord(currentWord.word, currentWord.id)}
           className="inline-flex items-center gap-2 mb-2"
@@ -1344,14 +1674,26 @@ function BlocksMode({ onBack, words }: { onBack: () => void; words: any[] }) {
           <span className="text-xs text-gray-500">点击听发音</span>
         </button>
         <p className="text-sm text-gray-600 whitespace-pre-line">{currentWord.definition}</p>
-        {/* Example hidden until submitted */}
-        {result && currentWord.example && (
-          <div className="mt-3 bg-indigo-50 rounded-lg p-3 border border-indigo-100">
-            <p className="text-xs text-indigo-400 mb-1 font-medium">例句</p>
-            <p className="text-sm text-indigo-700 whitespace-pre-line">{currentWord.example}</p>
-          </div>
-        )}
       </div>
+      <PracticeExampleLine
+        currentWord={currentWord}
+        tone="indigo"
+        reveal={result !== null}
+        answer={contextAnswer}
+        activeCharacterIndexes={result ? [] : activeCharacterIndexes}
+        onCharacterSelect={
+          result
+            ? undefined
+            : (characterIndex) => {
+                const blockIndex = blockCharacterRanges.findIndex(
+                  (range) =>
+                    characterIndex >= range.start &&
+                    characterIndex < range.end,
+                );
+                if (blockIndex >= 0) handleSlotClick(blockIndex);
+              }
+        }
+      />
 
       {/* Result - show full word details after submit */}
       {result && (
@@ -1382,50 +1724,63 @@ function BlocksMode({ onBack, words }: { onBack: () => void; words: any[] }) {
         </div>
       )}
 
-      {/* Slots */}
-      <div className="flex justify-center gap-2 mb-6 flex-wrap">
-        {slots.map((slot, i) => {
-          const expected = letterBlocks[i];
-          const isMultiLetter = expected && expected.letters.length > 1;
-          return (
-            <button
-              key={i}
-              onClick={() => handleSlotClick(i)}
-              className={`h-14 rounded-xl border-2 flex items-center justify-center text-lg font-bold transition-all ${
-                slot
-                  ? result
-                    ? letterBlocks[i] && slot.letter.toLowerCase() === letterBlocks[i].letters.toLowerCase()
-                      ? "border-green-400 bg-green-50 text-green-700"
-                      : "border-red-400 bg-red-50 text-red-700"
-                    : "border-indigo-300 bg-indigo-50 text-indigo-700"
-                  : "border-dashed border-gray-300 bg-gray-50"
-              }`}
-              style={isMultiLetter ? { minWidth: `${expected.letters.length * 40}px` } : { width: "48px" }}
-            >
-              {slot?.letter ?? ""}
-            </button>
-          );
-        })}
-      </div>
+      {!hasContextExample && (
+        <div className="flex justify-center gap-2 mb-6 flex-wrap">
+          {slots.map((slot, i) => {
+            const expected = letterBlocks[i];
+            const isMultiLetter = expected && expected.letters.length > 1;
+            return (
+              <button
+                key={i}
+                onClick={() => handleSlotClick(i)}
+                className={`h-14 rounded-xl border-2 flex items-center justify-center text-lg font-bold transition-all ${
+                  slot
+                    ? result
+                      ? letterBlocks[i] && slot.letter.toLowerCase() === letterBlocks[i].letters.toLowerCase()
+                        ? "border-green-400 bg-green-50 text-green-700"
+                        : "border-red-400 bg-red-50 text-red-700"
+                      : "border-indigo-300 bg-indigo-50 text-indigo-700"
+                    : "border-dashed border-gray-300 bg-gray-50"
+                }`}
+                style={isMultiLetter ? { minWidth: `${expected.letters.length * 40}px` } : { width: "48px" }}
+              >
+                {slot?.letter ?? ""}
+              </button>
+            );
+          })}
+        </div>
+      )}
 
       {/* Pool */}
       {!result && (
-        <div className="flex justify-center gap-2 flex-wrap mb-6">
-          {pool.map((item, i) => {
+        <div className="mb-6">
+          <p className="mb-2 text-center text-[11px] text-gray-400">
+            点击字母块填入例句，再次点击已选字母可撤回
+          </p>
+          <div className="flex justify-center gap-2 flex-wrap">
+            {pool.map((item, i) => {
             const phonicsColor = item.comboType ? getPhonicsColor(item.comboType as any) : undefined;
             return (
               <button
                 key={item.id}
                 onClick={() => handlePoolClick(i)}
-                disabled={item.used}
                 className={`h-14 rounded-xl border-2 flex items-center justify-center text-lg font-bold transition-all ${
                   item.used
                     ? "border-gray-200 bg-gray-100 text-gray-300 w-12"
+                    : item.id === highlightedPoolId
+                      ? "border-amber-600 bg-amber-200 text-amber-700 shadow-md ring-2 ring-amber-300"
                     : "bg-white hover:shadow-md text-gray-700 active:scale-95"
                 }`}
                 style={
                   !item.used
-                    ? {
+                    ? item.id === highlightedPoolId
+                      ? {
+                          minWidth: item.letter.length > 1 ? `${item.letter.length * 40}px` : "48px",
+                          borderColor: "#D97706",
+                          color: "#B45309",
+                          backgroundColor: "#FDE68A",
+                        }
+                      : {
                         minWidth: item.letter.length > 1 ? `${item.letter.length * 40}px` : "48px",
                         borderColor: phonicsColor ?? "#d1d5db",
                         color: phonicsColor ?? "#374151",
@@ -1437,7 +1792,8 @@ function BlocksMode({ onBack, words }: { onBack: () => void; words: any[] }) {
                 {item.letter}
               </button>
             );
-          })}
+            })}
+          </div>
         </div>
       )}
 
@@ -1489,13 +1845,20 @@ function FillBlankMode({ onBack, words }: { onBack: () => void; words: any[] }) 
   const [retryToken, setRetryToken] = useState(0);
 
   const currentWord = words?.[index];
+  const practiceTarget = currentWord
+    ? normalizePracticeAnswer(currentWord.word)
+    : "";
   useAutoSpeakTwice(currentWord, retryToken);
-  const blankPattern = currentWord ? generateFillBlank(currentWord.word) : null;
+  const blankPattern = currentWord ? generateFillBlank(practiceTarget) : null;
   // Positions that are blanks (indices in the display string)
   const blankPositions = blankPattern
     ? blankPattern.display.split("").map((c, i) => c === "_" ? i : -1).filter(i => i >= 0)
     : [];
   const blankCount = blankPositions.length;
+  const hasContextExample = Boolean(
+    currentWord &&
+      pickPracticeExample(currentWord.example, currentWord.word),
+  );
 
   useEffect(() => {
     setAnswers(new Array(blankCount).fill(""));
@@ -1536,7 +1899,7 @@ function FillBlankMode({ onBack, words }: { onBack: () => void; words: any[] }) 
     if (!currentWord || !blankPattern) return;
     if (answers.some(a => !a)) return; // Not all filled
 
-    const lower = currentWord.word.toLowerCase();
+    const lower = practiceTarget;
     let filled = "";
     let ansIdx = 0;
     for (let i = 0; i < blankPattern.display.length; i++) {
@@ -1572,6 +1935,16 @@ function FillBlankMode({ onBack, words }: { onBack: () => void; words: any[] }) 
   if (!currentWord) return <div className="min-h-screen flex items-center justify-center"><p className="text-gray-500">暂无单词可练习</p></div>;
 
   const allFilled = answers.every(a => a.length > 0);
+  const contextAnswer = blankPattern
+    ? blankPattern.display
+        .split("")
+        .map((character, displayIndex) => {
+          if (character !== "_") return character;
+          const answerIndex = blankPositions.indexOf(displayIndex);
+          return answers[answerIndex] || "\u00a0";
+        })
+        .join("")
+    : "";
   // Map blank position in display to blank list index
   let blankCounter = -1;
 
@@ -1588,7 +1961,7 @@ function FillBlankMode({ onBack, words }: { onBack: () => void; words: any[] }) 
       </div>
 
       {/* Word Info - 只显示释义 */}
-      <div className="bg-white rounded-xl border border-gray-100 p-4 mb-4 text-center">
+      <div className="bg-white rounded-xl border border-gray-100 p-4 text-center">
         <button
           onClick={() => speakWord(currentWord.word, currentWord.id)}
           className="inline-flex items-center gap-2 mb-2"
@@ -1598,9 +1971,28 @@ function FillBlankMode({ onBack, words }: { onBack: () => void; words: any[] }) 
         </button>
         <p className="text-sm text-gray-600 whitespace-pre-line">{currentWord.definition}</p>
       </div>
+      <PracticeExampleLine
+        currentWord={currentWord}
+        tone="emerald"
+        reveal={result !== null}
+        answer={contextAnswer}
+        activeCharacterIndexes={
+          result || blankPositions[activeBlankIdx] === undefined
+            ? []
+            : [blankPositions[activeBlankIdx]]
+        }
+        onCharacterSelect={
+          result
+            ? undefined
+            : (characterIndex) => {
+                const blankIndex = blankPositions.indexOf(characterIndex);
+                if (blankIndex >= 0) setActiveBlankIdx(blankIndex);
+              }
+        }
+      />
 
-      {/* Blank pattern - clickable boxes */}
-      <div className="bg-white rounded-xl border border-gray-100 p-4 mb-4">
+      {!hasContextExample && (
+        <div className="bg-white rounded-xl border border-gray-100 p-4 mb-4">
         <p className="text-xs text-gray-400 text-center mb-3">点击虚线框，选择字母填入</p>
         <div className="flex items-center justify-center gap-1.5 flex-wrap">
           {blankPattern?.display.split("").map((char, displayIdx) => {
@@ -1615,7 +2007,7 @@ function FillBlankMode({ onBack, words }: { onBack: () => void; words: any[] }) 
                   disabled={!!result}
                   className={`w-12 h-14 rounded-xl flex items-center justify-center text-xl font-bold transition-all ${
                     result
-                      ? answers[listIdx]?.toLowerCase() === currentWord.word.toLowerCase()[displayIdx]
+                      ? answers[listIdx]?.toLowerCase() === practiceTarget[displayIdx]
                         ? "border-2 border-green-400 bg-green-50 text-green-700"
                         : "border-2 border-red-400 bg-red-50 text-red-700"
                       : isActive
@@ -1641,7 +2033,8 @@ function FillBlankMode({ onBack, words }: { onBack: () => void; words: any[] }) 
           })}
         </div>
         <p className="text-xs text-gray-400 text-center mt-2">{blankPattern?.hint}</p>
-      </div>
+        </div>
+      )}
 
       {/* Result after submit */}
       {result && (
@@ -1660,12 +2053,6 @@ function FillBlankMode({ onBack, words }: { onBack: () => void; words: any[] }) 
           <div className="mt-3 pt-3 border-t border-gray-200/50">
             <p className="text-lg font-bold text-gray-900">{currentWord.word}</p>
             {currentWord.phonetic && <p className="text-sm text-gray-400 font-mono mt-1">{currentWord.phonetic}</p>}
-            {currentWord.example && (
-              <div className="mt-3 bg-emerald-50 rounded-lg p-3 border border-emerald-100 text-left">
-                <p className="text-xs text-emerald-500 mb-1 font-medium">例句</p>
-                <p className="text-sm text-emerald-700 whitespace-pre-line">{currentWord.example}</p>
-              </div>
-            )}
             {currentWord.tags && currentWord.tags.length > 0 && (
               <div className="flex flex-wrap justify-center gap-1 mt-2">
                 {currentWord.tags.map((tag: any) => (
@@ -1706,6 +2093,11 @@ function FillBlankMode({ onBack, words }: { onBack: () => void; words: any[] }) 
                 </button>
               ))}
             </div>
+            <PracticeExtraKeyboardRow
+              tone="emerald"
+              onKey={handleLetterPress}
+              includeSpace={false}
+            />
             {/* Row 3: zxcvbnm + Delete */}
             <div className="flex justify-center gap-1">
               {["z","x","c","v","b","n","m"].map(letter => (
@@ -1773,6 +2165,7 @@ function FlashMode({ onBack, words }: { onBack: () => void; words: any[] }) {
   const [index, setIndex] = useState(0);
   const [phase, setPhase] = useState<"show" | "input" | "result">("show");
   const [input, setInput] = useState("");
+  const [activeInputIndex, setActiveInputIndex] = useState(0);
   const [timeLeft, setTimeLeft] = useState(3);
   const [score, setScore] = useState(0);
   const [showSummary, setShowSummary] = useState(false);
@@ -1781,6 +2174,10 @@ function FlashMode({ onBack, words }: { onBack: () => void; words: any[] }) {
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const currentWord = words?.[index];
+  const hasContextExample = Boolean(
+    currentWord &&
+      pickPracticeExample(currentWord.example, currentWord.word),
+  );
   useAutoSpeakTwice(currentWord, retryToken);
 
   useEffect(() => {
@@ -1790,6 +2187,7 @@ function FlashMode({ onBack, words }: { onBack: () => void; words: any[] }) {
         setTimeLeft((t) => {
           if (t <= 1) {
             clearInterval(timer);
+            setActiveInputIndex(0);
             setPhase("input");
             return 0;
           }
@@ -1803,7 +2201,9 @@ function FlashMode({ onBack, words }: { onBack: () => void; words: any[] }) {
 
   const checkAnswer = () => {
     if (!currentWord) return;
-    const correct = input.trim().toLowerCase() === currentWord.word.toLowerCase();
+    const correct =
+      normalizePracticeAnswer(input) ===
+      normalizePracticeAnswer(currentWord.word);
     setPhase("result");
     setSessionResults((r) => [...r, { word: currentWord.word, correct }]);
     if (correct) setScore((s) => s + 1);
@@ -1816,10 +2216,45 @@ function FlashMode({ onBack, words }: { onBack: () => void; words: any[] }) {
     });
   };
 
+  const handleFlashKey = (key: string) => {
+    setInput((previous) => {
+      const characters = [...previous];
+      while (characters.length <= activeInputIndex) {
+        characters.push("\u00a0");
+      }
+      characters[activeInputIndex] = key;
+      const nextEmpty = characters.findIndex(
+        (character, characterIndex) =>
+          characterIndex > activeInputIndex &&
+          (character === "\u00a0" || character === " "),
+      );
+      setActiveInputIndex(
+        nextEmpty >= 0
+          ? nextEmpty
+          : Math.min(
+              activeInputIndex + 1,
+              Math.max(0, [...normalizePracticeAnswer(currentWord?.word ?? "")].length - 1),
+            ),
+      );
+      return characters.join("");
+    });
+  };
+
+  const handleFlashDelete = () => {
+    setInput((previous) => {
+      const characters = [...previous];
+      if (activeInputIndex < characters.length) {
+        characters[activeInputIndex] = "\u00a0";
+      }
+      return characters.join("").trimEnd();
+    });
+  };
+
   const nextWord = () => {
     if (words && index < words.length - 1) {
       setIndex((i) => i + 1);
       setInput("");
+      setActiveInputIndex(0);
       setPhase("show");
     } else {
       setShowSummary(true);
@@ -1842,24 +2277,27 @@ function FlashMode({ onBack, words }: { onBack: () => void; words: any[] }) {
       </div>
 
       {phase === "show" && (
-        <div className="bg-white rounded-xl border border-gray-100 p-8 text-center">
-          <p className="text-sm text-gray-500 mb-4">记住这个单词！</p>
-          <div className="flex items-center justify-center gap-3 mb-2">
-            <h2 className="text-3xl font-bold text-gray-900">{currentWord.word}</h2>
-            <button
-              onClick={() => speakWord(currentWord.word, currentWord.id)}
-              className="p-2 rounded-lg hover:bg-amber-50 text-gray-400 hover:text-amber-600 transition-colors active:scale-90"
-              title="重听发音"
-            >
-              <Volume2 className="w-5 h-5" />
-            </button>
+        <div>
+          <div className="bg-white rounded-xl border border-gray-100 p-8 text-center">
+            <p className="text-sm text-gray-500 mb-4">记住这个单词！</p>
+            <div className="flex items-center justify-center gap-3 mb-2">
+              <h2 className="text-3xl font-bold text-gray-900">{currentWord.word}</h2>
+              <button
+                onClick={() => speakWord(currentWord.word, currentWord.id)}
+                className="p-2 rounded-lg hover:bg-amber-50 text-gray-400 hover:text-amber-600 transition-colors active:scale-90"
+                title="重听发音"
+              >
+                <Volume2 className="w-5 h-5" />
+              </button>
+            </div>
+            {currentWord.phonetic && <p className="text-sm text-gray-400 font-mono mb-2">{currentWord.phonetic}</p>}
+            <p className="text-sm text-gray-600 mb-6 whitespace-pre-line">{currentWord.definition}</p>
+            <div className="flex items-center justify-center gap-2">
+              <Clock className="w-5 h-5 text-amber-500" />
+              <span className="text-2xl font-bold text-amber-500">{timeLeft}</span>
+            </div>
           </div>
-          {currentWord.phonetic && <p className="text-sm text-gray-400 font-mono mb-2">{currentWord.phonetic}</p>}
-          <p className="text-sm text-gray-600 mb-6 whitespace-pre-line">{currentWord.definition}</p>
-          <div className="flex items-center justify-center gap-2">
-            <Clock className="w-5 h-5 text-amber-500" />
-            <span className="text-2xl font-bold text-amber-500">{timeLeft}</span>
-          </div>
+          <PracticeExampleLine currentWord={currentWord} tone="amber" reveal />
         </div>
       )}
 
@@ -1869,13 +2307,21 @@ function FlashMode({ onBack, words }: { onBack: () => void; words: any[] }) {
             <Lightbulb className="w-6 h-6 text-amber-500 mx-auto mb-2" />
             <p className="text-sm text-amber-700 whitespace-pre-line">{currentWord.definition}</p>
           </div>
+          <PracticeExampleLine
+            currentWord={currentWord}
+            tone="amber"
+            answer={input}
+            activeCharacterIndexes={[activeInputIndex]}
+            onCharacterSelect={setActiveInputIndex}
+          />
 
-          {/* Read-only display box - no system keyboard */}
-          <div className="flex-1 flex flex-col justify-center">
-            <div className="h-14 rounded-xl border-2 border-amber-300 bg-white flex items-center justify-center text-xl tracking-[0.3em] font-mono font-bold text-gray-900">
-              {input || <span className="text-gray-300 text-sm tracking-normal">点击键盘输入单词</span>}
+          {!hasContextExample && (
+            <div className="flex-1 flex flex-col justify-center">
+              <div className="h-14 rounded-xl border-2 border-amber-300 bg-white flex items-center justify-center text-xl tracking-[0.3em] font-mono font-bold text-gray-900">
+                {input || <span className="text-gray-300 text-sm tracking-normal">点击键盘输入单词</span>}
+              </div>
             </div>
-          </div>
+          )}
 
           {/* Virtual Keyboard */}
           <div className="mt-auto">
@@ -1885,7 +2331,7 @@ function FlashMode({ onBack, words }: { onBack: () => void; words: any[] }) {
                 {["q","w","e","r","t","y","u","i","o","p"].map(letter => (
                   <button
                     key={letter}
-                    onClick={() => setInput((prev) => prev + letter)}
+                    onClick={() => handleFlashKey(letter)}
                     className="w-8 h-10 sm:w-9 sm:h-11 md:w-11 md:h-13 lg:w-12 lg:h-14 rounded-lg bg-white border border-gray-200 text-sm sm:text-base md:text-lg font-semibold text-gray-700 hover:bg-amber-50 hover:border-amber-300 active:scale-95 transition-all"
                   >
                     {letter}
@@ -1897,26 +2343,30 @@ function FlashMode({ onBack, words }: { onBack: () => void; words: any[] }) {
                 {["a","s","d","f","g","h","j","k","l"].map(letter => (
                   <button
                     key={letter}
-                    onClick={() => setInput((prev) => prev + letter)}
+                    onClick={() => handleFlashKey(letter)}
                     className="w-8 h-10 sm:w-9 sm:h-11 md:w-11 md:h-13 lg:w-12 lg:h-14 rounded-lg bg-white border border-gray-200 text-sm sm:text-base md:text-lg font-semibold text-gray-700 hover:bg-amber-50 hover:border-amber-300 active:scale-95 transition-all"
                   >
                     {letter}
                   </button>
                 ))}
               </div>
+              <PracticeExtraKeyboardRow
+                tone="amber"
+                onKey={handleFlashKey}
+              />
               {/* Row 3: zxcvbnm + Delete */}
               <div className="flex justify-center gap-1">
                 {["z","x","c","v","b","n","m"].map(letter => (
                   <button
                     key={letter}
-                    onClick={() => setInput((prev) => prev + letter)}
+                    onClick={() => handleFlashKey(letter)}
                     className="w-8 h-10 sm:w-9 sm:h-11 md:w-11 md:h-13 lg:w-12 lg:h-14 rounded-lg bg-white border border-gray-200 text-sm sm:text-base md:text-lg font-semibold text-gray-700 hover:bg-amber-50 hover:border-amber-300 active:scale-95 transition-all"
                   >
                     {letter}
                   </button>
                 ))}
                 <button
-                  onClick={() => setInput((prev) => prev.slice(0, -1))}
+                  onClick={handleFlashDelete}
                   className="w-10 h-10 sm:w-11 sm:h-11 md:w-13 md:h-13 lg:w-14 lg:h-14 rounded-lg bg-gray-200 border border-gray-300 text-sm sm:text-base font-semibold text-gray-600 hover:bg-red-50 hover:border-red-300 hover:text-red-500 active:scale-95 transition-all flex items-center justify-center"
                   title="删除"
                 >
@@ -1943,11 +2393,13 @@ function FlashMode({ onBack, words }: { onBack: () => void; words: any[] }) {
       {phase === "result" && (
         <div className="space-y-4">
           <div className={`rounded-xl p-4 text-center ${
-            input.trim().toLowerCase() === currentWord.word.toLowerCase()
+            normalizePracticeAnswer(input) ===
+            normalizePracticeAnswer(currentWord.word)
               ? "bg-green-50 border border-green-200"
               : "bg-red-50 border border-red-200"
           }`}>
-            {input.trim().toLowerCase() === currentWord.word.toLowerCase() ? (
+            {normalizePracticeAnswer(input) ===
+            normalizePracticeAnswer(currentWord.word) ? (
               <div className="flex items-center justify-center gap-2 mb-2">
                 <CheckCircle2 className="w-5 h-5 text-green-500" />
                 <span className="text-sm font-medium text-green-700">正确！</span>
@@ -1968,12 +2420,7 @@ function FlashMode({ onBack, words }: { onBack: () => void; words: any[] }) {
               </div>
               {currentWord.phonetic && <p className="text-sm text-gray-400 font-mono mt-0.5">{currentWord.phonetic}</p>}
               <p className="text-sm text-gray-600 mt-2 whitespace-pre-line">{currentWord.definition}</p>
-              {currentWord.example && (
-                <div className="mt-3 bg-amber-50 rounded-lg p-3 border border-amber-100">
-                  <p className="text-xs text-amber-500 mb-1 font-medium">例句</p>
-                  <p className="text-sm text-amber-700 whitespace-pre-line">{currentWord.example}</p>
-                </div>
-              )}
+              <PracticeExampleLine currentWord={currentWord} tone="amber" reveal />
               {currentWord.tags && currentWord.tags.length > 0 && (
                 <div className="flex flex-wrap gap-1 mt-2">
                   {currentWord.tags.map((tag: any) => (
