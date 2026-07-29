@@ -28,6 +28,7 @@ import { eq, and, gte, lte, desc, count, inArray } from "drizzle-orm";
 import { getCatalogOwnerId } from "./catalog";
 import { analyzeWordForStudy } from "../src/utils/phonics";
 import {
+  calculatePracticePoints,
   calculateErrorBookStreak,
   ERROR_BOOK_CLEAR_STREAK,
   type SpellingAttemptAction,
@@ -493,7 +494,34 @@ export const spellingRouter = createRouter({
         ),
       );
       const removedFromErrorBook =
-        input.isCorrect && errorCorrectStreak >= ERROR_BOOK_CLEAR_STREAK;
+        record.errorCount > 0 &&
+        input.isCorrect &&
+        errorCorrectStreak >= ERROR_BOOK_CLEAR_STREAK;
+      const todayStart = new Date();
+      todayStart.setHours(0, 0, 0, 0);
+      const rewardedCorrectAttempts = input.isCorrect
+        ? await db
+            .select({ count: count() })
+            .from(wordLogs)
+            .where(
+              and(
+                eq(wordLogs.wordId, input.wordId),
+                eq(wordLogs.userId, ctx.user.id),
+                eq(wordLogs.action, "test_pass"),
+                gte(wordLogs.createdAt, todayStart),
+              ),
+            )
+        : [{ count: 0 }];
+      const pointResult = calculatePracticePoints({
+        isCorrect: input.isCorrect,
+        consecutiveCorrect: errorCorrectStreak,
+        previousLevel: record.level,
+        newLevel,
+        removedFromErrorBook,
+        rewardedCorrectAttemptsToday: Number(
+          rewardedCorrectAttempts[0]?.count ?? 0,
+        ),
+      });
 
       await db.transaction(async (tx) => {
         await tx
@@ -518,6 +546,8 @@ export const spellingRouter = createRouter({
           notes: JSON.stringify({
             practiceMode: input.practiceMode,
             duration: input.duration ?? null,
+            pointsEarned: pointResult.pointsEarned,
+            pointReasons: pointResult.reasons,
           }),
         });
 
@@ -548,6 +578,9 @@ export const spellingRouter = createRouter({
         nextReviewAt: nextReview,
         errorCorrectStreak,
         removedFromErrorBook,
+        pointsEarned: pointResult.pointsEarned,
+        rewardCapped: pointResult.rewardCapped,
+        pointReasons: pointResult.reasons,
       };
     }),
 
@@ -691,6 +724,35 @@ export const spellingRouter = createRouter({
       .select({ count: count() })
       .from(spellingSessions)
       .where(and(eq(spellingSessions.userId, ctx.user.id), gte(spellingSessions.createdAt, todayStart)));
+    const pointLogs = await db
+      .select({
+        notes: wordLogs.notes,
+        createdAt: wordLogs.createdAt,
+      })
+      .from(wordLogs)
+      .where(
+        and(
+          eq(wordLogs.userId, ctx.user.id),
+          eq(wordLogs.action, "test_pass"),
+        ),
+      );
+    let totalPoints = 0;
+    let todayPoints = 0;
+    for (const log of pointLogs) {
+      if (!log.notes) continue;
+      try {
+        const parsed = JSON.parse(log.notes) as { pointsEarned?: unknown };
+        const points =
+          typeof parsed.pointsEarned === "number" &&
+          Number.isFinite(parsed.pointsEarned)
+            ? Math.max(0, Math.floor(parsed.pointsEarned))
+            : 0;
+        totalPoints += points;
+        if (log.createdAt >= todayStart) todayPoints += points;
+      } catch {
+        // Older log notes were not guaranteed to be JSON.
+      }
+    }
 
     return {
       totalWords: totalWords[0]?.count ?? 0,
@@ -701,6 +763,8 @@ export const spellingRouter = createRouter({
       manualDue: manualDue[0]?.count ?? 0,
       totalErrors: totalErrors.length,
       todaySessions: todaySessions[0]?.count ?? 0,
+      totalPoints,
+      todayPoints,
     };
   }),
 

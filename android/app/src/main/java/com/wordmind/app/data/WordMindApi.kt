@@ -245,6 +245,8 @@ class WordMindApi(context: Context) {
             dueForReview = result.optInt("dueForReview"),
             totalErrors = result.optInt("totalErrors"),
             todaySessions = result.optInt("todaySessions"),
+            totalPoints = result.optInt("totalPoints"),
+            todayPoints = result.optInt("todayPoints"),
             byLevel = byLevel,
         )
     }
@@ -255,8 +257,8 @@ class WordMindApi(context: Context) {
         userInput: String,
         durationMs: Long,
         practiceMode: String,
-    ) {
-        mutate(
+    ): SpellingReward {
+        val result = mutate(
             "spelling.submitResult",
             JSONObject()
                 .put("wordId", wordId)
@@ -264,6 +266,10 @@ class WordMindApi(context: Context) {
                 .put("userInput", userInput)
                 .put("practiceMode", practiceMode)
                 .put("duration", durationMs),
+        ) as JSONObject
+        return SpellingReward(
+            pointsEarned = result.optInt("pointsEarned"),
+            rewardCapped = result.optBoolean("rewardCapped"),
         )
     }
 

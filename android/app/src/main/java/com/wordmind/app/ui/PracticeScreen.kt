@@ -67,6 +67,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import com.wordmind.app.data.PracticeWord
+import com.wordmind.app.data.SpellingReward
 import com.wordmind.app.data.SpellingStats
 import com.wordmind.app.data.Textbook
 import com.wordmind.app.data.Word
@@ -220,16 +221,26 @@ internal fun PracticeScreen(
         input: String,
         mode: String,
         durationMs: Long,
+        onReward: (SpellingReward) -> Unit,
     ) {
         scope.launch {
             try {
-                api.submitSpellingResult(
+                val reward = api.submitSpellingResult(
                     wordId = word.id,
                     correct = correct,
                     userInput = input,
                     durationMs = durationMs,
                     practiceMode = mode,
                 )
+                onReward(reward)
+                if (reward.pointsEarned > 0) {
+                    stats = stats?.copy(
+                        totalPoints = stats?.totalPoints?.plus(reward.pointsEarned)
+                            ?: reward.pointsEarned,
+                        todayPoints = stats?.todayPoints?.plus(reward.pointsEarned)
+                            ?: reward.pointsEarned,
+                    )
+                }
                 onLearningChanged()
             } catch (error: Exception) {
                 error.rethrowIfCancellation()
@@ -393,6 +404,42 @@ private fun PracticeHome(
             )
             Spacer(Modifier.width(8.dp))
             Text("单词拼写", fontSize = 22.sp, fontWeight = FontWeight.Bold)
+            Spacer(Modifier.weight(1f))
+            Surface(
+                color = Color(0xFFFFFBEB),
+                shape = RoundedCornerShape(999.dp),
+                border = androidx.compose.foundation.BorderStroke(
+                    1.dp,
+                    Color(0xFFFDE68A),
+                ),
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(
+                        Icons.Default.EmojiEvents,
+                        contentDescription = null,
+                        tint = PracticeAmber,
+                        modifier = Modifier.size(14.dp),
+                    )
+                    Spacer(Modifier.width(4.dp))
+                    Text(
+                        "${stats?.totalPoints ?: 0} 积分",
+                        color = PracticeAmber,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    if ((stats?.todayPoints ?: 0) > 0) {
+                        Spacer(Modifier.width(5.dp))
+                        Text(
+                            "今日 +${stats?.todayPoints}",
+                            color = Color(0xFFF59E0B),
+                            fontSize = 9.sp,
+                        )
+                    }
+                }
+            }
         }
         Spacer(Modifier.height(3.dp))
         Text("先选择今日练习单词，再开始练习", color = PracticeMuted, fontSize = 13.sp)

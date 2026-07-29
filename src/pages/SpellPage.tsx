@@ -1,4 +1,12 @@
-import { useState, useEffect, useRef, createContext, useContext, useCallback } from "react";
+import {
+  useState,
+  useEffect,
+  useRef,
+  createContext,
+  useContext,
+  useCallback,
+} from "react";
+import confetti from "canvas-confetti";
 import { useAuth } from "@/hooks/useAuth";
 import { trpc } from "@/providers/trpc";
 import AppHeader from "@/components/AppHeader";
@@ -186,7 +194,7 @@ function PracticeExampleLine({
                 piece
               ) : (
                 <span
-                  className="mx-1 inline-flex max-w-full flex-wrap justify-center gap-x-1 gap-y-2 align-middle"
+                  className="mx-1 inline align-middle"
                   aria-label={`填写 ${targetWord}`}
                 >
                   {[...piece].map((expectedCharacter, characterIndex) => {
@@ -212,7 +220,7 @@ function PracticeExampleLine({
                         key={characterIndex}
                         onClick={() => onCharacterSelect?.(characterIndex)}
                         disabled={!onCharacterSelect}
-                        className={`inline-flex h-8 min-w-7 items-center justify-center rounded-md px-1 text-base font-bold text-[#F59E0B] transition-all ${
+                        className={`mx-0.5 my-1 inline-flex h-8 min-w-7 items-center justify-center rounded-md px-1 align-middle text-base font-bold text-[#F59E0B] transition-all ${
                           isActive
                             ? "border-[3px] border-amber-600 bg-amber-200 shadow-md ring-2 ring-amber-300"
                             : `border-2 border-[#F59E0B] ${
@@ -276,6 +284,193 @@ function PracticeExtraKeyboardRow({
           {key.label}
         </button>
       ))}
+    </div>
+  );
+}
+
+const FIREWORK_COLORS = [
+  "#F59E0B",
+  "#EC4899",
+  "#8B5CF6",
+  "#06B6D4",
+  "#22C55E",
+  "#F97316",
+];
+
+function playCuteCelebrationChime() {
+  const AudioContextClass =
+    window.AudioContext ??
+    (
+      window as typeof window & {
+        webkitAudioContext?: typeof AudioContext;
+      }
+    ).webkitAudioContext;
+  if (!AudioContextClass) return;
+
+  try {
+    const context = new AudioContextClass();
+    const startedAt = context.currentTime + 0.02;
+    const notes = [
+      { frequency: 523.25, offset: 0, duration: 0.3, volume: 0.2 },
+      { frequency: 659.25, offset: 0.1, duration: 0.34, volume: 0.2 },
+      { frequency: 783.99, offset: 0.2, duration: 0.38, volume: 0.22 },
+      { frequency: 1046.5, offset: 0.34, duration: 0.55, volume: 0.25 },
+    ];
+
+    notes.forEach(({ frequency, offset, duration, volume }) => {
+      const oscillator = context.createOscillator();
+      const gain = context.createGain();
+      const noteStart = startedAt + offset;
+      const noteEnd = noteStart + duration;
+
+      oscillator.type = "sine";
+      oscillator.frequency.setValueAtTime(frequency, noteStart);
+      oscillator.frequency.exponentialRampToValueAtTime(
+        frequency * 1.015,
+        noteEnd,
+      );
+      gain.gain.setValueAtTime(0.0001, noteStart);
+      gain.gain.exponentialRampToValueAtTime(volume, noteStart + 0.025);
+      gain.gain.exponentialRampToValueAtTime(0.0001, noteEnd);
+      oscillator.connect(gain).connect(context.destination);
+      oscillator.start(noteStart);
+      oscillator.stop(noteEnd + 0.02);
+    });
+
+    window.setTimeout(() => {
+      void context.close();
+    }, 1_200);
+  } catch {
+    // Audio feedback is optional when a browser blocks synthesized sound.
+  }
+}
+
+function CorrectCelebration({
+  points,
+  rewardCapped,
+}: {
+  points: number | null;
+  rewardCapped: boolean;
+}) {
+  useEffect(() => {
+    playCuteCelebrationChime();
+
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      return;
+    }
+
+    const common = {
+      colors: FIREWORK_COLORS,
+      disableForReducedMotion: true,
+      zIndex: 95,
+    };
+    const heart = confetti.shapeFromText({ text: "💖", scalar: 1.8 });
+    const smilingStar = confetti.shapeFromText({
+      text: "🌟",
+      scalar: 1.8,
+    });
+
+    confetti({
+      ...common,
+      particleCount: 75,
+      angle: 62,
+      spread: 58,
+      startVelocity: 58,
+      gravity: 0.9,
+      origin: { x: 0, y: 0.72 },
+      shapes: ["circle", "square", "star"],
+      scalar: 1.15,
+    });
+    confetti({
+      ...common,
+      particleCount: 75,
+      angle: 118,
+      spread: 58,
+      startVelocity: 58,
+      gravity: 0.9,
+      origin: { x: 1, y: 0.72 },
+      shapes: ["circle", "square", "star"],
+      scalar: 1.15,
+    });
+
+    const emojiTimer = window.setTimeout(() => {
+      confetti({
+        ...common,
+        particleCount: 22,
+        spread: 110,
+        startVelocity: 35,
+        gravity: 0.7,
+        ticks: 220,
+        origin: { x: 0.5, y: 0.38 },
+        shapes: [heart, smilingStar],
+        scalar: 1.8,
+      });
+    }, 180);
+    const finaleTimer = window.setTimeout(() => {
+      confetti({
+        ...common,
+        particleCount: 55,
+        spread: 125,
+        startVelocity: 42,
+        gravity: 0.85,
+        origin: { x: 0.5, y: 0.42 },
+        shapes: ["star", "circle"],
+        scalar: 1.25,
+      });
+    }, 430);
+
+    return () => {
+      window.clearTimeout(emojiTimer);
+      window.clearTimeout(finaleTimer);
+    };
+  }, []);
+
+  return (
+    <div
+      className="wordmind-celebration-backdrop pointer-events-none fixed inset-0 z-[90] overflow-hidden"
+      aria-live="polite"
+      aria-label="回答正确"
+    >
+      <div className="wordmind-reward-pop absolute left-1/2 top-1/2 w-[min(84vw,320px)] rounded-[2rem] border-4 border-amber-300 bg-gradient-to-br from-yellow-50 via-white to-pink-50 px-6 py-5 text-center shadow-2xl">
+        <div className="wordmind-reward-star mx-auto -mt-12 flex h-20 w-20 items-center justify-center rounded-full border-4 border-white bg-gradient-to-br from-amber-300 to-orange-400 text-5xl text-white shadow-lg">
+          ★
+        </div>
+        <p className="mt-2 text-2xl font-black tracking-wide text-orange-500">
+          太棒啦！
+        </p>
+        <p className="mt-1 text-sm font-bold text-pink-500">
+          这道题答对了，继续加油！
+        </p>
+        <p className="mx-auto mt-3 w-fit whitespace-nowrap rounded-full bg-amber-100 px-4 py-1.5 text-base font-black text-amber-700">
+          {points === null
+            ? "积分结算中…"
+            : points > 0
+              ? `+${points} 积分`
+              : rewardCapped
+                ? "该词今日奖励已完成"
+                : "继续保持"}
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function PracticeRewardBadge({
+  points,
+  rewardCapped,
+}: {
+  points: number | null;
+  rewardCapped: boolean;
+}) {
+  return (
+    <div className="mx-auto mt-2 w-fit rounded-full bg-amber-100 px-3 py-1 text-xs font-bold text-amber-700">
+      {points === null
+        ? "正在结算积分…"
+        : points > 0
+          ? `本次获得 +${points} 积分`
+          : rewardCapped
+            ? "该单词今日已获得 3 次积分奖励"
+            : "继续保持"}
     </div>
   );
 }
@@ -580,10 +775,21 @@ function SpellHome({
 
   return (
     <main className="max-w-3xl mx-auto px-4 py-6 pb-24">
-      <h1 className="text-xl font-bold text-gray-900 flex items-center gap-2 mb-1">
-        <PenLine className="w-5 h-5 text-indigo-500" />
-        单词拼写
-      </h1>
+      <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
+        <h1 className="flex items-center gap-2 text-xl font-bold text-gray-900">
+          <PenLine className="w-5 h-5 text-indigo-500" />
+          单词拼写
+        </h1>
+        <div className="flex items-center gap-1.5 rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-bold text-amber-700">
+          <Trophy className="h-3.5 w-3.5" />
+          {stats?.totalPoints ?? 0} 积分
+          {(stats?.todayPoints ?? 0) > 0 && (
+            <span className="font-medium text-amber-500">
+              今日 +{stats?.todayPoints}
+            </span>
+          )}
+        </div>
+      </div>
       <p className="text-sm text-gray-500 mb-6">先选择今日练习单词，再开始练习</p>
 
       {/* Stats Cards - Clickable to open dialog */}
@@ -1469,8 +1675,15 @@ function PracticeModeWrapper({
 // ============================================================
 function BlocksMode({ onBack, words }: { onBack: () => void; words: any[] }) {
   const utils = trpc.useUtils();
+  const [rewardPoints, setRewardPoints] = useState<number | null>(null);
+  const [rewardCapped, setRewardCapped] = useState(false);
   const submitResult = trpc.spelling.submitResult.useMutation({
-    onSuccess: () => {
+    onSuccess: (data) => {
+      if (data.isCorrect) {
+        setRewardPoints(data.pointsEarned);
+        setRewardCapped(data.rewardCapped);
+        setSessionPoints((points) => points + data.pointsEarned);
+      }
       void utils.spelling.getReviewQueue.invalidate();
       void utils.spelling.getErrorWords.invalidate();
       void utils.spelling.getErrorBook.invalidate();
@@ -1485,6 +1698,7 @@ function BlocksMode({ onBack, words }: { onBack: () => void; words: any[] }) {
   const [highlightedPoolId, setHighlightedPoolId] = useState<string | null>(null);
   const [result, setResult] = useState<"correct" | "wrong" | null>(null);
   const [score, setScore] = useState(0);
+  const [sessionPoints, setSessionPoints] = useState(0);
   const [showSummary, setShowSummary] = useState(false);
   const [sessionResults, setSessionResults] = useState<Array<{ word: string; correct: boolean }>>([]);
   const [retryToken, setRetryToken] = useState(0);
@@ -1567,6 +1781,8 @@ function BlocksMode({ onBack, words }: { onBack: () => void; words: any[] }) {
         blocks.findIndex((block) => !/^\s+$/.test(block.letters)),
       );
       setHighlightedPoolId(null);
+      setRewardPoints(null);
+      setRewardCapped(false);
       setResult(null);
     }
   }, [currentWord?.id, practiceTarget, retryToken]);
@@ -1646,13 +1862,19 @@ function BlocksMode({ onBack, words }: { onBack: () => void; words: any[] }) {
     }
   };
 
-  if (showSummary) return <SessionSummary results={sessionResults} score={score} total={words?.length ?? 0} onBack={onBack} onRetry={() => { setIndex(0); setScore(0); setSessionResults([]); setShowSummary(false); setRetryToken((token) => token + 1); }} />;
+  if (showSummary) return <SessionSummary results={sessionResults} score={score} points={sessionPoints} total={words?.length ?? 0} onBack={onBack} onRetry={() => { setIndex(0); setScore(0); setSessionPoints(0); setSessionResults([]); setShowSummary(false); setRetryToken((token) => token + 1); }} />;
   if (!currentWord) return <div className="min-h-screen flex items-center justify-center"><p className="text-gray-500">暂无单词可练习</p></div>;
 
   const allFilled = slots.every((s) => s !== null);
 
   return (
     <main className="max-w-lg mx-auto px-4 py-6 pb-24">
+      {result === "correct" && (
+        <CorrectCelebration
+          points={rewardPoints}
+          rewardCapped={rewardCapped}
+        />
+      )}
       {/* Header */}
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
@@ -1661,7 +1883,7 @@ function BlocksMode({ onBack, words }: { onBack: () => void; words: any[] }) {
           </button>
           <span className="text-xs px-2 py-1 bg-gray-100 rounded-md text-gray-500">{index + 1} / {words?.length}</span>
         </div>
-        <span className="text-sm font-bold text-indigo-600">{score} 分</span>
+        <span className="text-sm font-bold text-indigo-600">答对 {score}</span>
       </div>
 
       {/* Word Info */}
@@ -1699,10 +1921,16 @@ function BlocksMode({ onBack, words }: { onBack: () => void; words: any[] }) {
       {result && (
         <div className={`rounded-xl p-4 mb-4 text-center ${result === "correct" ? "bg-green-50 border border-green-200" : "bg-red-50 border border-red-200"}`}>
           {result === "correct" ? (
-            <div className="flex items-center justify-center gap-2 mb-2">
-              <CheckCircle2 className="w-5 h-5 text-green-500" />
-              <span className="text-sm font-medium text-green-700">正确！</span>
-            </div>
+            <>
+              <div className="flex items-center justify-center gap-2 mb-2">
+                <CheckCircle2 className="w-5 h-5 text-green-500" />
+                <span className="text-sm font-medium text-green-700">正确！</span>
+              </div>
+              <PracticeRewardBadge
+                points={rewardPoints}
+                rewardCapped={rewardCapped}
+              />
+            </>
           ) : (
             <div className="flex items-center justify-center gap-2 mb-2">
               <XCircle className="w-5 h-5 text-red-500" />
@@ -1826,8 +2054,15 @@ function BlocksMode({ onBack, words }: { onBack: () => void; words: any[] }) {
 // ============================================================
 function FillBlankMode({ onBack, words }: { onBack: () => void; words: any[] }) {
   const utils = trpc.useUtils();
+  const [rewardPoints, setRewardPoints] = useState<number | null>(null);
+  const [rewardCapped, setRewardCapped] = useState(false);
   const submitResult = trpc.spelling.submitResult.useMutation({
-    onSuccess: () => {
+    onSuccess: (data) => {
+      if (data.isCorrect) {
+        setRewardPoints(data.pointsEarned);
+        setRewardCapped(data.rewardCapped);
+        setSessionPoints((points) => points + data.pointsEarned);
+      }
       void utils.spelling.getReviewQueue.invalidate();
       void utils.spelling.getErrorWords.invalidate();
       void utils.spelling.getErrorBook.invalidate();
@@ -1840,6 +2075,7 @@ function FillBlankMode({ onBack, words }: { onBack: () => void; words: any[] }) 
   const [activeBlankIdx, setActiveBlankIdx] = useState(0);
   const [result, setResult] = useState<"correct" | "wrong" | null>(null);
   const [score, setScore] = useState(0);
+  const [sessionPoints, setSessionPoints] = useState(0);
   const [showSummary, setShowSummary] = useState(false);
   const [sessionResults, setSessionResults] = useState<Array<{ word: string; correct: boolean }>>([]);
   const [retryToken, setRetryToken] = useState(0);
@@ -1863,6 +2099,8 @@ function FillBlankMode({ onBack, words }: { onBack: () => void; words: any[] }) 
   useEffect(() => {
     setAnswers(new Array(blankCount).fill(""));
     setActiveBlankIdx(0);
+    setRewardPoints(null);
+    setRewardCapped(false);
     setResult(null);
   }, [index, blankCount, retryToken]);
 
@@ -1931,7 +2169,7 @@ function FillBlankMode({ onBack, words }: { onBack: () => void; words: any[] }) 
     }
   };
 
-  if (showSummary) return <SessionSummary results={sessionResults} score={score} total={words?.length ?? 0} onBack={onBack} onRetry={() => { setIndex(0); setScore(0); setSessionResults([]); setShowSummary(false); setRetryToken((token) => token + 1); }} />;
+  if (showSummary) return <SessionSummary results={sessionResults} score={score} points={sessionPoints} total={words?.length ?? 0} onBack={onBack} onRetry={() => { setIndex(0); setScore(0); setSessionPoints(0); setSessionResults([]); setShowSummary(false); setRetryToken((token) => token + 1); }} />;
   if (!currentWord) return <div className="min-h-screen flex items-center justify-center"><p className="text-gray-500">暂无单词可练习</p></div>;
 
   const allFilled = answers.every(a => a.length > 0);
@@ -1950,6 +2188,12 @@ function FillBlankMode({ onBack, words }: { onBack: () => void; words: any[] }) 
 
   return (
     <main className="max-w-lg mx-auto px-4 py-6 pb-24 min-h-screen flex flex-col">
+      {result === "correct" && (
+        <CorrectCelebration
+          points={rewardPoints}
+          rewardCapped={rewardCapped}
+        />
+      )}
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
           <button onClick={onBack} className="h-9 w-9 flex items-center justify-center rounded-lg hover:bg-gray-100">
@@ -1957,7 +2201,7 @@ function FillBlankMode({ onBack, words }: { onBack: () => void; words: any[] }) 
           </button>
           <span className="text-xs px-2 py-1 bg-gray-100 rounded-md text-gray-500">{index + 1} / {words?.length}</span>
         </div>
-        <span className="text-sm font-bold text-emerald-600">{score} 分</span>
+        <span className="text-sm font-bold text-emerald-600">答对 {score}</span>
       </div>
 
       {/* Word Info - 只显示释义 */}
@@ -2040,10 +2284,16 @@ function FillBlankMode({ onBack, words }: { onBack: () => void; words: any[] }) 
       {result && (
         <div className={`rounded-xl p-4 mb-4 text-center ${result === "correct" ? "bg-green-50 border border-green-200" : "bg-red-50 border border-red-200"}`}>
           {result === "correct" ? (
-            <div className="flex items-center justify-center gap-2 mb-2">
-              <CheckCircle2 className="w-5 h-5 text-green-500" />
-              <span className="text-sm font-medium text-green-700">正确！</span>
-            </div>
+            <>
+              <div className="flex items-center justify-center gap-2 mb-2">
+                <CheckCircle2 className="w-5 h-5 text-green-500" />
+                <span className="text-sm font-medium text-green-700">正确！</span>
+              </div>
+              <PracticeRewardBadge
+                points={rewardPoints}
+                rewardCapped={rewardCapped}
+              />
+            </>
           ) : (
             <div className="flex items-center justify-center gap-2 mb-2">
               <XCircle className="w-5 h-5 text-red-500" />
@@ -2153,8 +2403,15 @@ function FillBlankMode({ onBack, words }: { onBack: () => void; words: any[] }) 
 // ============================================================
 function FlashMode({ onBack, words }: { onBack: () => void; words: any[] }) {
   const utils = trpc.useUtils();
+  const [rewardPoints, setRewardPoints] = useState<number | null>(null);
+  const [rewardCapped, setRewardCapped] = useState(false);
   const submitResult = trpc.spelling.submitResult.useMutation({
-    onSuccess: () => {
+    onSuccess: (data) => {
+      if (data.isCorrect) {
+        setRewardPoints(data.pointsEarned);
+        setRewardCapped(data.rewardCapped);
+        setSessionPoints((points) => points + data.pointsEarned);
+      }
       void utils.spelling.getReviewQueue.invalidate();
       void utils.spelling.getErrorWords.invalidate();
       void utils.spelling.getErrorBook.invalidate();
@@ -2168,6 +2425,7 @@ function FlashMode({ onBack, words }: { onBack: () => void; words: any[] }) {
   const [activeInputIndex, setActiveInputIndex] = useState(0);
   const [timeLeft, setTimeLeft] = useState(3);
   const [score, setScore] = useState(0);
+  const [sessionPoints, setSessionPoints] = useState(0);
   const [showSummary, setShowSummary] = useState(false);
   const [sessionResults, setSessionResults] = useState<Array<{ word: string; correct: boolean }>>([]);
   const [retryToken, setRetryToken] = useState(0);
@@ -2255,17 +2513,27 @@ function FlashMode({ onBack, words }: { onBack: () => void; words: any[] }) {
       setIndex((i) => i + 1);
       setInput("");
       setActiveInputIndex(0);
+      setRewardPoints(null);
+      setRewardCapped(false);
       setPhase("show");
     } else {
       setShowSummary(true);
     }
   };
 
-  if (showSummary) return <SessionSummary results={sessionResults} score={score} total={words?.length ?? 0} onBack={onBack} onRetry={() => { setIndex(0); setScore(0); setSessionResults([]); setShowSummary(false); setPhase("show"); setInput(""); setRetryToken((token) => token + 1); }} />;
+  if (showSummary) return <SessionSummary results={sessionResults} score={score} points={sessionPoints} total={words?.length ?? 0} onBack={onBack} onRetry={() => { setIndex(0); setScore(0); setSessionPoints(0); setRewardPoints(null); setRewardCapped(false); setSessionResults([]); setShowSummary(false); setPhase("show"); setInput(""); setRetryToken((token) => token + 1); }} />;
   if (!currentWord) return <div className="min-h-screen flex items-center justify-center"><p className="text-gray-500">暂无单词可练习</p></div>;
 
   return (
     <main className="max-w-lg mx-auto px-4 py-6 pb-24">
+      {phase === "result" &&
+        normalizePracticeAnswer(input) ===
+          normalizePracticeAnswer(currentWord.word) && (
+          <CorrectCelebration
+            points={rewardPoints}
+            rewardCapped={rewardCapped}
+          />
+        )}
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
           <button onClick={onBack} className="h-9 w-9 flex items-center justify-center rounded-lg hover:bg-gray-100">
@@ -2273,7 +2541,7 @@ function FlashMode({ onBack, words }: { onBack: () => void; words: any[] }) {
           </button>
           <span className="text-xs px-2 py-1 bg-gray-100 rounded-md text-gray-500">{index + 1} / {words?.length}</span>
         </div>
-        <span className="text-sm font-bold text-amber-600">{score} 分</span>
+        <span className="text-sm font-bold text-amber-600">答对 {score}</span>
       </div>
 
       {phase === "show" && (
@@ -2400,10 +2668,16 @@ function FlashMode({ onBack, words }: { onBack: () => void; words: any[] }) {
           }`}>
             {normalizePracticeAnswer(input) ===
             normalizePracticeAnswer(currentWord.word) ? (
-              <div className="flex items-center justify-center gap-2 mb-2">
-                <CheckCircle2 className="w-5 h-5 text-green-500" />
-                <span className="text-sm font-medium text-green-700">正确！</span>
-              </div>
+              <>
+                <div className="flex items-center justify-center gap-2 mb-2">
+                  <CheckCircle2 className="w-5 h-5 text-green-500" />
+                  <span className="text-sm font-medium text-green-700">正确！</span>
+                </div>
+                <PracticeRewardBadge
+                  points={rewardPoints}
+                  rewardCapped={rewardCapped}
+                />
+              </>
             ) : (
               <div className="flex items-center justify-center gap-2 mb-2">
                 <XCircle className="w-5 h-5 text-red-500" />
@@ -2450,12 +2724,14 @@ function FlashMode({ onBack, words }: { onBack: () => void; words: any[] }) {
 function SessionSummary({
   results,
   score,
+  points,
   total,
   onBack,
   onRetry,
 }: {
   results: Array<{ word: string; correct: boolean }>;
   score: number;
+  points: number;
   total: number;
   onBack: () => void;
   onRetry: () => void;
@@ -2469,6 +2745,9 @@ function SessionSummary({
         <h2 className="text-xl font-bold text-gray-900 mb-1">练习完成！</h2>
         <p className="text-3xl font-bold text-indigo-600 mb-2">{score} / {total}</p>
         <p className="text-sm text-gray-500">正确率 {accuracy}%</p>
+        <div className="mx-auto mt-3 w-fit rounded-full bg-amber-100 px-3 py-1 text-sm font-bold text-amber-700">
+          本轮获得 +{points} 积分
+        </div>
 
         {/* Level badge */}
         <div className="mt-3">

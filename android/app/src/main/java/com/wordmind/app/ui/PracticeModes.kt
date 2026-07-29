@@ -1,6 +1,13 @@
 package com.wordmind.app.ui
 
+import android.media.AudioAttributes
+import android.media.AudioFormat
+import android.media.AudioTrack
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -56,7 +63,13 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.drawscope.rotate
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -66,11 +79,21 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import com.wordmind.app.data.PracticeWord
+import com.wordmind.app.data.SpellingReward
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import kotlin.math.PI
 import kotlin.math.ceil
+import kotlin.math.cos
+import kotlin.math.exp
 import kotlin.math.floor
+import kotlin.math.min
+import kotlin.math.sin
 
 private typealias PracticeSubmit = (
     word: PracticeWord,
@@ -78,6 +101,7 @@ private typealias PracticeSubmit = (
     input: String,
     mode: String,
     durationMs: Long,
+    onReward: (SpellingReward) -> Unit,
 ) -> Unit
 
 private val PracticeExtraKeys = listOf(
@@ -131,7 +155,9 @@ internal fun BlocksPracticeMode(
     var activeSlotIndex by remember { mutableIntStateOf(0) }
     var highlightedPoolTokenId by remember { mutableStateOf<Int?>(null) }
     var result by remember { mutableStateOf<Boolean?>(null) }
+    var reward by remember { mutableStateOf<SpellingReward?>(null) }
     var score by remember { mutableIntStateOf(0) }
+    var sessionPoints by remember { mutableIntStateOf(0) }
     var sessionResults by remember { mutableStateOf<List<SessionWordResult>>(emptyList()) }
     var showSummary by remember { mutableStateOf(false) }
     var retryToken by remember { mutableIntStateOf(0) }
@@ -150,6 +176,7 @@ internal fun BlocksPracticeMode(
             }
             activeSlotIndex = target.indexOfFirst { !it.isWhitespace() }.coerceAtLeast(0)
             highlightedPoolTokenId = null
+            reward = null
             result = null
             startedAt = System.currentTimeMillis()
             autoSpeakPracticeWordTwice(current.word, speak, current.example)
@@ -160,11 +187,13 @@ internal fun BlocksPracticeMode(
         PracticeSessionSummary(
             results = sessionResults,
             score = score,
+            points = sessionPoints,
             total = words.size,
             onBack = onBack,
             onRetry = {
                 index = 0
                 score = 0
+                sessionPoints = 0
                 sessionResults = emptyList()
                 showSummary = false
                 retryToken += 1
@@ -343,6 +372,7 @@ internal fun BlocksPracticeMode(
                 userInput = answer,
                 accent = PracticeIndigo,
                 speak = speak,
+                reward = reward,
             )
         }
         Spacer(Modifier.height(18.dp))
@@ -360,7 +390,10 @@ internal fun BlocksPracticeMode(
                         answer,
                         "blocks",
                         System.currentTimeMillis() - startedAt,
-                    )
+                    ) { earnedReward ->
+                        reward = earnedReward
+                        sessionPoints += earnedReward.pointsEarned
+                    }
                 } else if (index < words.lastIndex) {
                     index += 1
                 } else {
@@ -397,7 +430,9 @@ internal fun FillBlankPracticeMode(
     var answers by remember { mutableStateOf<Map<Int, Char>>(emptyMap()) }
     var activeBlankIndex by remember { mutableIntStateOf(0) }
     var result by remember { mutableStateOf<Boolean?>(null) }
+    var reward by remember { mutableStateOf<SpellingReward?>(null) }
     var score by remember { mutableIntStateOf(0) }
+    var sessionPoints by remember { mutableIntStateOf(0) }
     var sessionResults by remember { mutableStateOf<List<SessionWordResult>>(emptyList()) }
     var showSummary by remember { mutableStateOf(false) }
     var retryToken by remember { mutableIntStateOf(0) }
@@ -410,6 +445,7 @@ internal fun FillBlankPracticeMode(
             hiddenPositions = fillBlankPositions(target)
             answers = emptyMap()
             activeBlankIndex = 0
+            reward = null
             result = null
             startedAt = System.currentTimeMillis()
             autoSpeakPracticeWordTwice(current.word, speak, current.example)
@@ -420,11 +456,13 @@ internal fun FillBlankPracticeMode(
         PracticeSessionSummary(
             results = sessionResults,
             score = score,
+            points = sessionPoints,
             total = words.size,
             onBack = onBack,
             onRetry = {
                 index = 0
                 score = 0
+                sessionPoints = 0
                 sessionResults = emptyList()
                 showSummary = false
                 retryToken += 1
@@ -585,7 +623,10 @@ internal fun FillBlankPracticeMode(
                         answer,
                         "fillblank",
                         System.currentTimeMillis() - startedAt,
-                    )
+                    ) { earnedReward ->
+                        reward = earnedReward
+                        sessionPoints += earnedReward.pointsEarned
+                    }
                 },
             )
         } else {
@@ -595,6 +636,7 @@ internal fun FillBlankPracticeMode(
                 userInput = answer,
                 accent = PracticeSuccess,
                 speak = speak,
+                reward = reward,
             )
             Spacer(Modifier.height(14.dp))
             Button(
@@ -635,6 +677,8 @@ internal fun FlashPracticeMode(
     var activeInputIndex by remember { mutableIntStateOf(0) }
     var timeLeft by remember { mutableIntStateOf(3) }
     var score by remember { mutableIntStateOf(0) }
+    var reward by remember { mutableStateOf<SpellingReward?>(null) }
+    var sessionPoints by remember { mutableIntStateOf(0) }
     var sessionResults by remember { mutableStateOf<List<SessionWordResult>>(emptyList()) }
     var showSummary by remember { mutableStateOf(false) }
     var retryToken by remember { mutableIntStateOf(0) }
@@ -646,6 +690,7 @@ internal fun FlashPracticeMode(
         if (current != null && phase == FlashPhase.Show) {
             startedAt = System.currentTimeMillis()
             input = ""
+            reward = null
             activeInputIndex = 0
             timeLeft = 3
             launch {
@@ -663,11 +708,13 @@ internal fun FlashPracticeMode(
         PracticeSessionSummary(
             results = sessionResults,
             score = score,
+            points = sessionPoints,
             total = words.size,
             onBack = onBack,
             onRetry = {
                 index = 0
                 score = 0
+                sessionPoints = 0
                 sessionResults = emptyList()
                 showSummary = false
                 phase = FlashPhase.Show
@@ -856,7 +903,10 @@ internal fun FlashPracticeMode(
                             input,
                             "flash",
                             System.currentTimeMillis() - startedAt,
-                        )
+                        ) { earnedReward ->
+                            reward = earnedReward
+                            sessionPoints += earnedReward.pointsEarned
+                        }
                     },
                 )
             }
@@ -867,6 +917,7 @@ internal fun FlashPracticeMode(
                     userInput = input,
                     accent = PracticeAmber,
                     speak = speak,
+                    reward = reward,
                 )
                 Spacer(Modifier.height(14.dp))
                 Button(
@@ -1210,7 +1261,7 @@ private fun PracticeModeHeader(
             )
         }
         Spacer(Modifier.weight(1f))
-        Text("$score 分", color = scoreColor, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+        Text("答对 $score", color = scoreColor, fontSize = 14.sp, fontWeight = FontWeight.Bold)
     }
 }
 
@@ -1337,12 +1388,319 @@ private fun PracticeExampleCard(
 }
 
 @Composable
+private fun CorrectFireworks(reward: SpellingReward?) {
+    CorrectCelebrationOverlay(reward)
+
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(82.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(
+                "★ 太棒啦！ ★",
+                color = PracticeSuccess,
+                fontSize = 19.sp,
+                fontWeight = FontWeight.ExtraBold,
+            )
+            Spacer(Modifier.height(5.dp))
+            Surface(
+                color = Color(0xFFFFF0B8),
+                shape = RoundedCornerShape(999.dp),
+            ) {
+                Text(
+                    celebrationRewardText(reward),
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
+                    color = PracticeAmber,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                )
+            }
+        }
+    }
+}
+
+private fun celebrationRewardText(reward: SpellingReward?): String = when {
+    reward == null -> "积分结算中…"
+    reward.pointsEarned > 0 -> "+${reward.pointsEarned} 积分"
+    reward.rewardCapped -> "该词今日奖励已完成"
+    else -> "继续保持"
+}
+
+@Composable
+private fun CorrectCelebrationOverlay(reward: SpellingReward?) {
+    val progress = remember { Animatable(0f) }
+    var visible by remember { mutableStateOf(true) }
+
+    LaunchedEffect(Unit) {
+        launch { playCuteCelebrationChime() }
+        progress.snapTo(0f)
+        progress.animateTo(
+            targetValue = 1f,
+            animationSpec = tween(
+                durationMillis = 2_400,
+                easing = FastOutSlowInEasing,
+            ),
+        )
+        visible = false
+    }
+
+    if (!visible) return
+
+    Dialog(
+        onDismissRequest = {},
+        properties = DialogProperties(
+            dismissOnBackPress = false,
+            dismissOnClickOutside = false,
+            usePlatformDefaultWidth = false,
+        ),
+    ) {
+        Box(
+            modifier = Modifier.fillMaxSize(),
+            contentAlignment = Alignment.Center,
+        ) {
+            Canvas(Modifier.fillMaxSize()) {
+                val animationProgress = progress.value
+                val overlayAlpha = when {
+                    animationProgress < 0.08f -> animationProgress / 0.08f
+                    animationProgress > 0.82f -> (1f - animationProgress) / 0.18f
+                    else -> 1f
+                }.coerceIn(0f, 1f)
+                drawRect(Color(0xFF0F172A).copy(alpha = overlayAlpha * 0.16f))
+
+                val colors = listOf(
+                    Color(0xFFF59E0B),
+                    Color(0xFFEC4899),
+                    Color(0xFF8B5CF6),
+                    Color(0xFF06B6D4),
+                    Color(0xFF22C55E),
+                    Color(0xFFF97316),
+                    Color(0xFFFDE047),
+                )
+                repeat(108) { particleIndex ->
+                    val delay = (particleIndex % 12) * 0.018f
+                    val particleProgress = (
+                        (animationProgress * 1.28f - delay) / (1f - delay)
+                        ).coerceIn(0f, 1f)
+                    if (particleProgress <= 0f) return@repeat
+
+                    val leftSide = particleIndex % 2 == 0
+                    val direction = if (leftSide) 1f else -1f
+                    val originX = if (leftSide) size.width * 0.04f else size.width * 0.96f
+                    val originY = size.height * (0.64f + (particleIndex % 5) * 0.025f)
+                    val horizontalTravel =
+                        size.width * (0.28f + (particleIndex % 9) * 0.025f)
+                    val lift = size.height * (0.30f + (particleIndex % 7) * 0.026f)
+                    val wobble = sin(
+                        particleProgress * PI.toFloat() * 3f + particleIndex,
+                    ) * (10f + particleIndex % 4 * 4f)
+                    val center = Offset(
+                        x = originX +
+                            direction * horizontalTravel * particleProgress +
+                            wobble,
+                        y = originY -
+                            lift * particleProgress +
+                            size.height * 0.21f * particleProgress * particleProgress,
+                    )
+                    val alpha = (
+                        (1f - particleProgress) * 1.7f
+                        ).coerceIn(0f, 1f) * overlayAlpha
+                    val color = colors[particleIndex % colors.size].copy(alpha = alpha)
+                    val radius = 7f + (particleIndex % 4) * 2f
+
+                    when (particleIndex % 4) {
+                        0 -> drawCelebrationStar(
+                            center = center,
+                            radius = radius * 1.45f,
+                            color = color,
+                            rotation = particleProgress * 240f,
+                        )
+                        1 -> drawCircle(color, radius, center)
+                        else -> rotate(
+                            degrees = particleProgress * 300f + particleIndex * 17f,
+                            pivot = center,
+                        ) {
+                            drawRect(
+                                color = color,
+                                topLeft = Offset(center.x - radius, center.y - radius * 0.45f),
+                                size = Size(radius * 2f, radius * 0.9f),
+                            )
+                        }
+                    }
+                }
+            }
+
+            val cardAlpha = when {
+                progress.value < 0.1f -> progress.value / 0.1f
+                progress.value > 0.8f -> (1f - progress.value) / 0.2f
+                else -> 1f
+            }.coerceIn(0f, 1f)
+            val cardScale = when {
+                progress.value < 0.16f -> 0.58f + progress.value / 0.16f * 0.54f
+                progress.value < 0.28f -> 1.12f - (progress.value - 0.16f) / 0.12f * 0.15f
+                else -> 0.97f + min((progress.value - 0.28f) / 0.14f, 1f) * 0.03f
+            }
+            Surface(
+                modifier = Modifier
+                    .width(286.dp)
+                    .graphicsLayer {
+                        alpha = cardAlpha
+                        scaleX = cardScale
+                        scaleY = cardScale
+                        rotationZ = sin(progress.value * PI.toFloat() * 4f) *
+                            (1f - progress.value) * 5f
+                    },
+                color = Color(0xFFFFFCF5),
+                shape = RoundedCornerShape(30.dp),
+                border = BorderStroke(4.dp, Color(0xFFFBBF24)),
+                shadowElevation = 18.dp,
+            ) {
+                Column(
+                    modifier = Modifier.padding(horizontal = 22.dp, vertical = 20.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    Surface(
+                        modifier = Modifier.size(76.dp),
+                        shape = CircleShape,
+                        color = Color(0xFFF59E0B),
+                        border = BorderStroke(4.dp, Color.White),
+                        shadowElevation = 8.dp,
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Text(
+                                "★",
+                                color = Color.White,
+                                fontSize = 45.sp,
+                                fontWeight = FontWeight.Black,
+                            )
+                        }
+                    }
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        "太棒啦！",
+                        color = Color(0xFFF97316),
+                        fontSize = 27.sp,
+                        fontWeight = FontWeight.Black,
+                    )
+                    Text(
+                        "这道题答对了，继续加油！",
+                        color = Color(0xFFEC4899),
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    Spacer(Modifier.height(11.dp))
+                    Surface(
+                        color = Color(0xFFFFE8A3),
+                        shape = RoundedCornerShape(999.dp),
+                    ) {
+                        Text(
+                            celebrationRewardText(reward),
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 7.dp),
+                            color = Color(0xFFB45309),
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Black,
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+private fun DrawScope.drawCelebrationStar(
+    center: Offset,
+    radius: Float,
+    color: Color,
+    rotation: Float,
+) {
+    val path = Path()
+    repeat(10) { pointIndex ->
+        val pointRadius = if (pointIndex % 2 == 0) radius else radius * 0.44f
+        val angle = Math.toRadians(
+            (rotation - 90f + pointIndex * 36f).toDouble(),
+        )
+        val point = Offset(
+            x = center.x + cos(angle).toFloat() * pointRadius,
+            y = center.y + sin(angle).toFloat() * pointRadius,
+        )
+        if (pointIndex == 0) path.moveTo(point.x, point.y) else path.lineTo(point.x, point.y)
+    }
+    path.close()
+    drawPath(path, color)
+}
+
+private suspend fun playCuteCelebrationChime() = withContext(Dispatchers.Default) {
+    val sampleRate = 44_100
+    val durationSeconds = 1.05
+    val sampleCount = (sampleRate * durationSeconds).toInt()
+    val samples = ShortArray(sampleCount)
+    val notes = listOf(
+        Triple(523.25, 0.00, 0.34),
+        Triple(659.25, 0.10, 0.38),
+        Triple(783.99, 0.20, 0.42),
+        Triple(1046.50, 0.34, 0.62),
+    )
+
+    for (sampleIndex in samples.indices) {
+        val time = sampleIndex.toDouble() / sampleRate
+        var mixedSample = 0.0
+        notes.forEach { (frequency, start, duration) ->
+            val localTime = time - start
+            if (localTime in 0.0..duration) {
+                val attack = (localTime / 0.025).coerceIn(0.0, 1.0)
+                val decay = exp(-4.4 * localTime / duration)
+                val envelope = attack * decay
+                mixedSample += sin(2.0 * PI * frequency * localTime) * envelope * 0.28
+                mixedSample += sin(2.0 * PI * frequency * 2.0 * localTime) * envelope * 0.07
+            }
+        }
+        samples[sampleIndex] = (
+            mixedSample.coerceIn(-1.0, 1.0) * Short.MAX_VALUE
+            ).toInt().toShort()
+    }
+
+    val minimumBufferSize = AudioTrack.getMinBufferSize(
+        sampleRate,
+        AudioFormat.CHANNEL_OUT_MONO,
+        AudioFormat.ENCODING_PCM_16BIT,
+    )
+    val track = AudioTrack.Builder()
+        .setAudioAttributes(
+            AudioAttributes.Builder()
+                .setUsage(AudioAttributes.USAGE_GAME)
+                .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                .build(),
+        )
+        .setAudioFormat(
+            AudioFormat.Builder()
+                .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
+                .setSampleRate(sampleRate)
+                .setChannelMask(AudioFormat.CHANNEL_OUT_MONO)
+                .build(),
+        )
+        .setTransferMode(AudioTrack.MODE_STATIC)
+        .setBufferSizeInBytes(maxOf(minimumBufferSize, samples.size * 2))
+        .build()
+
+    try {
+        track.write(samples, 0, samples.size, AudioTrack.WRITE_BLOCKING)
+        track.play()
+        delay((durationSeconds * 1_000).toLong() + 80L)
+    } finally {
+        runCatching { track.stop() }
+        track.release()
+    }
+}
+
+@Composable
 private fun PracticeAnswerResult(
     correct: Boolean,
     word: PracticeWord,
     userInput: String,
     accent: Color,
     speak: (String) -> Unit,
+    reward: SpellingReward?,
 ) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
@@ -1354,6 +1712,10 @@ private fun PracticeAnswerResult(
         ),
     ) {
         Column(Modifier.padding(15.dp)) {
+            if (correct) {
+                CorrectFireworks(reward)
+                Spacer(Modifier.height(2.dp))
+            }
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
@@ -1486,66 +1848,50 @@ private fun PracticeExampleInputBlocks(
 
     val prefix = example.substring(0, match.range.first)
     val suffix = example.substring(match.range.last + 1)
-    val compactLayout = match.value.count { !it.isWhitespace() } <= 7 &&
-        example.length <= 34
-
-    if (compactLayout) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.Center,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            PracticeExampleText(prefix)
-            PracticeInputBlockSequence(
-                expected = match.value,
-                answer = answer,
-                activeInputIndex = activeInputIndex,
-                onInputBlockClick = onInputBlockClick,
-            )
-            PracticeExampleText(suffix)
-        }
-    } else {
-        Column(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalAlignment = Alignment.CenterHorizontally,
-        ) {
-            prefix.trimEnd().takeIf { it.isNotEmpty() }?.let {
-                PracticeExampleText(it, Modifier.fillMaxWidth())
-                Spacer(Modifier.height(6.dp))
-            }
-            FlowRow(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.Center,
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                PracticeInputBlockSequence(
-                    expected = match.value,
-                    answer = answer,
-                    activeInputIndex = activeInputIndex,
-                    onInputBlockClick = onInputBlockClick,
-                )
-                suffix.trimStart().takeIf { it.isNotEmpty() }?.let {
-                    PracticeExampleText(it)
-                }
-            }
-        }
+    FlowRow(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.Center,
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        PracticeExampleTextFlow(prefix)
+        PracticeInputBlockSequence(
+            expected = match.value,
+            answer = answer,
+            activeInputIndex = activeInputIndex,
+            onInputBlockClick = onInputBlockClick,
+        )
+        PracticeExampleTextFlow(suffix)
     }
 }
 
 @Composable
-private fun PracticeExampleText(
-    text: String,
-    modifier: Modifier = Modifier,
-) {
-    Text(
-        text,
-        modifier = modifier,
-        color = Color(0xFF334155),
-        fontSize = 16.sp,
-        fontWeight = FontWeight.Medium,
-        lineHeight = 30.sp,
-        textAlign = TextAlign.Center,
-    )
+private fun PracticeExampleTextFlow(text: String) {
+    Regex("""\s+|\S+""").findAll(text).forEach { match ->
+        val chunk = match.value
+        if (chunk.isBlank()) {
+            Spacer(
+                Modifier.size(
+                    width = (chunk.length * 5).dp,
+                    height = 36.dp,
+                ),
+            )
+        } else {
+            Box(
+                modifier = Modifier.height(36.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    chunk,
+                    color = Color(0xFF334155),
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Medium,
+                    maxLines = 1,
+                    softWrap = false,
+                    textAlign = TextAlign.Center,
+                )
+            }
+        }
+    }
 }
 
 @Composable
@@ -1557,7 +1903,7 @@ private fun PracticeInputBlockSequence(
 ) {
     expected.forEachIndexed { characterIndex, expectedCharacter ->
         if (expectedCharacter.isWhitespace()) {
-            Spacer(Modifier.width(7.dp))
+            Spacer(Modifier.size(width = 7.dp, height = 36.dp))
         } else {
             val enteredCharacter = answer.getOrNull(characterIndex)
             val hasInput = enteredCharacter != null &&
@@ -1565,7 +1911,7 @@ private fun PracticeInputBlockSequence(
                 enteredCharacter != '\u00A0'
             val isActive = characterIndex == activeInputIndex
             val baseModifier = Modifier
-                .padding(horizontal = 1.5.dp)
+                .padding(horizontal = 1.5.dp, vertical = 2.dp)
                 .size(width = 27.dp, height = 32.dp)
             val blockModifier = if (onInputBlockClick != null) {
                 baseModifier.clickable {
@@ -1778,6 +2124,7 @@ private fun KeyboardTextKey(
 private fun PracticeSessionSummary(
     results: List<SessionWordResult>,
     score: Int,
+    points: Int,
     total: Int,
     onBack: () -> Unit,
     onRetry: () -> Unit,
@@ -1817,6 +2164,19 @@ private fun PracticeSessionSummary(
                         fontWeight = FontWeight.Bold,
                     )
                     Text("正确率 $accuracy%", color = PracticeMuted, fontSize = 13.sp)
+                    Spacer(Modifier.height(9.dp))
+                    Surface(
+                        color = Color(0xFFFFF7D6),
+                        shape = RoundedCornerShape(100.dp),
+                    ) {
+                        Text(
+                            "本轮获得 +$points 积分",
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 5.dp),
+                            color = PracticeAmber,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                        )
+                    }
                     Spacer(Modifier.height(10.dp))
                     Surface(
                         color = when {

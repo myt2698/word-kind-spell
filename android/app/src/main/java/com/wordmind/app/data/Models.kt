@@ -114,7 +114,14 @@ data class SpellingStats(
     val dueForReview: Int,
     val totalErrors: Int,
     val todaySessions: Int,
+    val totalPoints: Int,
+    val todayPoints: Int,
     val byLevel: List<SpellingLevelStat>,
+)
+
+data class SpellingReward(
+    val pointsEarned: Int,
+    val rewardCapped: Boolean,
 )
 
 data class SpellingLevelStat(
