@@ -19,5 +19,14 @@ export default defineConfig([
       ecmaVersion: 2020,
       globals: globals.browser,
     },
+    rules: {
+      '@typescript-eslint/no-explicit-any': 'warn',
+      'react-refresh/only-export-components': ['warn', { allowConstantExport: true }],
+      // These React Compiler diagnostics are useful during refactors, but the
+      // current UI intentionally resets local state when dialogs/modes change.
+      'react-hooks/set-state-in-effect': 'off',
+      'react-hooks/immutability': 'off',
+      'react-hooks/purity': 'off',
+    },
   },
 ])

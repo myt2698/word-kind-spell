@@ -4,6 +4,7 @@
 
 import * as jose from "jose";
 import { env } from "./lib/env";
+import { Session } from "@contracts/constants";
 
 const JWT_ALG = "HS256";
 const JWT_SECRET = () => new TextEncoder().encode(env.appSecret + "_name_v2");
@@ -22,7 +23,7 @@ export async function signPhoneSessionToken(
   return new jose.SignJWT({ userId, name })
     .setProtectedHeader({ alg: JWT_ALG })
     .setIssuedAt()
-    .setExpirationTime("1 year")
+    .setExpirationTime(`${Math.floor(Session.maxAgeMs / 1000)} seconds`)
     .sign(JWT_SECRET());
 }
 

@@ -1,20 +1,27 @@
 import { Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
+import { secureHeaders } from "hono/secure-headers";
 import type { HttpBindings } from "@hono/node-server";
 import { fetchRequestHandler } from "@trpc/server/adapters/fetch";
 import { appRouter } from "./router";
 import { createContext } from "./context";
 import { env } from "./lib/env";
+import { rateLimit } from "./lib/rate-limit";
 
-// DEBUG: Print env info BEFORE any validation
 console.log("[BOOT] ========== Starting 词音岛 ==========");
 console.log("[BOOT] NODE_ENV:", process.env.NODE_ENV);
-console.log("[BOOT] Env var count:", Object.keys(process.env).length);
-console.log("[BOOT] Env keys:", Object.keys(process.env).sort().filter(k => !k.includes("SECRET") && !k.includes("PASS") && !k.includes("KEY")).join(", "));
 
 const app = new Hono<{ Bindings: HttpBindings }>();
 
-app.use(bodyLimit({ maxSize: 50 * 1024 * 1024 }));
+app.use(secureHeaders());
+app.use("/api/*", rateLimit({ windowMs: 60_000, maxRequests: 120, authMaxRequests: 10 }));
+app.use("/api/*", async (c, next) => {
+  const isAudioRequest = c.req.url.includes("audio.");
+  return bodyLimit({
+    maxSize: isAudioRequest ? 50 * 1024 * 1024 : 2 * 1024 * 1024,
+    onError: (context) => context.json({ error: "Request body is too large" }, 413),
+  })(c, next);
+});
 
 // tRPC API handler
 app.use("/api/trpc/*", async (c) => {

@@ -11,6 +11,10 @@ import { getSessionCookieOptions } from "./lib/cookies";
 import { Session } from "@contracts/constants";
 import * as cookie from "cookie";
 
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : "未知错误";
+}
+
 export const authRouter = createRouter({
   // Register with name + password
   register: publicQuery
@@ -42,9 +46,9 @@ export const authRouter = createRouter({
         );
 
         return { success: true as const, message: "注册成功" };
-      } catch (err: any) {
+      } catch (err: unknown) {
         console.error("[auth] Register error:", err);
-        return { success: false as const, message: "注册失败: " + (err.message || "未知错误") };
+        return { success: false as const, message: "注册失败: " + errorMessage(err) };
       }
     }),
 
@@ -78,9 +82,9 @@ export const authRouter = createRouter({
         );
 
         return { success: true as const, message: "登录成功" };
-      } catch (err: any) {
+      } catch (err: unknown) {
         console.error("[auth] Login error:", err);
-        return { success: false as const, message: "登录失败: " + (err.message || "未知错误") };
+        return { success: false as const, message: "登录失败: " + errorMessage(err) };
       }
     }),
 
@@ -103,9 +107,9 @@ export const authRouter = createRouter({
           input.newPassword
         );
         return result;
-      } catch (err: any) {
+      } catch (err: unknown) {
         console.error("[auth] Change password error:", err);
-        return { success: false, message: "修改失败: " + (err.message || "未知错误") };
+        return { success: false, message: "修改失败: " + errorMessage(err) };
       }
     }),
 

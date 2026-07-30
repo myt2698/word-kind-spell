@@ -10,6 +10,10 @@ import { eq } from "drizzle-orm";
 
 const SALT_ROUNDS = 10;
 
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : "未知错误";
+}
+
 function isValidPassword(password: string): boolean {
   return password.length >= 6;
 }
@@ -61,8 +65,6 @@ export async function register(
 
     // Hash password and create user
     const passwordHash = await hashPassword(password);
-    console.log("[auth] Register - name:", trimmedName, "hash length:", passwordHash.length);
-
     const result = await db.insert(users).values({
       name: trimmedName,
       password: passwordHash,
@@ -70,15 +72,15 @@ export async function register(
     });
 
     const userId = Number(result[0].insertId);
-    console.log("[auth] Register success - userId:", userId);
     return { success: true, userId, message: "注册成功" };
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error("[auth] Register exception:", err);
+    const message = errorMessage(err);
     // Handle unique constraint violation
-    if (err.message?.includes("Duplicate") || err.message?.includes("unique")) {
+    if (message.includes("Duplicate") || message.includes("unique")) {
       return { success: false, message: "该昵称已被使用，请换一个" };
     }
-    return { success: false, message: "注册异常: " + (err.message || "未知错误") };
+    return { success: false, message: "注册异常: " + message };
   }
 }
 
@@ -116,8 +118,6 @@ export async function login(
 
     const user = rows[0] || null;
 
-    console.log("[auth] Login - name:", trimmedName, "user found:", !!user);
-
     if (!user) {
       return { success: false, message: "昵称不存在，请先注册" };
     }
@@ -127,8 +127,6 @@ export async function login(
     }
 
     const valid = await verifyPassword(password, user.password);
-    console.log("[auth] Login - password valid:", valid);
-
     if (!valid) {
       return { success: false, message: "密码错误" };
     }
@@ -139,11 +137,10 @@ export async function login(
       .set({ lastSignInAt: new Date() })
       .where(eq(users.id, user.id));
 
-    console.log("[auth] Login success - userId:", user.id);
     return { success: true, userId: user.id, message: "登录成功" };
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error("[auth] Login exception:", err);
-    return { success: false, message: "登录异常: " + (err.message || "未知错误") };
+    return { success: false, message: "登录异常: " + errorMessage(err) };
   }
 }
 
@@ -189,9 +186,9 @@ export async function changePassword(
       .where(eq(users.id, userId));
 
     return { success: true, message: "密码修改成功" };
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error("[auth] Change password exception:", err);
-    return { success: false, message: "修改异常: " + (err.message || "未知错误") };
+    return { success: false, message: "修改异常: " + errorMessage(err) };
   }
 }
 

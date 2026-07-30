@@ -23,17 +23,16 @@ export const env = {
   get youdaoAppKey() { return process.env.YOUDAO_APP_KEY ?? ""; },
   get youdaoAppSecret() { return process.env.YOUDAO_APP_SECRET ?? ""; },
 
-  // Validate all required vars, call this after debug logging
+  // Validate all required variables before starting the production server.
   validate() {
-    const required = ["APP_ID", "APP_SECRET", "DATABASE_URL", "KIMI_AUTH_URL", "KIMI_OPEN_URL"];
+    const required = ["APP_SECRET", "DATABASE_URL"];
     const missing = required.filter((name) => !process.env[name]);
     if (missing.length > 0) {
-      const available = Object.keys(process.env)
-        .filter((k) => !k.includes("SECRET") && !k.includes("PASS") && !k.includes("KEY"))
-        .sort();
       console.error(`[ENV ERROR] Missing: ${missing.join(", ")}`);
-      console.error(`[ENV DEBUG] Available (${Object.keys(process.env).length}): ${available.join(", ")}`);
       throw new Error(`Missing required env vars: ${missing.join(", ")}`);
+    }
+    if ((process.env.APP_SECRET?.length ?? 0) < 32) {
+      throw new Error("APP_SECRET must contain at least 32 characters");
     }
     console.log("[ENV] All required variables OK");
   },

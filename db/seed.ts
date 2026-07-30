@@ -1,17 +1,14 @@
+import { sql } from "drizzle-orm";
 import { getDb } from "../api/queries/connection";
-// TODO: import tables from "./schema"
 
 async function seed() {
   const db = getDb();
-  console.log("Seeding database...");
-
-  // TODO: insert seed data, e.g.
-  // await db.insert(schema.posts).values([
-  //   { title: "First post", content: "Hello world" },
-  // ]);
-
-  console.log("Done.");
-  process.exit(0); // close MySQL connection pool
+  await db.execute(sql`SELECT 1`);
+  console.log("Database connection verified. No mandatory seed data is required.");
+  process.exit(0);
 }
 
-seed();
+seed().catch((error: unknown) => {
+  console.error("Database seed check failed:", error);
+  process.exit(1);
+});

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { useNavigate } from "react-router";
 import { trpc } from "@/providers/trpc";
@@ -54,14 +54,13 @@ function sortTagsAlphabetically<T extends { id: number; name: string }>(
 export default function AdminPage() {
   const { user, isLoading: authLoading } = useAuth({ redirectOnUnauthenticated: true });
   const navigate = useNavigate();
-
-  // Redirect non-admin users
-  if (!authLoading && user && user.role !== "admin") {
-    navigate("/");
-    return null;
-  }
-
   const [activeTab, setActiveTab] = useState<AdminTab>("tags");
+
+  useEffect(() => {
+    if (!authLoading && user && user.role !== "admin") navigate("/");
+  }, [authLoading, navigate, user]);
+
+  if (!authLoading && user && user.role !== "admin") return null;
 
   return (
     <div className="min-h-screen bg-gray-50/50">

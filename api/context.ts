@@ -2,6 +2,8 @@ import type { FetchCreateContextFnOptions } from "@trpc/server/adapters/fetch";
 import type { User } from "@db/schema";
 import { verifyPhoneSessionToken } from "./session-v2";
 import { findUserById } from "./phone-auth";
+import { Session } from "@contracts/constants";
+import * as cookie from "cookie";
 
 export type TrpcContext = {
   req: Request;
@@ -15,10 +17,10 @@ export async function createContext(
   const ctx: TrpcContext = { req: opts.req, resHeaders: opts.resHeaders };
 
   try {
-    const cookies = opts.req.headers.get("cookie") || "";
-    const match = cookies.match(/kimi_sid=([^;]+)/);
-    if (match) {
-      const session = await verifyPhoneSessionToken(decodeURIComponent(match[1]));
+    const cookies = cookie.parse(opts.req.headers.get("cookie") || "");
+    const token = cookies[Session.cookieName];
+    if (token) {
+      const session = await verifyPhoneSessionToken(token);
       if (session) {
         const user = await findUserById(session.userId);
         if (user) {

@@ -908,7 +908,8 @@ function SpellHome({
         onKeyDown={(event) => {
           if (event.key === "Enter" || event.key === " ") {
             event.preventDefault();
-            selectedIds.length > 0 ? onStart("study") : setSelectDialogOpen(true);
+            if (selectedIds.length > 0) onStart("study");
+            else setSelectDialogOpen(true);
           }
         }}
         className="group bg-gradient-to-br from-white to-indigo-50/70 rounded-2xl border border-indigo-100 p-5 mb-6 cursor-pointer shadow-sm hover:shadow-md hover:border-indigo-300 transition-all active:scale-[0.995] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400"
