@@ -14,7 +14,7 @@
 
 ## 本地开发
 
-要求 Node.js 20+、npm 10+ 和 MySQL 8+。
+要求 Node.js 22.22+、npm 10+ 和 MySQL 8+。
 
 ```bash
 npm ci

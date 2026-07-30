@@ -85,7 +85,7 @@ Render 有免费 tier，支持 Docker。
 ### 步骤
 
 1. **准备服务器**
-   - 安装 Node.js 20+ 和 PM2
+   - 安装 Node.js 22.22+ 和 PM2
    ```bash
    # Ubuntu/Debian
    curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
