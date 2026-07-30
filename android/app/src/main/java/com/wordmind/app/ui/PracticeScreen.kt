@@ -993,7 +993,7 @@ private fun PracticeWordSelectionDialog(
                             selected = if (allSelected) {
                                 selected - filteredIds
                             } else {
-                                selected + filteredIds
+                                filteredIds
                             }
                         },
                         enabled = filteredIds.isNotEmpty(),
