@@ -58,6 +58,11 @@ import {
 import { useSearchParams } from "react-router";
 
 import { speakWord, preloadAudio } from "@/utils/speech";
+import {
+  deselectFilteredWordIds,
+  selectFilteredWordIds,
+} from "@/utils/word-selection";
+import { buildBlockPuzzleErrorReason } from "@/utils/block-puzzle-feedback";
 import DictationMode from "@/components/DictationMode";
 
 const AUTO_SPEAK_BASE_DELAY_MS = 1100;
@@ -1127,7 +1132,6 @@ function WordSelectionDialog({
     return matchesTextbook && matchesUnit && matchesLevel;
   });
   const filteredWordIds = filteredWords.map((word) => word.id);
-  const filteredWordIdSet = new Set(filteredWordIds);
   const allSelected =
     filteredWordIds.length > 0 && filteredWordIds.every((id) => isSelected(id));
   const hasFilters =
@@ -1137,10 +1141,10 @@ function WordSelectionDialog({
 
   const toggleSelectAll = () => {
     if (allSelected) {
-      selectAll(selectedIds.filter((id) => !filteredWordIdSet.has(id)));
+      selectAll(deselectFilteredWordIds(selectedIds, filteredWordIds));
       return;
     }
-    selectAll([...new Set([...selectedIds, ...filteredWordIds])]);
+    selectAll(selectFilteredWordIds(filteredWordIds));
   };
 
   return (
@@ -1867,6 +1871,13 @@ function BlocksMode({ onBack, words }: { onBack: () => void; words: any[] }) {
   if (!currentWord) return <div className="min-h-screen flex items-center justify-center"><p className="text-gray-500">暂无单词可练习</p></div>;
 
   const allFilled = slots.every((s) => s !== null);
+  const blockErrorReason =
+    result === "wrong"
+      ? buildBlockPuzzleErrorReason(
+          letterBlocks.map((block) => block.letters),
+          slots.map((slot) => slot?.letter ?? ""),
+        )
+      : null;
 
   return (
     <main className="max-w-lg mx-auto px-4 py-6 pb-24">
@@ -1933,9 +1944,16 @@ function BlocksMode({ onBack, words }: { onBack: () => void; words: any[] }) {
               />
             </>
           ) : (
-            <div className="flex items-center justify-center gap-2 mb-2">
-              <XCircle className="w-5 h-5 text-red-500" />
-              <span className="text-sm font-medium text-red-700">错误</span>
+            <div className="mb-2">
+              <div className="flex items-center justify-center gap-2">
+                <XCircle className="w-5 h-5 text-red-500" />
+                <span className="text-sm font-medium text-red-700">错误：{blockErrorReason?.summary}</span>
+              </div>
+              {blockErrorReason && (
+                <p className="mt-2 text-xs leading-5 text-red-600">
+                  {blockErrorReason.detail}
+                </p>
+              )}
             </div>
           )}
           {/* Full word info revealed after submit */}
