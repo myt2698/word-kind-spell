@@ -41,7 +41,33 @@ describe("practice points", () => {
         removedFromErrorBook: false,
         rewardedCorrectAttemptsToday: 0,
       }),
-    ).toMatchObject({ pointsEarned: 5, rewardCapped: false });
+    ).toMatchObject({ pointsEarned: 2, rewardCapped: false });
+  });
+
+  it("awards three points for the second consecutive correct answer", () => {
+    expect(
+      calculatePracticePoints({
+        isCorrect: true,
+        consecutiveCorrect: 2,
+        previousLevel: 1,
+        newLevel: 1,
+        removedFromErrorBook: false,
+        rewardedCorrectAttemptsToday: 1,
+      }),
+    ).toMatchObject({ pointsEarned: 3, rewardCapped: false });
+  });
+
+  it("awards four points for the third consecutive correct answer", () => {
+    expect(
+      calculatePracticePoints({
+        isCorrect: true,
+        consecutiveCorrect: 3,
+        previousLevel: 1,
+        newLevel: 1,
+        removedFromErrorBook: false,
+        rewardedCorrectAttemptsToday: 2,
+      }),
+    ).toMatchObject({ pointsEarned: 4, rewardCapped: false });
   });
 
   it("adds streak, level-up and error-book bonuses", () => {
@@ -54,7 +80,16 @@ describe("practice points", () => {
         removedFromErrorBook: true,
         rewardedCorrectAttemptsToday: 2,
       }),
-    ).toMatchObject({ pointsEarned: 20, rewardCapped: false });
+    ).toMatchObject({
+      pointsEarned: 8,
+      rewardCapped: false,
+      reasons: [
+        "答对 +2",
+        "连续答对3次 +2",
+        "熟练度升级 +2",
+        "攻克错题 +2",
+      ],
+    });
   });
 
   it("does not award points for a wrong answer", () => {

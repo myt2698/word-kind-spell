@@ -62,7 +62,6 @@ import {
   deselectFilteredWordIds,
   selectFilteredWordIds,
 } from "@/utils/word-selection";
-import { buildBlockPuzzleErrorReason } from "@/utils/block-puzzle-feedback";
 import DictationMode from "@/components/DictationMode";
 
 const AUTO_SPEAK_BASE_DELAY_MS = 1100;
@@ -168,14 +167,14 @@ function PracticeExampleLine({
   if (!example) return null;
 
   const toneClasses = {
-    indigo: "text-indigo-700",
-    emerald: "text-emerald-700",
-    amber: "text-amber-700",
+    indigo: "text-[#1D4ED8]",
+    emerald: "text-[#1D4ED8]",
+    amber: "text-[#1D4ED8]",
   }[tone];
   const surfaceClasses = {
-    indigo: "border-indigo-200 bg-indigo-50/80",
-    emerald: "border-emerald-200 bg-emerald-50/80",
-    amber: "border-amber-200 bg-amber-50/80",
+    indigo: "border-blue-200 bg-blue-50/80",
+    emerald: "border-blue-200 bg-blue-50/80",
+    amber: "border-blue-200 bg-blue-50/80",
   }[tone];
 
   const targetWord = currentWord.word.trim();
@@ -184,7 +183,7 @@ function PracticeExampleLine({
 
   return (
     <div className={`relative mb-4 mt-3 flex items-center justify-center rounded-xl border px-4 py-3 text-center shadow-sm ${surfaceClasses} ${toneClasses}`}>
-      <p className="w-full min-w-0 px-8 text-center text-base font-medium leading-10">
+      <p className="w-full min-w-0 px-8 text-center text-xl font-medium leading-[2.3]">
         {pieces.map((piece, pieceIndex) =>
           piece.toLowerCase() === targetWord.toLowerCase() ? (
             <strong
@@ -192,7 +191,7 @@ function PracticeExampleLine({
               className={
                 reveal
                   ? "font-semibold text-emerald-600"
-                  : "font-mono font-bold tracking-wide text-[#F59E0B]"
+                  : "font-mono font-bold tracking-wide text-[#1D4ED8]"
               }
             >
               {reveal ? (
@@ -225,12 +224,10 @@ function PracticeExampleLine({
                         key={characterIndex}
                         onClick={() => onCharacterSelect?.(characterIndex)}
                         disabled={!onCharacterSelect}
-                        className={`mx-0.5 my-1 inline-flex h-8 min-w-7 items-center justify-center rounded-md px-1 align-middle text-base font-bold text-[#F59E0B] transition-all ${
+                        className={`mx-0.5 my-1 inline-flex h-9 min-w-8 items-center justify-center rounded-md px-1 align-middle text-xl font-bold text-[#1D4ED8] transition-all ${
                           isActive
-                            ? "border-[3px] border-amber-600 bg-amber-200 shadow-md ring-2 ring-amber-300"
-                            : `border-2 border-[#F59E0B] ${
-                                hasInput ? "bg-amber-50" : "bg-white/70"
-                              }`
+                            ? "border-[3px] border-[#FACC15] bg-[#FFFBEB] shadow-md ring-2 ring-[#FEF3C7]"
+                            : "border-2 border-[#FDE68A] bg-[#F7FBFF]"
                         }`}
                         aria-label={`第 ${characterIndex + 1} 个字母${isActive ? "，正在输入" : ""}`}
                       >
@@ -1871,13 +1868,6 @@ function BlocksMode({ onBack, words }: { onBack: () => void; words: any[] }) {
   if (!currentWord) return <div className="min-h-screen flex items-center justify-center"><p className="text-gray-500">暂无单词可练习</p></div>;
 
   const allFilled = slots.every((s) => s !== null);
-  const blockErrorReason =
-    result === "wrong"
-      ? buildBlockPuzzleErrorReason(
-          letterBlocks.map((block) => block.letters),
-          slots.map((slot) => slot?.letter ?? ""),
-        )
-      : null;
 
   return (
     <main className="max-w-lg mx-auto px-4 py-6 pb-24">
@@ -1944,23 +1934,19 @@ function BlocksMode({ onBack, words }: { onBack: () => void; words: any[] }) {
               />
             </>
           ) : (
-            <div className="mb-2">
-              <div className="flex items-center justify-center gap-2">
-                <XCircle className="w-5 h-5 text-red-500" />
-                <span className="text-sm font-medium text-red-700">错误：{blockErrorReason?.summary}</span>
-              </div>
-              {blockErrorReason && (
-                <p className="mt-2 text-xs leading-5 text-red-600">
-                  {blockErrorReason.detail}
-                </p>
-              )}
+            <div className="flex items-center justify-center gap-2 mb-2">
+              <XCircle className="w-5 h-5 text-red-500" />
+              <span className="text-sm font-medium text-red-700">错误</span>
             </div>
           )}
           {/* Full word info revealed after submit */}
           <div className="mt-3 pt-3 border-t border-gray-200/50">
+            {result === "wrong" && (
+              <p className="mb-1 text-xs text-red-500">正确单词</p>
+            )}
             <p className="text-lg font-bold text-gray-900">{currentWord.word}</p>
-            {currentWord.phonetic && <p className="text-sm text-gray-400 font-mono mt-1">{currentWord.phonetic}</p>}
-            {currentWord.tags && currentWord.tags.length > 0 && (
+            {result === "correct" && currentWord.phonetic && <p className="text-sm text-gray-400 font-mono mt-1">{currentWord.phonetic}</p>}
+            {result === "correct" && currentWord.tags && currentWord.tags.length > 0 && (
               <div className="flex flex-wrap justify-center gap-1 mt-2">
                 {currentWord.tags.map((tag: any) => (
                   <span key={tag.id} className="text-[10px] px-1.5 py-0.5 bg-indigo-50 text-indigo-600 rounded">{tag.name}</span>

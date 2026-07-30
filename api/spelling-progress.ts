@@ -11,10 +11,10 @@ export type PracticePointResult = {
 
 /**
  * Balanced reward rule:
- * - 5 points for a correct answer.
- * - +3/+5 for the second/third consecutive correct answer.
- * - +5 when the word advances a learning level.
- * - +5 when three consecutive correct answers clear it from the error book.
+ * - 2 points for a correct answer.
+ * - +1/+2 for the second/third consecutive correct answer.
+ * - +2 when the word advances a learning level.
+ * - +2 when three consecutive correct answers clear it from the error book.
  * - Only the first three correct answers for the same word each day earn points.
  */
 export function calculatePracticePoints(input: {
@@ -35,24 +35,24 @@ export function calculatePracticePoints(input: {
     return { pointsEarned: 0, rewardCapped: true, reasons: [] };
   }
 
-  let pointsEarned = 5;
-  const reasons = ["答对 +5"];
+  let pointsEarned = 2;
+  const reasons = ["答对 +2"];
 
   if (input.consecutiveCorrect >= 3) {
-    pointsEarned += 5;
-    reasons.push("连续答对3次 +5");
+    pointsEarned += 2;
+    reasons.push("连续答对3次 +2");
   } else if (input.consecutiveCorrect === 2) {
-    pointsEarned += 3;
-    reasons.push("连续答对2次 +3");
+    pointsEarned += 1;
+    reasons.push("连续答对2次 +1");
   }
 
   if (input.newLevel > input.previousLevel) {
-    pointsEarned += 5;
-    reasons.push("熟练度升级 +5");
+    pointsEarned += 2;
+    reasons.push("熟练度升级 +2");
   }
   if (input.removedFromErrorBook) {
-    pointsEarned += 5;
-    reasons.push("攻克错题 +5");
+    pointsEarned += 2;
+    reasons.push("攻克错题 +2");
   }
 
   return { pointsEarned, rewardCapped: false, reasons };
