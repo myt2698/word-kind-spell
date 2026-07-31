@@ -33,6 +33,7 @@ import {
   ERROR_BOOK_CLEAR_STREAK,
   type SpellingAttemptAction,
 } from "./spelling-progress";
+import { generateDailyReading } from "./reading-generator";
 
 // Review intervals in minutes for each level
 const REVIEW_INTERVALS: Record<number, number[]> = {
@@ -986,6 +987,24 @@ export const spellingRouter = createRouter({
       .from(todayWordSelections)
       .where(and(eq(todayWordSelections.userId, ctx.user.id), eq(todayWordSelections.date, today)));
     return rows.map((r) => r.wordId);
+  }),
+
+  /** Generate three daily reading stories from today's selected words. */
+  getDailyReading: authedQuery.query(async ({ ctx }) => {
+    const db = getDb();
+    const today = new Date().toISOString().split("T")[0];
+    const selected = await db
+      .select({ word: words.word, definition: words.definition })
+      .from(todayWordSelections)
+      .innerJoin(words, eq(todayWordSelections.wordId, words.id))
+      .where(
+        and(
+          eq(todayWordSelections.userId, ctx.user.id),
+          eq(todayWordSelections.date, today),
+        ),
+      )
+      .orderBy(todayWordSelections.id);
+    return generateDailyReading(today, selected);
   }),
 
   /** Replace today's selections */

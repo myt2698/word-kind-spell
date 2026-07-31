@@ -106,6 +106,66 @@ data class StudyPhonicsPattern(
     val explanation: String,
 )
 
+data class DailyReading(
+    val date: String,
+    val words: List<String>,
+    val stories: List<ReadingStory>,
+)
+
+data class ReadingStory(
+    val title: String,
+    val theme: String,
+    val content: String,
+    val questions: List<ReadingQuestion>,
+)
+
+data class ReadingQuestion(
+    val question: String,
+    val options: List<String>,
+    val correctIndex: Int,
+)
+
+internal fun JSONObject.toDailyReading(): DailyReading {
+    val wordsJson = optJSONArray("words") ?: JSONArray()
+    val storiesJson = optJSONArray("stories") ?: JSONArray()
+    return DailyReading(
+        date = optString("date"),
+        words = buildList {
+            for (index in 0 until wordsJson.length()) add(wordsJson.optString(index))
+        },
+        stories = buildList {
+            for (storyIndex in 0 until storiesJson.length()) {
+                val story = storiesJson.getJSONObject(storyIndex)
+                val questionsJson = story.optJSONArray("questions") ?: JSONArray()
+                add(
+                    ReadingStory(
+                        title = story.optString("title"),
+                        theme = story.optString("theme"),
+                        content = story.optString("content"),
+                        questions = buildList {
+                            for (questionIndex in 0 until questionsJson.length()) {
+                                val question = questionsJson.getJSONObject(questionIndex)
+                                val optionsJson = question.optJSONArray("options") ?: JSONArray()
+                                add(
+                                    ReadingQuestion(
+                                        question = question.optString("question"),
+                                        options = buildList {
+                                            for (optionIndex in 0 until optionsJson.length()) {
+                                                add(optionsJson.optString(optionIndex))
+                                            }
+                                        },
+                                        correctIndex = question.optInt("correctIndex"),
+                                    )
+                                )
+                            }
+                        },
+                    )
+                )
+            }
+        },
+    )
+}
+
 data class SpellingStats(
     val totalWords: Int,
     val learningWords: Int,

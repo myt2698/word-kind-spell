@@ -209,6 +209,9 @@ class WordMindApi(context: Context) {
         }
     }
 
+    suspend fun getDailyReading(): DailyReading =
+        (query("spelling.getDailyReading") as JSONObject).toDailyReading()
+
     suspend fun setTodaySelections(wordIds: List<Int>) {
         mutate(
             "spelling.setTodaySelections",

@@ -63,6 +63,7 @@ import {
   selectFilteredWordIds,
 } from "@/utils/word-selection";
 import DictationMode from "@/components/DictationMode";
+import DailyReadingMode from "@/components/DailyReadingMode";
 
 const AUTO_SPEAK_BASE_DELAY_MS = 1100;
 const PRACTICE_EXTRA_KEYS = [
@@ -584,7 +585,7 @@ function TodayWordsProvider({ children, allWords }: { children: React.ReactNode;
 // ============================================================
 // Types
 // ============================================================
-type SpellView = "home" | "study" | "blocks" | "fillblank" | "flash" | "dictation";
+type SpellView = "home" | "study" | "reading" | "blocks" | "fillblank" | "flash" | "dictation";
 type PracticeSourceMode = "challenge" | "revenge";
 
 // ============================================================
@@ -626,7 +627,8 @@ export default function SpellPage() {
           />
         )}
         {view === "study" && <TodayStudyWrapper onBack={() => setView("home")} />}
-        {view !== "home" && view !== "study" && view !== "dictation" && (
+        {view === "reading" && <DailyReadingMode onBack={() => setView("home")} />}
+        {view !== "home" && view !== "study" && view !== "reading" && view !== "dictation" && (
           <PracticeModeWrapper
             mode={view}
             source={practiceSource}
@@ -983,6 +985,23 @@ function SpellHome({
             </div>
           )}
       </div>
+
+      <button
+        type="button"
+        onClick={() => selectedIds.length > 0 ? onStart("reading") : setSelectDialogOpen(true)}
+        className="mb-6 flex w-full items-center gap-4 rounded-2xl border border-violet-100 bg-gradient-to-r from-violet-50 to-amber-50 p-4 text-left shadow-sm transition-all hover:border-violet-300 hover:shadow-md"
+      >
+        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-violet-100">
+          <BookOpen className="h-6 w-6 text-violet-600" />
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="font-bold text-gray-900">今日单词趣味阅读</p>
+          <p className="mt-0.5 text-xs text-gray-500">
+            {selectedIds.length > 0 ? "3 篇不同主题短文 · 音节标注 · 阅读理解" : "选择今日单词后生成趣味短文"}
+          </p>
+        </div>
+        <ChevronRight className="h-5 w-5 text-violet-400" />
+      </button>
 
       {/* Practice source */}
       <div className="flex items-center justify-between gap-3 mb-3">

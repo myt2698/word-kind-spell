@@ -86,6 +86,7 @@ internal val PracticePurple = Color(0xFF9333EA)
 internal enum class PracticeView {
     Home,
     Study,
+    Reading,
     Blocks,
     FillBlank,
     Flash,
@@ -273,6 +274,10 @@ internal fun PracticeScreen(
             catalogWords = catalogWords,
             speak = speak,
             onBack = ::returnHome,
+        )
+        PracticeView.Reading -> DailyReadingMode(
+            api = api,
+            onBack = { view = PracticeView.Home },
         )
         PracticeView.Blocks -> BlocksPracticeMode(
             words = practiceWords,
@@ -630,6 +635,21 @@ private fun PracticeHome(
                 }
             }
         }
+        Spacer(Modifier.height(20.dp))
+
+        PracticeModeCard(
+            title = "今日单词趣味阅读",
+            description = if (selectedWords.isEmpty()) {
+                "选择今日单词后生成趣味短文"
+            } else {
+                "3 篇不同主题短文 · 音节标注 · 阅读理解"
+            },
+            icon = Icons.AutoMirrored.Filled.MenuBook,
+            color = PracticePurple,
+            background = Color(0xFFFAF5FF),
+            enabled = selectedWords.isNotEmpty(),
+            onClick = { onMode(PracticeView.Reading) },
+        )
         Spacer(Modifier.height(20.dp))
 
         Row(
