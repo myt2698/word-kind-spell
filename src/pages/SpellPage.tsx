@@ -599,7 +599,14 @@ export default function SpellPage() {
     useState<PracticeSourceMode>("challenge");
 
   // Fetch all active learning words for the provider
-  const { data: learningQueue, isLoading: learningLoading } = trpc.spelling.getLearningQueue.useQuery();
+  const {
+    data: learningQueue,
+    isLoading: learningLoading,
+    error: learningError,
+    refetch: refetchLearningQueue,
+  } = trpc.spelling.getLearningQueue.useQuery(undefined, {
+    retry: 1,
+  });
 
   if (learningLoading) {
     return (
@@ -608,6 +615,26 @@ export default function SpellPage() {
         <div className="min-h-screen flex items-center justify-center">
           <Loader2 className="w-8 h-8 animate-spin text-indigo-500" />
         </div>
+        <MobileNav activeTab="spell" />
+      </div>
+    );
+  }
+
+  if (learningError) {
+    return (
+      <div className="min-h-screen bg-gray-50/50">
+        <AppHeader />
+        <main className="mx-auto flex min-h-[70vh] max-w-md flex-col items-center justify-center px-6 text-center">
+          <XCircle className="mb-3 h-10 w-10 text-rose-400" />
+          <h1 className="text-lg font-bold text-gray-900">拼写练习加载失败</h1>
+          <p className="mt-2 text-sm leading-6 text-gray-500">
+            {learningError.message || "网络连接异常，请稍后重试"}
+          </p>
+          <Button className="mt-5" onClick={() => refetchLearningQueue()}>
+            <RotateCcw className="mr-2 h-4 w-4" />
+            重新加载
+          </Button>
+        </main>
         <MobileNav activeTab="spell" />
       </div>
     );

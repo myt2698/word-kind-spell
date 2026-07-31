@@ -14,9 +14,14 @@ const trpcClient = trpc.createClient({
       url: "/api/trpc",
       transformer: superjson,
       fetch(input, init) {
+        const timeoutSignal = AbortSignal.timeout(20_000);
+        const signal = init?.signal
+          ? AbortSignal.any([init.signal, timeoutSignal])
+          : timeoutSignal;
         return globalThis.fetch(input, {
           ...(init ?? {}),
           credentials: "include",
+          signal,
         });
       },
     }),
