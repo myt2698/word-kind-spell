@@ -592,6 +592,9 @@ type PracticeSourceMode = "challenge" | "revenge";
 // Main Component
 // ============================================================
 export default function SpellPage() {
+  const { user, isLoading: authLoading } = useAuth({
+    redirectOnUnauthenticated: true,
+  });
   const [searchParams] = useSearchParams();
   const modeParam = searchParams.get("mode");
   const [view, setView] = useState<SpellView>((modeParam as SpellView) || "home");
@@ -606,9 +609,10 @@ export default function SpellPage() {
     refetch: refetchLearningQueue,
   } = trpc.spelling.getLearningQueue.useQuery(undefined, {
     retry: 1,
+    enabled: !!user,
   });
 
-  if (learningLoading) {
+  if (authLoading || (user && learningLoading)) {
     return (
       <div className="min-h-screen bg-gray-50/50">
         <AppHeader />
@@ -619,6 +623,8 @@ export default function SpellPage() {
       </div>
     );
   }
+
+  if (!user) return null;
 
   if (learningError) {
     return (
