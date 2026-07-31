@@ -1,11 +1,33 @@
-import { useState } from "react";
-import { ArrowLeft, BookOpenText, CheckCircle2, Loader2, RotateCcw, Sparkles, XCircle } from "lucide-react";
+import { useEffect, useState } from "react";
+import { ArrowLeft, BookOpenText, CheckCircle2, Loader2, LockKeyhole, RotateCcw, Sparkles, XCircle } from "lucide-react";
 import { trpc } from "@/providers/trpc";
 import { Button } from "@/components/ui/button";
 
 export default function DailyReadingMode({ onBack }: { onBack: () => void }) {
   const { data, isLoading, error, refetch } = trpc.spelling.getDailyReading.useQuery();
   const [answers, setAnswers] = useState<Record<string, number>>({});
+  const [unlockedLevel, setUnlockedLevel] = useState(0);
+  const [unlockMessage, setUnlockMessage] = useState("");
+
+  useEffect(() => {
+    if (!data?.stories.length) return;
+    const completed = data.stories[unlockedLevel]?.questions.every(
+      (_, questionIndex) => answers[`${unlockedLevel}-${questionIndex}`] !== undefined,
+    );
+    if (!completed) return;
+    if (unlockedLevel < data.stories.length - 1) {
+      setUnlockedLevel((level) => level + 1);
+      setUnlockMessage(`🌟 太棒了！第 ${unlockedLevel + 2} 关已解锁`);
+    } else {
+      setUnlockMessage("🏆 恭喜你！三个阅读任务全部完成");
+    }
+  }, [answers, data, unlockedLevel]);
+
+  useEffect(() => {
+    if (!unlockMessage) return;
+    const timer = window.setTimeout(() => setUnlockMessage(""), 2600);
+    return () => window.clearTimeout(timer);
+  }, [unlockMessage]);
 
   if (isLoading) {
     return (
@@ -51,10 +73,11 @@ export default function DailyReadingMode({ onBack }: { onBack: () => void }) {
       ) : (
         <div className="space-y-6">
           {data.stories.map((story, storyIndex) => (
-            <article key={story.title} className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm">
+            storyIndex <= unlockedLevel ? (
+            <article key={story.title} className="animate-in fade-in slide-in-from-bottom-3 overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm duration-500">
               <header className="border-b border-violet-50 bg-violet-50/60 p-5">
                 <div className="mb-1 flex items-center gap-2 text-xs font-semibold text-violet-600">
-                  <Sparkles className="h-3.5 w-3.5" /> 故事 {storyIndex + 1} · {story.theme}
+                  <Sparkles className="h-3.5 w-3.5" /> 第 {storyIndex + 1} 关 · {story.theme}
                 </div>
                 <h2 className="text-lg font-bold text-gray-900">{story.title}</h2>
               </header>
@@ -98,7 +121,21 @@ export default function DailyReadingMode({ onBack }: { onBack: () => void }) {
                 </div>
               </div>
             </article>
+            ) : (
+              <div key={story.title} className="flex min-h-32 items-center gap-4 rounded-2xl border border-dashed border-gray-200 bg-gray-50/70 p-5 text-gray-400">
+                <div className="rounded-xl bg-gray-100 p-3"><LockKeyhole className="h-6 w-6" /></div>
+                <div>
+                  <p className="font-bold text-gray-500">第 {storyIndex + 1} 关尚未解锁</p>
+                  <p className="mt-1 text-xs">完成上一关的 5 道阅读理解题即可解锁</p>
+                </div>
+              </div>
+            )
           ))}
+        </div>
+      )}
+      {unlockMessage && (
+        <div className="fixed inset-x-0 top-24 z-50 mx-auto w-fit animate-in zoom-in-90 fade-in rounded-2xl border border-amber-200 bg-white px-6 py-4 text-base font-bold text-amber-600 shadow-xl duration-300">
+          {unlockMessage}
         </div>
       )}
     </main>
