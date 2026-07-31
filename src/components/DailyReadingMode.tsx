@@ -1,13 +1,76 @@
 import { useEffect, useState } from "react";
 import { ArrowLeft, BookOpenText, CheckCircle2, Loader2, LockKeyhole, RotateCcw, Sparkles, XCircle } from "lucide-react";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { trpc } from "@/providers/trpc";
 import { Button } from "@/components/ui/button";
 
+type DailyReadingData = {
+  date: string;
+  words: string[];
+  stories: Array<{
+    title: string;
+    theme: string;
+    content: string;
+    questions: Array<{
+      question: string;
+      options: string[];
+      correctIndex: number;
+    }>;
+  }>;
+};
+
+type ReadingReward = {
+  isCorrect: boolean;
+  pointsEarned: number;
+  storyBonus: number;
+  alreadyRewarded: boolean;
+};
+
+async function callReadingApi<T>(
+  procedure: "getDailyReading" | "submitReadingAnswer",
+  input?: Record<string, number>,
+): Promise<T> {
+  const isMutation = procedure === "submitReadingAnswer";
+  const envelope = JSON.stringify({ json: input ?? null });
+  const url = `/api/trpc/spelling.${procedure}${
+    isMutation ? "" : `?input=${encodeURIComponent(envelope)}`
+  }`;
+  const response = await fetch(url, {
+    method: isMutation ? "POST" : "GET",
+    credentials: "include",
+    headers: {
+      Accept: "application/json",
+      ...(isMutation ? { "Content-Type": "application/json" } : {}),
+    },
+    body: isMutation ? envelope : undefined,
+    signal: AbortSignal.timeout(20_000),
+  });
+  const payload = await response.json();
+  if (!response.ok || payload.error) {
+    const errorData = payload.error?.json ?? payload.error;
+    throw new Error(errorData?.message ?? `请求失败（${response.status}）`);
+  }
+  const data = payload.result?.data;
+  if (data == null) throw new Error("服务器没有返回阅读数据");
+  return (data.json ?? data) as T;
+}
+
 export default function DailyReadingMode({ onBack }: { onBack: () => void }) {
   const utils = trpc.useUtils();
-  const { data, isLoading, error, refetch } = trpc.spelling.getDailyReading.useQuery();
-  const submitAnswer = trpc.spelling.submitReadingAnswer.useMutation({
-    onSuccess: () => utils.spelling.getStats.invalidate(),
+  const { data, isLoading, error, refetch } = useQuery({
+    queryKey: ["daily-reading"],
+    queryFn: () => callReadingApi<DailyReadingData>("getDailyReading"),
+    retry: 1,
+  });
+  const submitAnswer = useMutation({
+    mutationFn: (input: {
+      storyIndex: number;
+      questionIndex: number;
+      selectedIndex: number;
+    }) => callReadingApi<ReadingReward>("submitReadingAnswer", input),
+    onSuccess: () => {
+      utils.spelling.getStats.invalidate();
+    },
   });
   const [answers, setAnswers] = useState<Record<string, number>>({});
   const [rewards, setRewards] = useState<
