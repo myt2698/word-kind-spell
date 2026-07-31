@@ -33,6 +33,8 @@ export const wordRouter = createRouter({
         textbookId: z.number().optional(),
         search: z.string().optional(),
         sortBy: z.enum(["newest", "oldest", "alphabetical"]).default("newest"),
+        limit: z.number().int().min(1).max(200).default(100),
+        offset: z.number().int().min(0).default(0),
       }).optional()
     )
     .query(async ({ ctx, input }) => {
@@ -74,6 +76,21 @@ export const wordRouter = createRouter({
         const linkedWordIds = [...new Set(linkedWords.map((row) => row.wordId))];
         if (linkedWordIds.length === 0) return [];
         conditions.push(inArray(words.id, linkedWordIds));
+      }
+
+      const effectiveTagIds = input?.tagIds
+        ? input.tagIds
+        : input?.tagId
+          ? [input.tagId]
+          : [];
+      if (effectiveTagIds.length > 0) {
+        const taggedWords = await db
+          .selectDistinct({ wordId: wordTags.wordId })
+          .from(wordTags)
+          .where(inArray(wordTags.tagId, effectiveTagIds));
+        const taggedWordIds = taggedWords.map((row) => row.wordId);
+        if (taggedWordIds.length === 0) return [];
+        conditions.push(inArray(words.id, taggedWordIds));
       }
 
       let exactMatchFirst = false;
@@ -123,7 +140,9 @@ export const wordRouter = createRouter({
         })
         .from(words)
         .where(and(...conditions))
-        .orderBy(...orderByClause);
+        .orderBy(...orderByClause)
+        .limit(input?.limit ?? 100)
+        .offset(input?.offset ?? 0);
 
       if (wordList.length === 0) {
         return [];
@@ -217,18 +236,6 @@ export const wordRouter = createRouter({
           textbookName: groupInfo?.textbookName ?? "扩展词汇",
         };
       });
-
-      // Filter by tag (single or multiple) in memory
-      const effectiveTagIds = input?.tagIds
-        ? input.tagIds
-        : input?.tagId
-          ? [input.tagId]
-          : [];
-      if (effectiveTagIds.length > 0) {
-        results = results.filter((w) =>
-          w.tags.some((t) => effectiveTagIds.includes(t.id))
-        );
-      }
 
       return results;
     }),

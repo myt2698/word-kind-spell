@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useDeferredValue } from "react";
 import { useNavigate } from "react-router";
 import { useAuth } from "@/hooks/useAuth";
 import { trpc } from "@/providers/trpc";
@@ -15,6 +15,7 @@ import { Input } from "@/components/ui/input";
 import { ArrowLeft, CheckSquare2, Plus, Search, X } from "lucide-react";
 
 const WORD_FILTERS_STORAGE_KEY = "ciyindao:wordFilters:v1";
+const WORDS_PER_PAGE = 50;
 
 function loadWordFilters(): {
   textbookId: number | null;
@@ -47,6 +48,8 @@ export default function Home({ searchMode = false }: { searchMode?: boolean }) {
   const [sortBy, setSortBy] = useState<SortBy>(initialFilters.sortBy);
   const [selectedTextbookId, setSelectedTextbookId] = useState<number | null>(initialFilters.textbookId);
   const [selectedUnitId, setSelectedUnitId] = useState<number | null>(initialFilters.unitId);
+  const [page, setPage] = useState(0);
+  const deferredSearch = useDeferredValue(searchQuery.trim());
 
   // Dialog state
   const [showWordForm, setShowWordForm] = useState(false);
@@ -59,11 +62,16 @@ export default function Home({ searchMode = false }: { searchMode?: boolean }) {
     searchMode
       ? {
           sortBy,
+          search: deferredSearch || undefined,
+          limit: WORDS_PER_PAGE,
+          offset: page * WORDS_PER_PAGE,
         }
       : {
           groupIds: selectedUnitId ? [selectedUnitId] : undefined,
           textbookId: selectedTextbookId ?? undefined,
           sortBy,
+          limit: WORDS_PER_PAGE,
+          offset: page * WORDS_PER_PAGE,
         },
   );
 
@@ -83,6 +91,10 @@ export default function Home({ searchMode = false }: { searchMode?: boolean }) {
       }),
     );
   }, [selectedTextbookId, selectedUnitId, sortBy]);
+
+  useEffect(() => {
+    setPage(0);
+  }, [deferredSearch, selectedTextbookId, selectedUnitId, sortBy]);
 
   useEffect(() => {
     if (textbooks && selectedTextbookId && !textbooks.some((textbook) => textbook.id === selectedTextbookId)) {
@@ -175,16 +187,7 @@ export default function Home({ searchMode = false }: { searchMode?: boolean }) {
   if (!user) return null;
 
   const canManageCatalog = user.role === "admin";
-  const searchNeedle = searchQuery.trim().toLowerCase();
-  const filteredWords =
-    searchMode && searchNeedle
-      ? (words || []).filter(
-          (word) =>
-            word.word.toLowerCase().includes(searchNeedle) ||
-            word.definition.toLowerCase().includes(searchNeedle) ||
-            word.notes?.toLowerCase().includes(searchNeedle),
-        )
-      : words || [];
+  const filteredWords = words || [];
   const hasFilters = selectedTextbookId || selectedUnitId;
   const selectableWordIds = filteredWords
     .filter((word) => (word.learningStatus || "idle") === "idle")
@@ -454,6 +457,25 @@ export default function Home({ searchMode = false }: { searchMode?: boolean }) {
                 }}
               />
             ))}
+            <div className="flex items-center justify-center gap-3 pt-3">
+              <Button
+                type="button"
+                variant="outline"
+                disabled={page === 0 || wordsLoading}
+                onClick={() => setPage((current) => Math.max(0, current - 1))}
+              >
+                上一页
+              </Button>
+              <span className="text-sm text-gray-500">第 {page + 1} 页</span>
+              <Button
+                type="button"
+                variant="outline"
+                disabled={filteredWords.length < WORDS_PER_PAGE || wordsLoading}
+                onClick={() => setPage((current) => current + 1)}
+              >
+                下一页
+              </Button>
+            </div>
           </div>
         )}
 

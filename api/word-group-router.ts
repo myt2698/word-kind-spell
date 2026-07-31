@@ -2,7 +2,7 @@ import { z } from "zod";
 import { createRouter, authedQuery, adminQuery } from "./middleware";
 import { getDb } from "./queries/connection";
 import { wordGroups, wordGroupLinks, users, words } from "@db/schema";
-import { eq, and, asc, sql } from "drizzle-orm";
+import { eq, and, asc, sql, inArray } from "drizzle-orm";
 import { getCatalogOwnerId } from "./catalog";
 
 export const wordGroupRouter = createRouter({
@@ -22,27 +22,24 @@ export const wordGroupRouter = createRouter({
         .where(and(...conditions))
         .orderBy(asc(wordGroups.sortOrder));
 
-      // Get word count for each group
-      const groupsWithCount = await Promise.all(
-        groups.map(async (group) => {
-          const countResult = await db
-            .select({ count: sql<number>`count(*)` })
-            .from(wordGroupLinks)
-            .innerJoin(words, eq(wordGroupLinks.wordId, words.id))
-            .where(
-              and(
-                eq(wordGroupLinks.groupId, group.id),
-                eq(words.userId, catalogOwnerId)
-              )
-            );
-          return {
-            ...group,
-            wordCount: countResult[0]?.count ?? 0,
-          };
+      if (groups.length === 0) return [];
+      const counts = await db
+        .select({
+          groupId: wordGroupLinks.groupId,
+          count: sql<number>`count(*)`,
         })
-      );
-
-      return groupsWithCount;
+        .from(wordGroupLinks)
+        .innerJoin(words, eq(wordGroupLinks.wordId, words.id))
+        .where(and(
+          inArray(wordGroupLinks.groupId, groups.map((group) => group.id)),
+          eq(words.userId, catalogOwnerId),
+        ))
+        .groupBy(wordGroupLinks.groupId);
+      const countMap = new Map(counts.map((row) => [row.groupId, row.count]));
+      return groups.map((group) => ({
+        ...group,
+        wordCount: countMap.get(group.id) ?? 0,
+      }));
     }),
 
   getById: authedQuery

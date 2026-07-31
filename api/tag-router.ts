@@ -26,25 +26,19 @@ export const tagRouter = createRouter({
   listWithCount: authedQuery.query(async () => {
     const db = getDb();
     const catalogOwnerId = await getCatalogOwnerId();
-    const userTags = await db
-      .select()
-      .from(tags)
-      .where(eq(tags.userId, catalogOwnerId));
-
-    const result = await Promise.all(
-      userTags.map(async (tag) => {
-        const countResult = await db
-          .select({ count: sql<number>`count(*)` })
-          .from(wordTags)
-          .where(eq(wordTags.tagId, tag.id));
-        return {
-          ...tag,
-          wordCount: countResult[0]?.count ?? 0,
-        };
+    return db
+      .select({
+        id: tags.id,
+        userId: tags.userId,
+        name: tags.name,
+        description: tags.description,
+        createdAt: tags.createdAt,
+        wordCount: sql<number>`count(${wordTags.wordId})`,
       })
-    );
-
-    return result;
+      .from(tags)
+      .leftJoin(wordTags, eq(wordTags.tagId, tags.id))
+      .where(eq(tags.userId, catalogOwnerId))
+      .groupBy(tags.id);
   }),
 
   create: adminQuery

@@ -24,7 +24,7 @@ if (typeof window !== "undefined" && "speechSynthesis" in window) {
   window.speechSynthesis.onvoiceschanged = loadVoices;
 }
 
-// ---- Audio cache: wordId -> base64 | null ----
+// ---- Audio cache: wordId -> binary audio URL | null ----
 const audioCache = new Map<number, string | null>();
 
 // ---- Persistent audio element ----
@@ -37,32 +37,44 @@ function getAudio(): HTMLAudioElement {
 
 /** Preload audio for given wordIds. Call when page loads. */
 export function preloadAudio(wordIds: number[]) {
-  for (const id of wordIds) {
-    if (audioCache.has(id)) continue;
-    audioCache.set(id, null); // Mark as "fetching"
-    fetch(`/api/trpc/audio.getByWordId?input=${encodeURIComponent(JSON.stringify({ wordId: id }))}`)
+  const ids = [...new Set(wordIds)]
+    .filter((id) => Number.isInteger(id) && id > 0 && !audioCache.has(id));
+
+  for (let offset = 0; offset < ids.length; offset += 50) {
+    const batch = ids.slice(offset, offset + 50);
+    for (const id of batch) audioCache.set(id, null);
+
+    const input = JSON.stringify({ json: { wordIds: batch } });
+    fetch(`/api/trpc/audio.getByWordIds?input=${encodeURIComponent(input)}`, {
+      headers: { Accept: "application/json" },
+      credentials: "include",
+    })
       .then((r) => r.json())
       .then((json) => {
-        const d = json.result?.data;
-        audioCache.set(id, d?.hasAudio && d?.audioData ? d.audioData : null);
+        const data = json.result?.data;
+        const rows = (data?.json ?? data) as Array<{
+          wordId: number;
+          audioUrl: string;
+        }> | undefined;
+        if (!Array.isArray(rows)) return;
+        for (const row of rows) {
+          if (row.audioUrl) audioCache.set(row.wordId, row.audioUrl);
+        }
       })
-      .catch(() => audioCache.set(id, null));
+      .catch(() => {
+        // Keep null so playback immediately falls back to browser speech.
+      });
   }
 }
 
 /** Play base64 — all sync operations */
-function playBase64(base64: string) {
+function playAudioUrl(audioUrl: string) {
   try {
-    const bytes = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
-    const blob = new Blob([bytes], { type: "audio/mpeg" });
-    const url = URL.createObjectURL(blob);
     const a = getAudio();
     a.pause();
-    a.src = url;
+    a.src = audioUrl;
     a.currentTime = 0;
-    a.onended = () => URL.revokeObjectURL(url);
-    a.onerror = () => URL.revokeObjectURL(url);
-    a.play().catch(() => URL.revokeObjectURL(url));
+    a.play().catch(() => {});
   } catch { /* ignore */ }
 }
 
@@ -118,7 +130,7 @@ export function speakWord(word: string, wordId?: number) {
   // Path 1: cached local audio
   if (wordId) {
     const cached = audioCache.get(wordId);
-    if (cached) { playBase64(cached); return; }
+    if (cached) { playAudioUrl(cached); return; }
     if (cached === null) {
       // Explicitly cached as "no audio" -> Web Speech
       if (speakWeb(word)) return;

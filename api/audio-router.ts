@@ -9,7 +9,7 @@ import { z } from "zod";
 import { createRouter, authedQuery, publicQuery } from "./middleware";
 import { getDb } from "./queries/connection";
 import { wordAudios, words } from "@db/schema";
-import { eq, and, sql, count } from "drizzle-orm";
+import { eq, and, sql, count, inArray } from "drizzle-orm";
 import { getCatalogOwnerId } from "./catalog";
 
 const YOUDAO_URL = "https://dict.youdao.com/dictvoice";
@@ -43,6 +43,28 @@ export const audioRouter = createRouter({
 
       if (rows.length === 0) return { hasAudio: false, audioData: null, format: null };
       return { hasAudio: true, audioData: rows[0].audioData, format: rows[0].format };
+    }),
+
+  /** Get audio for several words in one request to avoid a preload request storm. */
+  getByWordIds: publicQuery
+    .input(z.object({
+      wordIds: z.array(z.number().int().positive()).max(50),
+    }))
+    .query(async ({ input }) => {
+      const uniqueIds = [...new Set(input.wordIds)];
+      if (uniqueIds.length === 0) return [];
+
+      return getDb()
+        .select({
+          wordId: wordAudios.wordId,
+          format: wordAudios.format,
+        })
+        .from(wordAudios)
+        .where(inArray(wordAudios.wordId, uniqueIds))
+        .then((rows) => rows.map((row) => ({
+          ...row,
+          audioUrl: `/media/audio/${row.wordId}`,
+        })));
     }),
 
   /** Download and save audio for a word */

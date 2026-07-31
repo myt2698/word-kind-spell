@@ -70,7 +70,21 @@ class WordMindApi(context: Context) {
         // word.list accepts an optional object, but tRPC distinguishes an omitted/empty
         // object from JSON null. Sending null fails Zod validation and aborts the whole
         // parallel catalog load.
-        val words = async { (query("word.list", JSONObject()) as JSONArray).toWords() }
+        val words = async {
+            val pageSize = 200
+            val allWords = mutableListOf<Word>()
+            var offset = 0
+            var page: List<Word>
+            do {
+                page = (query(
+                    "word.list",
+                    JSONObject().put("limit", pageSize).put("offset", offset),
+                ) as JSONArray).toWords()
+                allWords.addAll(page)
+                offset += page.size
+            } while (page.size == pageSize)
+            allWords
+        }
         val tags = async { (query("tag.listWithCount") as JSONArray).toTags() }
         CatalogData(
             textbooks = textbooks.await(),

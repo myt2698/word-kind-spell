@@ -24,7 +24,7 @@ import {
   wordTags,
   tags,
 } from "@db/schema";
-import { eq, and, gte, lte, desc, count, inArray } from "drizzle-orm";
+import { eq, and, gte, lte, desc, count, inArray, sql } from "drizzle-orm";
 import { getCatalogOwnerId } from "./catalog";
 import { analyzeWordForStudy } from "../src/utils/phonics";
 import {
@@ -725,10 +725,20 @@ export const spellingRouter = createRouter({
       .select({ count: count() })
       .from(spellingSessions)
       .where(and(eq(spellingSessions.userId, ctx.user.id), gte(spellingSessions.createdAt, todayStart)));
-    const pointLogs = await db
+    const pointTotals = await db
       .select({
-        notes: wordLogs.notes,
-        createdAt: wordLogs.createdAt,
+        totalPoints: sql<number>`COALESCE(SUM(
+          CASE WHEN JSON_VALID(${wordLogs.notes})
+            THEN CAST(JSON_UNQUOTE(JSON_EXTRACT(${wordLogs.notes}, '$.pointsEarned')) AS UNSIGNED)
+            ELSE 0
+          END
+        ), 0)`,
+        todayPoints: sql<number>`COALESCE(SUM(
+          CASE WHEN ${wordLogs.createdAt} >= ${todayStart} AND JSON_VALID(${wordLogs.notes})
+            THEN CAST(JSON_UNQUOTE(JSON_EXTRACT(${wordLogs.notes}, '$.pointsEarned')) AS UNSIGNED)
+            ELSE 0
+          END
+        ), 0)`,
       })
       .from(wordLogs)
       .where(
@@ -737,23 +747,8 @@ export const spellingRouter = createRouter({
           inArray(wordLogs.action, ["test_pass", "review"]),
         ),
       );
-    let totalPoints = 0;
-    let todayPoints = 0;
-    for (const log of pointLogs) {
-      if (!log.notes) continue;
-      try {
-        const parsed = JSON.parse(log.notes) as { pointsEarned?: unknown };
-        const points =
-          typeof parsed.pointsEarned === "number" &&
-          Number.isFinite(parsed.pointsEarned)
-            ? Math.max(0, Math.floor(parsed.pointsEarned))
-            : 0;
-        totalPoints += points;
-        if (log.createdAt >= todayStart) todayPoints += points;
-      } catch {
-        // Older log notes were not guaranteed to be JSON.
-      }
-    }
+    const totalPoints = Number(pointTotals[0]?.totalPoints ?? 0);
+    const todayPoints = Number(pointTotals[0]?.todayPoints ?? 0);
 
     return {
       totalWords: totalWords[0]?.count ?? 0,
@@ -1151,6 +1146,27 @@ export const spellingRouter = createRouter({
           return false;
         }
       });
+      if (existing?.notes) {
+        try {
+          const saved = JSON.parse(existing.notes) as {
+            storyIndex?: number;
+            stage?: "story" | "questions";
+            paragraphIndex?: number;
+          };
+          const savedStory = saved.storyIndex ?? 0;
+          const savedStage = saved.stage === "questions" ? 1 : 0;
+          const incomingStage = input.stage === "questions" ? 1 : 0;
+          const isBehind =
+            input.storyIndex < savedStory ||
+            (input.storyIndex === savedStory && incomingStage < savedStage) ||
+            (input.storyIndex === savedStory &&
+              incomingStage === savedStage &&
+              input.paragraphIndex < (saved.paragraphIndex ?? 0));
+          if (isBehind) return { success: true, ignoredAsStale: true };
+        } catch {
+          // A malformed legacy checkpoint can safely be replaced.
+        }
+      }
       const notes = JSON.stringify({
         type: "daily_reading_progress",
         date: today,
@@ -1169,7 +1185,7 @@ export const spellingRouter = createRouter({
           notes,
         });
       }
-      return { success: true };
+      return { success: true, ignoredAsStale: false };
     }),
 
   /** Score one daily-reading answer and award points only on its first submission. */

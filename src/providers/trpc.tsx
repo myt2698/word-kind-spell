@@ -7,7 +7,12 @@ import type { ReactNode } from "react";
 
 export const trpc = createTRPCReact<AppRouter>();
 
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: { retry: 1 },
+    mutations: { retry: false },
+  },
+});
 const tolerantSuperjson = {
   serialize(value: unknown) {
     return superjson.serialize(value);
@@ -35,7 +40,7 @@ const trpcClient = trpc.createClient({
       url: "/api/trpc",
       transformer: tolerantSuperjson,
       fetch(input, init) {
-        const timeoutSignal = AbortSignal.timeout(20_000);
+        const timeoutSignal = AbortSignal.timeout(45_000);
         const signal = init?.signal
           ? AbortSignal.any([init.signal, timeoutSignal])
           : timeoutSignal;

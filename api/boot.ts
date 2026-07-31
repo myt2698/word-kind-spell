@@ -7,6 +7,7 @@ import { appRouter } from "./router";
 import { createContext } from "./context";
 import { env } from "./lib/env";
 import { rateLimit } from "./lib/rate-limit";
+import { audioHttp } from "./audio-http";
 
 console.log("[BOOT] ========== Starting 词音岛 ==========");
 console.log("[BOOT] NODE_ENV:", process.env.NODE_ENV);
@@ -14,7 +15,12 @@ console.log("[BOOT] NODE_ENV:", process.env.NODE_ENV);
 const app = new Hono<{ Bindings: HttpBindings }>();
 
 app.use(secureHeaders());
-app.use("/api/*", rateLimit({ windowMs: 60_000, maxRequests: 120, authMaxRequests: 10 }));
+app.route("/media/audio", audioHttp);
+app.use("/api/*", async (c, next) => {
+  await next();
+  c.header("Cache-Control", "no-store, max-age=0");
+});
+app.use("/api/*", rateLimit({ windowMs: 60_000, maxRequests: 300, authMaxRequests: 20 }));
 app.use("/api/*", async (c, next) => {
   const isAudioRequest = c.req.url.includes("audio.");
   return bodyLimit({

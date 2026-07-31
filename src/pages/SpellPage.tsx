@@ -1728,7 +1728,6 @@ function PracticeModeWrapper({
 // Mode A: Blocks Puzzle (Drag & Drop Letter Blocks)
 // ============================================================
 function BlocksMode({ onBack, words }: { onBack: () => void; words: any[] }) {
-  const utils = trpc.useUtils();
   const [rewardPoints, setRewardPoints] = useState<number | null>(null);
   const [rewardCapped, setRewardCapped] = useState(false);
   const submitResult = trpc.spelling.submitResult.useMutation({
@@ -1738,10 +1737,6 @@ function BlocksMode({ onBack, words }: { onBack: () => void; words: any[] }) {
         setRewardCapped(data.rewardCapped);
         setSessionPoints((points) => points + data.pointsEarned);
       }
-      void utils.spelling.getReviewQueue.invalidate();
-      void utils.spelling.getErrorWords.invalidate();
-      void utils.spelling.getErrorBook.invalidate();
-      void utils.spelling.getStats.invalidate();
     },
   });
 
@@ -2110,7 +2105,6 @@ function BlocksMode({ onBack, words }: { onBack: () => void; words: any[] }) {
 // Mode B: Fill in the Blank - 点击问号框 + 虚拟键盘
 // ============================================================
 function FillBlankMode({ onBack, words }: { onBack: () => void; words: any[] }) {
-  const utils = trpc.useUtils();
   const [rewardPoints, setRewardPoints] = useState<number | null>(null);
   const [rewardCapped, setRewardCapped] = useState(false);
   const submitResult = trpc.spelling.submitResult.useMutation({
@@ -2120,10 +2114,6 @@ function FillBlankMode({ onBack, words }: { onBack: () => void; words: any[] }) 
         setRewardCapped(data.rewardCapped);
         setSessionPoints((points) => points + data.pointsEarned);
       }
-      void utils.spelling.getReviewQueue.invalidate();
-      void utils.spelling.getErrorWords.invalidate();
-      void utils.spelling.getErrorBook.invalidate();
-      void utils.spelling.getStats.invalidate();
     },
   });
 
@@ -2459,7 +2449,6 @@ function FillBlankMode({ onBack, words }: { onBack: () => void; words: any[] }) 
 // Mode C: Flash Speed Challenge
 // ============================================================
 function FlashMode({ onBack, words }: { onBack: () => void; words: any[] }) {
-  const utils = trpc.useUtils();
   const [rewardPoints, setRewardPoints] = useState<number | null>(null);
   const [rewardCapped, setRewardCapped] = useState(false);
   const submitResult = trpc.spelling.submitResult.useMutation({
@@ -2469,10 +2458,6 @@ function FlashMode({ onBack, words }: { onBack: () => void; words: any[] }) {
         setRewardCapped(data.rewardCapped);
         setSessionPoints((points) => points + data.pointsEarned);
       }
-      void utils.spelling.getReviewQueue.invalidate();
-      void utils.spelling.getErrorWords.invalidate();
-      void utils.spelling.getErrorBook.invalidate();
-      void utils.spelling.getStats.invalidate();
     },
   });
 

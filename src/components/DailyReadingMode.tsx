@@ -87,6 +87,7 @@ export default function DailyReadingMode({ onBack }: { onBack: () => void }) {
   const [resumeParagraph, setResumeParagraph] = useState(0);
   const [showResume, setShowResume] = useState(false);
   const latestParagraph = useRef(0);
+  const progressTimer = useRef<number | null>(null);
 
   const saveProgress = useMutation({
     mutationFn: (input: {
@@ -111,6 +112,26 @@ export default function DailyReadingMode({ onBack }: { onBack: () => void }) {
       }),
     onSuccess: () => utils.spelling.getStats.invalidate(),
   });
+
+  const scheduleParagraphSave = (storyIndex: number, paragraphIndex: number) => {
+    if (progressTimer.current !== null) {
+      window.clearTimeout(progressTimer.current);
+    }
+    progressTimer.current = window.setTimeout(() => {
+      saveProgress.mutate({
+        storyIndex,
+        stage: "story",
+        paragraphIndex,
+      });
+      progressTimer.current = null;
+    }, 800);
+  };
+
+  useEffect(() => () => {
+    if (progressTimer.current !== null) {
+      window.clearTimeout(progressTimer.current);
+    }
+  }, []);
 
   useEffect(() => {
     if (!data) return;
@@ -169,11 +190,7 @@ export default function DailyReadingMode({ onBack }: { onBack: () => void }) {
           );
           if (paragraphIndex === latestParagraph.current) return;
           latestParagraph.current = paragraphIndex;
-          saveProgress.mutate({
-            storyIndex: activeStory,
-            stage: "story",
-            paragraphIndex,
-          });
+          scheduleParagraphSave(activeStory, paragraphIndex);
         },
         { threshold: 0.6 },
       );
