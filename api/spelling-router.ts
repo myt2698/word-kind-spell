@@ -994,7 +994,7 @@ export const spellingRouter = createRouter({
     const db = getDb();
     const today = new Date().toISOString().split("T")[0];
     const selected = await db
-      .select({ word: words.word, definition: words.definition })
+      .select({ id: words.id, word: words.word, definition: words.definition })
       .from(todayWordSelections)
       .innerJoin(words, eq(todayWordSelections.wordId, words.id))
       .where(
@@ -1004,8 +1004,173 @@ export const spellingRouter = createRouter({
         ),
       )
       .orderBy(todayWordSelections.id);
-    return generateDailyReading(today, selected);
+    const reading = generateDailyReading(today, selected);
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    const logs = await db
+      .select({ id: wordLogs.id, notes: wordLogs.notes })
+      .from(wordLogs)
+      .where(
+        and(
+          eq(wordLogs.userId, ctx.user.id),
+          eq(wordLogs.action, "review"),
+          gte(wordLogs.createdAt, todayStart),
+        ),
+      )
+      .orderBy(desc(wordLogs.id));
+    const answered = new Map<
+      string,
+      {
+        storyIndex: number;
+        questionIndex: number;
+        selectedIndex: number;
+        correctIndex: number;
+        isCorrect: boolean;
+      }
+    >();
+    let savedProgress:
+      | { storyIndex: number; stage: "story" | "questions"; paragraphIndex: number }
+      | undefined;
+    for (const log of logs) {
+      if (!log.notes) continue;
+      try {
+        const parsed = JSON.parse(log.notes);
+        if (parsed?.date !== today) continue;
+        if (
+          parsed.type === "daily_reading" &&
+          Number.isInteger(parsed.storyIndex) &&
+          Number.isInteger(parsed.questionIndex)
+        ) {
+          const key = `${parsed.storyIndex}-${parsed.questionIndex}`;
+          if (!answered.has(key)) answered.set(key, parsed);
+        } else if (
+          !savedProgress &&
+          parsed.type === "daily_reading_progress" &&
+          Number.isInteger(parsed.storyIndex)
+        ) {
+          savedProgress = {
+            storyIndex: parsed.storyIndex,
+            stage: parsed.stage === "questions" ? "questions" : "story",
+            paragraphIndex: Number.isInteger(parsed.paragraphIndex)
+              ? Math.max(0, parsed.paragraphIndex)
+              : 0,
+          };
+        }
+      } catch {
+        // Ignore unrelated legacy review notes.
+      }
+    }
+    const completedStories = reading.stories
+      .map((_, storyIndex) => storyIndex)
+      .filter((storyIndex) =>
+        [0, 1, 2, 3, 4].every((questionIndex) =>
+          answered.has(`${storyIndex}-${questionIndex}`),
+        ),
+      );
+    const currentStoryIndex =
+      [0, 1, 2].find((storyIndex) => !completedStories.includes(storyIndex)) ??
+      3;
+    const currentAnsweredCount =
+      currentStoryIndex < 3
+        ? [...answered.values()].filter(
+            (attempt) => attempt.storyIndex === currentStoryIndex,
+          ).length
+        : 0;
+    const matchingSavedProgress =
+      savedProgress?.storyIndex === currentStoryIndex
+        ? savedProgress
+        : undefined;
+    const stage =
+      currentStoryIndex >= 3
+        ? ("complete" as const)
+        : currentAnsweredCount > 0
+          ? ("questions" as const)
+          : matchingSavedProgress?.stage ?? ("story" as const);
+
+    return {
+      ...reading,
+      progress: {
+        currentStoryIndex,
+        stage,
+        paragraphIndex: matchingSavedProgress?.paragraphIndex ?? 0,
+        completedStories,
+        answered: [...answered.values()],
+      },
+    };
   }),
+
+  /** Persist the latest reading checkpoint without creating duplicate rows. */
+  saveReadingProgress: authedQuery
+    .input(
+      z.object({
+        storyIndex: z.number().int().min(0).max(2),
+        stage: z.enum(["story", "questions"]),
+        paragraphIndex: z.number().int().min(0).max(20).default(0),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const db = getDb();
+      const today = new Date().toISOString().split("T")[0];
+      const todayStart = new Date();
+      todayStart.setHours(0, 0, 0, 0);
+      const selected = await db
+        .select({ id: words.id })
+        .from(todayWordSelections)
+        .innerJoin(words, eq(todayWordSelections.wordId, words.id))
+        .where(
+          and(
+            eq(todayWordSelections.userId, ctx.user.id),
+            eq(todayWordSelections.date, today),
+          ),
+        )
+        .orderBy(todayWordSelections.id)
+        .limit(1);
+      if (!selected[0]) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "请先选择今日练习单词",
+        });
+      }
+      const logs = await db
+        .select({ id: wordLogs.id, notes: wordLogs.notes })
+        .from(wordLogs)
+        .where(
+          and(
+            eq(wordLogs.userId, ctx.user.id),
+            eq(wordLogs.action, "review"),
+            gte(wordLogs.createdAt, todayStart),
+          ),
+        )
+        .orderBy(desc(wordLogs.id));
+      const existing = logs.find((log) => {
+        if (!log.notes) return false;
+        try {
+          const parsed = JSON.parse(log.notes);
+          return parsed?.type === "daily_reading_progress" && parsed.date === today;
+        } catch {
+          return false;
+        }
+      });
+      const notes = JSON.stringify({
+        type: "daily_reading_progress",
+        date: today,
+        ...input,
+      });
+      if (existing) {
+        await db
+          .update(wordLogs)
+          .set({ wordId: selected[0].id, notes })
+          .where(eq(wordLogs.id, existing.id));
+      } else {
+        await db.insert(wordLogs).values({
+          wordId: selected[0].id,
+          userId: ctx.user.id,
+          action: "review",
+          notes,
+        });
+      }
+      return { success: true };
+    }),
 
   /** Score one daily-reading answer and award points only on its first submission. */
   submitReadingAnswer: authedQuery
@@ -1079,12 +1244,23 @@ export const spellingRouter = createRouter({
 
       const attemptKey = `${input.storyIndex}-${input.questionIndex}`;
       if (attempts.has(attemptKey)) {
+        const storyAttemptCount = [...attempts.values()].filter(
+          (attempt) => attempt.storyIndex === input.storyIndex,
+        ).length;
         return {
           isCorrect: input.selectedIndex === question.correctIndex,
           pointsEarned: 0,
           storyBonus: 0,
           alreadyRewarded: true,
           dailyCapped: false,
+          storyCompleted: storyAttemptCount >= 5,
+          allCompleted:
+            [0, 1, 2].every(
+              (storyIndex) =>
+                [...attempts.values()].filter(
+                  (attempt) => attempt.storyIndex === storyIndex,
+                ).length >= 5,
+            ),
         };
       }
 
@@ -1120,12 +1296,25 @@ export const spellingRouter = createRouter({
         }),
       });
 
+      const storyCompleted = previousStoryAttempts.length + 1 >= 5;
+      const completedBefore = [0, 1, 2].filter(
+        (storyIndex) =>
+          [...attempts.values()].filter(
+            (attempt) => attempt.storyIndex === storyIndex,
+          ).length >= 5,
+      );
+      const allCompleted =
+        storyCompleted &&
+        new Set([...completedBefore, input.storyIndex]).size >= 3;
+
       return {
         isCorrect,
         pointsEarned,
         storyBonus,
         alreadyRewarded: false,
         dailyCapped: false,
+        storyCompleted,
+        allCompleted,
       };
     }),
 

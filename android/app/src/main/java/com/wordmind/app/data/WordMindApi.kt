@@ -229,6 +229,22 @@ class WordMindApi(context: Context) {
             pointsEarned = result.optInt("pointsEarned"),
             storyBonus = result.optInt("storyBonus"),
             alreadyRewarded = result.optBoolean("alreadyRewarded"),
+            storyCompleted = result.optBoolean("storyCompleted"),
+            allCompleted = result.optBoolean("allCompleted"),
+        )
+    }
+
+    suspend fun saveReadingProgress(
+        storyIndex: Int,
+        stage: String,
+        paragraphIndex: Int,
+    ) {
+        mutate(
+            "spelling.saveReadingProgress",
+            JSONObject()
+                .put("storyIndex", storyIndex)
+                .put("stage", stage)
+                .put("paragraphIndex", paragraphIndex),
         )
     }
 

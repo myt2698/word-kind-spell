@@ -110,6 +110,7 @@ data class DailyReading(
     val date: String,
     val words: List<String>,
     val stories: List<ReadingStory>,
+    val progress: ReadingProgress,
 )
 
 data class ReadingStory(
@@ -130,11 +131,32 @@ data class ReadingReward(
     val pointsEarned: Int,
     val storyBonus: Int,
     val alreadyRewarded: Boolean,
+    val storyCompleted: Boolean,
+    val allCompleted: Boolean,
+)
+
+data class ReadingProgress(
+    val currentStoryIndex: Int,
+    val stage: String,
+    val paragraphIndex: Int,
+    val completedStories: List<Int>,
+    val answered: List<ReadingAnswerProgress>,
+)
+
+data class ReadingAnswerProgress(
+    val storyIndex: Int,
+    val questionIndex: Int,
+    val selectedIndex: Int,
+    val correctIndex: Int,
+    val isCorrect: Boolean,
 )
 
 internal fun JSONObject.toDailyReading(): DailyReading {
     val wordsJson = optJSONArray("words") ?: JSONArray()
     val storiesJson = optJSONArray("stories") ?: JSONArray()
+    val progressJson = optJSONObject("progress") ?: JSONObject()
+    val completedJson = progressJson.optJSONArray("completedStories") ?: JSONArray()
+    val answeredJson = progressJson.optJSONArray("answered") ?: JSONArray()
     return DailyReading(
         date = optString("date"),
         words = buildList {
@@ -170,6 +192,28 @@ internal fun JSONObject.toDailyReading(): DailyReading {
                 )
             }
         },
+        progress = ReadingProgress(
+            currentStoryIndex = progressJson.optInt("currentStoryIndex"),
+            stage = progressJson.optString("stage", "story"),
+            paragraphIndex = progressJson.optInt("paragraphIndex"),
+            completedStories = buildList {
+                for (index in 0 until completedJson.length()) add(completedJson.optInt(index))
+            },
+            answered = buildList {
+                for (index in 0 until answeredJson.length()) {
+                    val answer = answeredJson.getJSONObject(index)
+                    add(
+                        ReadingAnswerProgress(
+                            storyIndex = answer.optInt("storyIndex"),
+                            questionIndex = answer.optInt("questionIndex"),
+                            selectedIndex = answer.optInt("selectedIndex"),
+                            correctIndex = answer.optInt("correctIndex"),
+                            isCorrect = answer.optBoolean("isCorrect"),
+                        )
+                    )
+                }
+            },
+        ),
     )
 }
 
