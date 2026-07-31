@@ -13,6 +13,7 @@ describe("generateDailyReading", () => {
     expect(new Set(reading.stories.map((story) => story.theme)).size).toBe(3);
     for (const story of reading.stories) {
       expect(story.questions).toHaveLength(5);
+      expect(new Set(story.questions.map((question) => question.correctIndex)).size).toBe(3);
       expect(story.content).toContain("ap-ple");
       expect(story.content).toContain("beau-ti-ful");
       expect(story.content).toContain("e-le-phant");

@@ -147,6 +147,23 @@ function storyForTheme(
   };
 }
 
+function distributeAnswers(story: ReadingStory, seed: string): ReadingStory {
+  const startIndex = hash(seed) % 3;
+  return {
+    ...story,
+    questions: story.questions.map((question, questionIndex) => {
+      const correctOption = question.options[question.correctIndex];
+      const otherOptions = question.options.filter(
+        (_, optionIndex) => optionIndex !== question.correctIndex,
+      );
+      const correctIndex = (startIndex + questionIndex) % question.options.length;
+      const options = [...otherOptions];
+      options.splice(correctIndex, 0, correctOption);
+      return { ...question, options, correctIndex };
+    }),
+  };
+}
+
 export function generateDailyReading(date: string, words: ReadingWord[]): DailyReading {
   const cleanWords = words
     .map((item) => ({ ...item, word: item.word.trim().toLowerCase() }))
@@ -158,6 +175,11 @@ export function generateDailyReading(date: string, words: ReadingWord[]): DailyR
   return {
     date,
     words: cleanWords.map((item) => item.word),
-    stories: themes.map((theme, index) => storyForTheme(theme, cleanWords, index)),
+    stories: themes.map((theme, index) =>
+      distributeAnswers(
+        storyForTheme(theme, cleanWords, index),
+        `${date}:${cleanWords.map((item) => item.word).join(",")}:${theme}`,
+      ),
+    ),
   };
 }
