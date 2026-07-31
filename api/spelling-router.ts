@@ -734,7 +734,7 @@ export const spellingRouter = createRouter({
       .where(
         and(
           eq(wordLogs.userId, ctx.user.id),
-          eq(wordLogs.action, "test_pass"),
+          inArray(wordLogs.action, ["test_pass", "review"]),
         ),
       );
     let totalPoints = 0;
@@ -1006,6 +1006,128 @@ export const spellingRouter = createRouter({
       .orderBy(todayWordSelections.id);
     return generateDailyReading(today, selected);
   }),
+
+  /** Score one daily-reading answer and award points only on its first submission. */
+  submitReadingAnswer: authedQuery
+    .input(
+      z.object({
+        storyIndex: z.number().int().min(0).max(2),
+        questionIndex: z.number().int().min(0).max(4),
+        selectedIndex: z.number().int().min(0).max(2),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const db = getDb();
+      const today = new Date().toISOString().split("T")[0];
+      const selected = await db
+        .select({
+          id: words.id,
+          word: words.word,
+          definition: words.definition,
+        })
+        .from(todayWordSelections)
+        .innerJoin(words, eq(todayWordSelections.wordId, words.id))
+        .where(
+          and(
+            eq(todayWordSelections.userId, ctx.user.id),
+            eq(todayWordSelections.date, today),
+          ),
+        )
+        .orderBy(todayWordSelections.id);
+      const reading = generateDailyReading(today, selected);
+      const question =
+        reading.stories[input.storyIndex]?.questions[input.questionIndex];
+      if (!question || !selected[0]) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "今日阅读题目不存在，请刷新后重试",
+        });
+      }
+
+      const todayStart = new Date();
+      todayStart.setHours(0, 0, 0, 0);
+      const readingLogs = await db
+        .select({ notes: wordLogs.notes })
+        .from(wordLogs)
+        .where(
+          and(
+            eq(wordLogs.userId, ctx.user.id),
+            eq(wordLogs.action, "review"),
+            gte(wordLogs.createdAt, todayStart),
+          ),
+        );
+      const attempts = new Map<
+        string,
+        { storyIndex: number; questionIndex: number; isCorrect: boolean }
+      >();
+      for (const log of readingLogs) {
+        if (!log.notes) continue;
+        try {
+          const parsed = JSON.parse(log.notes);
+          if (
+            parsed?.type === "daily_reading" &&
+            parsed.date === today &&
+            Number.isInteger(parsed.storyIndex) &&
+            Number.isInteger(parsed.questionIndex)
+          ) {
+            attempts.set(`${parsed.storyIndex}-${parsed.questionIndex}`, parsed);
+          }
+        } catch {
+          // Ignore unrelated legacy review notes.
+        }
+      }
+
+      const attemptKey = `${input.storyIndex}-${input.questionIndex}`;
+      if (attempts.has(attemptKey)) {
+        return {
+          isCorrect: input.selectedIndex === question.correctIndex,
+          pointsEarned: 0,
+          storyBonus: 0,
+          alreadyRewarded: true,
+          dailyCapped: false,
+        };
+      }
+
+      const isCorrect = input.selectedIndex === question.correctIndex;
+      let pointsEarned = isCorrect ? 2 : 0;
+      let storyBonus = 0;
+      const previousStoryAttempts = [...attempts.values()].filter(
+        (attempt) => attempt.storyIndex === input.storyIndex,
+      );
+      if (
+        isCorrect &&
+        previousStoryAttempts.length === 4 &&
+        previousStoryAttempts.every((attempt) => attempt.isCorrect)
+      ) {
+        storyBonus = 5;
+        pointsEarned += storyBonus;
+      }
+
+      await db.insert(wordLogs).values({
+        wordId: selected[0].id,
+        userId: ctx.user.id,
+        action: "review",
+        notes: JSON.stringify({
+          type: "daily_reading",
+          date: today,
+          storyIndex: input.storyIndex,
+          questionIndex: input.questionIndex,
+          selectedIndex: input.selectedIndex,
+          correctIndex: question.correctIndex,
+          isCorrect,
+          pointsEarned,
+          storyBonus,
+        }),
+      });
+
+      return {
+        isCorrect,
+        pointsEarned,
+        storyBonus,
+        alreadyRewarded: false,
+        dailyCapped: false,
+      };
+    }),
 
   /** Replace today's selections */
   setTodaySelections: authedQuery.input(z.object({ wordIds: z.array(z.number()) })).mutation(async ({ ctx, input }) => {

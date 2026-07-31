@@ -29,6 +29,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -37,8 +38,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.wordmind.app.data.DailyReading
+import com.wordmind.app.data.ReadingReward
 import com.wordmind.app.data.WordMindApi
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 @Composable
 @OptIn(ExperimentalLayoutApi::class)
@@ -52,6 +55,7 @@ internal fun DailyReadingMode(
     var answeredQuestions by remember { mutableStateOf<Set<String>>(emptySet()) }
     var unlockedLevel by remember { mutableStateOf(0) }
     var unlockMessage by remember { mutableStateOf<String?>(null) }
+    val scope = rememberCoroutineScope()
 
     LaunchedEffect(Unit) {
         try {
@@ -172,8 +176,21 @@ internal fun DailyReadingMode(
                                         question = question.question,
                                         options = question.options,
                                         correctIndex = question.correctIndex,
-                                        onAnswered = {
+                                        onSubmit = { selectedIndex, onReward ->
                                             answeredQuestions = answeredQuestions + "$storyIndex-$questionIndex"
+                                            scope.launch {
+                                                try {
+                                                    onReward(
+                                                        api.submitReadingAnswer(
+                                                            storyIndex = storyIndex,
+                                                            questionIndex = questionIndex,
+                                                            selectedIndex = selectedIndex,
+                                                        )
+                                                    )
+                                                } catch (_: Exception) {
+                                                    onReward(null)
+                                                }
+                                            }
                                         },
                                     )
                                     if (questionIndex < story.questions.lastIndex) Spacer(Modifier.height(18.dp))
@@ -212,9 +229,11 @@ private fun ReadingQuestionBlock(
     question: String,
     options: List<String>,
     correctIndex: Int,
-    onAnswered: () -> Unit,
+    onSubmit: (Int, (ReadingReward?) -> Unit) -> Unit,
 ) {
     var selected by remember { mutableStateOf<Int?>(null) }
+    var reward by remember { mutableStateOf<ReadingReward?>(null) }
+    var rewardFailed by remember { mutableStateOf(false) }
     Text("$number. $question", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFF1F2937))
     Spacer(Modifier.height(7.dp))
     options.forEachIndexed { index, option ->
@@ -234,7 +253,10 @@ private fun ReadingQuestionBlock(
         Surface(
             modifier = Modifier.fillMaxWidth().clickable(enabled = !revealed) {
                 selected = index
-                onAnswered()
+                onSubmit(index) { result ->
+                    reward = result
+                    rewardFailed = result == null
+                }
             },
             color = background,
             shape = RoundedCornerShape(11.dp),
@@ -252,5 +274,22 @@ private fun ReadingQuestionBlock(
             )
         }
         Spacer(Modifier.height(6.dp))
+    }
+    reward?.let { result ->
+        Text(
+            when {
+                result.pointsEarned > 0 && result.storyBonus > 0 ->
+                    "🌟 +${result.pointsEarned} 积分（含全对通关奖 +5）"
+                result.pointsEarned > 0 -> "🌟 +${result.pointsEarned} 积分"
+                result.alreadyRewarded -> "本题今日已结算过积分"
+                else -> "答错不扣分，继续加油"
+            },
+            color = if (result.pointsEarned > 0) PracticeAmber else PracticeMuted,
+            fontSize = 11.sp,
+            fontWeight = FontWeight.SemiBold,
+        )
+    }
+    if (rewardFailed) {
+        Text("积分结算失败，请稍后重试", color = PracticeDanger, fontSize = 11.sp)
     }
 }

@@ -4,8 +4,15 @@ import { trpc } from "@/providers/trpc";
 import { Button } from "@/components/ui/button";
 
 export default function DailyReadingMode({ onBack }: { onBack: () => void }) {
+  const utils = trpc.useUtils();
   const { data, isLoading, error, refetch } = trpc.spelling.getDailyReading.useQuery();
+  const submitAnswer = trpc.spelling.submitReadingAnswer.useMutation({
+    onSuccess: () => utils.spelling.getStats.invalidate(),
+  });
   const [answers, setAnswers] = useState<Record<string, number>>({});
+  const [rewards, setRewards] = useState<
+    Record<string, { pointsEarned: number; storyBonus: number; alreadyRewarded: boolean }>
+  >({});
   const [unlockedLevel, setUnlockedLevel] = useState(0);
   const [unlockMessage, setUnlockMessage] = useState("");
 
@@ -88,6 +95,7 @@ export default function DailyReadingMode({ onBack }: { onBack: () => void }) {
                   {story.questions.map((question, questionIndex) => {
                     const key = `${storyIndex}-${questionIndex}`;
                     const selected = answers[key];
+                    const reward = rewards[key];
                     return (
                       <section key={key}>
                         <p className="mb-2 text-sm font-semibold text-gray-800">{questionIndex + 1}. {question.question}</p>
@@ -101,7 +109,16 @@ export default function DailyReadingMode({ onBack }: { onBack: () => void }) {
                                 key={option}
                                 type="button"
                                 disabled={revealed}
-                                onClick={() => setAnswers((old) => ({ ...old, [key]: optionIndex }))}
+                                onClick={() => {
+                                  setAnswers((old) => ({ ...old, [key]: optionIndex }));
+                                  submitAnswer.mutate(
+                                    { storyIndex, questionIndex, selectedIndex: optionIndex },
+                                    {
+                                      onSuccess: (result) =>
+                                        setRewards((old) => ({ ...old, [key]: result })),
+                                    },
+                                  );
+                                }}
                                 className={`flex min-h-10 items-center rounded-xl border px-3 py-2 text-left text-sm transition-colors ${
                                   revealed && correct ? "border-emerald-300 bg-emerald-50 text-emerald-700" :
                                   revealed && chosen ? "border-rose-300 bg-rose-50 text-rose-700" :
@@ -115,6 +132,15 @@ export default function DailyReadingMode({ onBack }: { onBack: () => void }) {
                             );
                           })}
                         </div>
+                        {reward && (
+                          <p className={`mt-2 text-xs font-semibold ${reward.pointsEarned > 0 ? "text-amber-600" : "text-gray-400"}`}>
+                            {reward.pointsEarned > 0
+                              ? `🌟 +${reward.pointsEarned} 积分${reward.storyBonus > 0 ? "（含全对通关奖 +5）" : ""}`
+                              : reward.alreadyRewarded
+                                ? "本题今日已结算过积分"
+                                : "答错不扣分，继续加油"}
+                          </p>
+                        )}
                       </section>
                     );
                   })}

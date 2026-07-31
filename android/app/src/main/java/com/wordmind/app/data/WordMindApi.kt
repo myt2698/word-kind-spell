@@ -212,6 +212,26 @@ class WordMindApi(context: Context) {
     suspend fun getDailyReading(): DailyReading =
         (query("spelling.getDailyReading") as JSONObject).toDailyReading()
 
+    suspend fun submitReadingAnswer(
+        storyIndex: Int,
+        questionIndex: Int,
+        selectedIndex: Int,
+    ): ReadingReward {
+        val result = mutate(
+            "spelling.submitReadingAnswer",
+            JSONObject()
+                .put("storyIndex", storyIndex)
+                .put("questionIndex", questionIndex)
+                .put("selectedIndex", selectedIndex),
+        ) as JSONObject
+        return ReadingReward(
+            isCorrect = result.optBoolean("isCorrect"),
+            pointsEarned = result.optInt("pointsEarned"),
+            storyBonus = result.optInt("storyBonus"),
+            alreadyRewarded = result.optBoolean("alreadyRewarded"),
+        )
+    }
+
     suspend fun setTodaySelections(wordIds: List<Int>) {
         mutate(
             "spelling.setTodaySelections",

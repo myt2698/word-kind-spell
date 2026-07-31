@@ -125,6 +125,13 @@ data class ReadingQuestion(
     val correctIndex: Int,
 )
 
+data class ReadingReward(
+    val isCorrect: Boolean,
+    val pointsEarned: Int,
+    val storyBonus: Int,
+    val alreadyRewarded: Boolean,
+)
+
 internal fun JSONObject.toDailyReading(): DailyReading {
     val wordsJson = optJSONArray("words") ?: JSONArray()
     val storiesJson = optJSONArray("stories") ?: JSONArray()
