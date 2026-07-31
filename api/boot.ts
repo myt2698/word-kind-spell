@@ -15,6 +15,11 @@ console.log("[BOOT] NODE_ENV:", process.env.NODE_ENV);
 const app = new Hono<{ Bindings: HttpBindings }>();
 
 app.use(secureHeaders());
+app.use("/media/audio/*", rateLimit({
+  windowMs: 60_000,
+  maxRequests: 60,
+  authMaxRequests: 60,
+}));
 app.route("/media/audio", audioHttp);
 app.use("/api/*", async (c, next) => {
   await next();

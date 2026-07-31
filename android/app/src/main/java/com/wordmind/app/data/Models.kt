@@ -126,6 +126,16 @@ data class ReadingQuestion(
     val correctIndex: Int,
 )
 
+data class ReadingWordHint(
+    val word: String,
+    val syllables: List<String>,
+    val phonetic: String,
+    val simpleDefinition: String,
+    val exampleSentence: String,
+    val translation: String,
+    val imageKeyword: String,
+)
+
 data class ReadingReward(
     val isCorrect: Boolean,
     val pointsEarned: Int,

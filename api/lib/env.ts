@@ -22,6 +22,12 @@ export const env = {
   get catalogOwnerUserId() { return process.env.CATALOG_OWNER_USER_ID ?? ""; },
   get youdaoAppKey() { return process.env.YOUDAO_APP_KEY ?? ""; },
   get youdaoAppSecret() { return process.env.YOUDAO_APP_SECRET ?? ""; },
+  get aliyunSpeechAppKey() {
+    return get("ALIYUN_SPEECH_APP_KEY") || "MhXjV6jWRgWGmdjb";
+  },
+  get aliyunAccessKeyId() { return get("ALIYUN_ACCESS_KEY_ID"); },
+  get aliyunAccessKeySecret() { return get("ALIYUN_ACCESS_KEY_SECRET"); },
+  get aliyunSpeechVoice() { return get("ALIYUN_SPEECH_VOICE"); },
 
   // Validate all required variables before starting the production server.
   validate() {

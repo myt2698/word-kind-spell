@@ -20,6 +20,11 @@ class WordMindApi(context: Context) {
     private val preferences = context.getSharedPreferences("wordmind_session", Context.MODE_PRIVATE)
     private val baseUrl = BuildConfig.API_BASE_URL.trimEnd('/')
 
+    fun speechUrl(text: String, locale: String = "en-US"): String =
+        "$baseUrl/media/audio/speech?text=${
+            URLEncoder.encode(text, StandardCharsets.UTF_8.name())
+        }&locale=${URLEncoder.encode(locale, StandardCharsets.UTF_8.name())}"
+
     suspend fun restoreUser(): User? {
         if (preferences.getString(COOKIE_KEY, null).isNullOrBlank()) return null
         return try {
@@ -225,6 +230,27 @@ class WordMindApi(context: Context) {
 
     suspend fun getDailyReading(): DailyReading =
         (query("spelling.getDailyReading") as JSONObject).toDailyReading()
+
+    suspend fun getReadingWordHint(word: String, context: String): ReadingWordHint {
+        val result = query(
+            "dict.readingHint",
+            JSONObject().put("word", word).put("context", context),
+        ) as JSONObject
+        val syllablesJson = result.optJSONArray("syllables") ?: JSONArray()
+        return ReadingWordHint(
+            word = result.optString("word", word),
+            syllables = buildList {
+                for (index in 0 until syllablesJson.length()) {
+                    add(syllablesJson.optString(index))
+                }
+            },
+            phonetic = result.optString("phonetic"),
+            simpleDefinition = result.optString("simple_definition"),
+            exampleSentence = result.optString("example_sentence"),
+            translation = result.optString("translation"),
+            imageKeyword = result.optString("image_keyword"),
+        )
+    }
 
     suspend fun submitReadingAnswer(
         storyIndex: Int,

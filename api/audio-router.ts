@@ -56,14 +56,15 @@ export const audioRouter = createRouter({
 
       return getDb()
         .select({
-          wordId: wordAudios.wordId,
-          format: wordAudios.format,
+          wordId: words.id,
+          word: words.word,
         })
-        .from(wordAudios)
-        .where(inArray(wordAudios.wordId, uniqueIds))
+        .from(words)
+        .where(inArray(words.id, uniqueIds))
         .then((rows) => rows.map((row) => ({
-          ...row,
-          audioUrl: `/media/audio/${row.wordId}`,
+          wordId: row.wordId,
+          format: "mp3",
+          audioUrl: `/media/audio/speech?text=${encodeURIComponent(row.word)}&locale=en-US`,
         })));
     }),
 

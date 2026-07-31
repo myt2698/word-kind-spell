@@ -2,6 +2,7 @@ package com.wordmind.app.ui
 
 import android.content.Context
 import android.content.res.Configuration
+import android.media.MediaPlayer
 import android.speech.tts.TextToSpeech
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Image
@@ -534,8 +535,8 @@ private fun MainScreen(
     val destinations = remember(user.role) {
         Destination.entries.filter { it != Destination.Manage || user.role == "admin" }
     }
-    val speak = rememberWordSpeaker()
-    val phonicsSpeak = rememberWordSpeaker(Locale.UK)
+    val speak = rememberWordSpeaker(api)
+    val phonicsSpeak = rememberWordSpeaker(api, Locale.UK)
     var wordEditorOpen by remember { mutableStateOf(false) }
     var editingWord by remember { mutableStateOf<Word?>(null) }
     var deletingWord by remember { mutableStateOf<Word?>(null) }
@@ -1837,7 +1838,10 @@ private fun MessageBanner(
 }
 
 @Composable
-private fun rememberWordSpeaker(locale: Locale = Locale.US): (String) -> Unit {
+private fun rememberWordSpeaker(
+    api: WordMindApi,
+    locale: Locale = Locale.US,
+): (String) -> Unit {
     val context = LocalContext.current
     var ready by remember { mutableStateOf(false) }
     val textToSpeech = remember {
@@ -1845,6 +1849,7 @@ private fun rememberWordSpeaker(locale: Locale = Locale.US): (String) -> Unit {
             ready = status == TextToSpeech.SUCCESS
         }
     }
+    val activePlayer = remember { arrayOfNulls<MediaPlayer>(1) }
 
     LaunchedEffect(ready, locale) {
         if (ready) {
@@ -1854,15 +1859,44 @@ private fun rememberWordSpeaker(locale: Locale = Locale.US): (String) -> Unit {
     }
     DisposableEffect(textToSpeech) {
         onDispose {
+            activePlayer[0]?.release()
+            activePlayer[0] = null
             textToSpeech.stop()
             textToSpeech.shutdown()
         }
     }
 
-    return remember(textToSpeech, ready, locale) {
+    return remember(textToSpeech, ready, locale, api) {
         { word ->
-            if (ready) {
-                textToSpeech.speak(word, TextToSpeech.QUEUE_FLUSH, null, "word-$word")
+            val fallback = {
+                if (ready) {
+                    textToSpeech.speak(word, TextToSpeech.QUEUE_FLUSH, null, "word-$word")
+                }
+            }
+            try {
+                activePlayer[0]?.release()
+                activePlayer[0] = MediaPlayer().apply {
+                    setDataSource(
+                        api.speechUrl(
+                            word,
+                            if (locale == Locale.UK) "en-GB" else "en-US",
+                        ),
+                    )
+                    setOnPreparedListener { it.start() }
+                    setOnCompletionListener {
+                        it.release()
+                        if (activePlayer[0] === it) activePlayer[0] = null
+                    }
+                    setOnErrorListener { player, _, _ ->
+                        player.release()
+                        if (activePlayer[0] === player) activePlayer[0] = null
+                        fallback()
+                        true
+                    }
+                    prepareAsync()
+                }
+            } catch (_: Exception) {
+                fallback()
             }
         }
     }

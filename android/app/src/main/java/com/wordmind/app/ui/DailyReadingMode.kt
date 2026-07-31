@@ -19,6 +19,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.MenuBook
 import androidx.compose.material3.Button
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Surface
@@ -39,6 +40,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.wordmind.app.data.DailyReading
 import com.wordmind.app.data.ReadingReward
+import com.wordmind.app.data.ReadingWordHint
 import com.wordmind.app.data.WordMindApi
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -59,6 +61,8 @@ internal fun DailyReadingMode(
     var completedStories by remember { mutableStateOf<Set<Int>>(emptySet()) }
     var answerSelections by remember { mutableStateOf<Map<String, Int>>(emptyMap()) }
     var unlockMessage by remember { mutableStateOf<String?>(null) }
+    var wordHint by remember { mutableStateOf<ReadingWordHint?>(null) }
+    var hintLoading by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val listState = rememberLazyListState()
 
@@ -236,21 +240,35 @@ internal fun DailyReadingMode(
                         paragraphs.forEachIndexed { paragraphIndex, paragraph ->
                             item {
                                 Surface(color = Color.White, shape = RoundedCornerShape(14.dp)) {
-                                    Text(
-                                        paragraph,
+                                    FlowRow(
                                         modifier = Modifier
                                             .fillMaxWidth()
-                                            .clickable {
-                                                resumeParagraph = paragraphIndex
-                                                scope.launch {
-                                                    api.saveReadingProgress(activeStory, "story", paragraphIndex)
-                                                }
-                                            }
                                             .padding(14.dp),
-                                        color = Color(0xFF0369A1),
-                                        fontSize = 17.sp,
-                                        lineHeight = 28.sp,
-                                    )
+                                    ) {
+                                        tokenizeReadingText(paragraph).forEach { token ->
+                                            Text(
+                                                token.text,
+                                                modifier = if (token.isWord) {
+                                                    Modifier.clickable {
+                                                        resumeParagraph = paragraphIndex
+                                                        hintLoading = true
+                                                        scope.launch {
+                                                            try {
+                                                                wordHint = api.getReadingWordHint(token.text, paragraph)
+                                                                api.saveReadingProgress(activeStory, "story", paragraphIndex)
+                                                            } finally {
+                                                                hintLoading = false
+                                                            }
+                                                        }
+                                                    }
+                                                } else Modifier,
+                                                color = Color(0xFF0369A1),
+                                                fontSize = 17.sp,
+                                                lineHeight = 28.sp,
+                                                fontWeight = if (token.isWord) FontWeight.Medium else FontWeight.Normal,
+                                            )
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -330,6 +348,47 @@ internal fun DailyReadingMode(
                     }
                 }
             }
+        }
+    }
+
+    if (hintLoading) {
+        AlertDialog(
+            onDismissRequest = { hintLoading = false },
+            confirmButton = {},
+            title = { Text("自然拼读提示卡") },
+            text = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    CircularProgressIndicator()
+                    Text("正在生成提示卡…", modifier = Modifier.padding(start = 12.dp))
+                }
+            },
+        )
+    } else {
+        wordHint?.let { hint ->
+            AlertDialog(
+                onDismissRequest = { wordHint = null },
+                confirmButton = {
+                    TextButton(onClick = { wordHint = null }) { Text("知道了") }
+                },
+                title = { Text(hint.word, color = Color(0xFF0369A1), fontWeight = FontWeight.Bold) },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Text(
+                            "${hint.syllables.joinToString("-")}  ${hint.phonetic}",
+                            color = Color(0xFF0369A1),
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.Bold,
+                        )
+                        Text("Easy English", color = PracticeMuted, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        Text(hint.simpleDefinition)
+                        Text("Story Example", color = PracticeMuted, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        Text(hint.exampleSentence, color = Color(0xFF0369A1))
+                        if (hint.translation.isNotBlank()) {
+                            Text("中文：${hint.translation}", color = Color(0xFF92400E))
+                        }
+                    }
+                },
+            )
         }
     }
 }
@@ -451,4 +510,21 @@ private fun ReadingQuestionBlock(
 private fun splitReadingParagraphs(content: String): List<String> {
     val sentences = content.split(Regex("(?<=[.!?])\\s+")).filter { it.isNotBlank() }
     return sentences.chunked(2).map { it.joinToString(" ") }.ifEmpty { listOf(content) }
+}
+
+private data class ReadingTextToken(val text: String, val isWord: Boolean)
+
+private fun tokenizeReadingText(text: String): List<ReadingTextToken> {
+    val wordPattern = Regex("[A-Za-z]+(?:['-][A-Za-z]+)*")
+    val result = mutableListOf<ReadingTextToken>()
+    var cursor = 0
+    wordPattern.findAll(text).forEach { match ->
+        if (match.range.first > cursor) {
+            result += ReadingTextToken(text.substring(cursor, match.range.first), false)
+        }
+        result += ReadingTextToken(match.value, true)
+        cursor = match.range.last + 1
+    }
+    if (cursor < text.length) result += ReadingTextToken(text.substring(cursor), false)
+    return result
 }

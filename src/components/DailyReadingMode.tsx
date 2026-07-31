@@ -9,6 +9,7 @@ import {
   RotateCcw,
   Sparkles,
   Trophy,
+  X,
   XCircle,
 } from "lucide-react";
 import { useMutation, useQuery } from "@tanstack/react-query";
@@ -86,6 +87,8 @@ export default function DailyReadingMode({ onBack }: { onBack: () => void }) {
   const [unlockMessage, setUnlockMessage] = useState("");
   const [resumeParagraph, setResumeParagraph] = useState(0);
   const [showResume, setShowResume] = useState(false);
+  const [hintWord, setHintWord] = useState("");
+  const [hintContext, setHintContext] = useState("");
   const latestParagraph = useRef(0);
   const progressTimer = useRef<number | null>(null);
 
@@ -112,6 +115,10 @@ export default function DailyReadingMode({ onBack }: { onBack: () => void }) {
       }),
     onSuccess: () => utils.spelling.getStats.invalidate(),
   });
+  const hintQuery = trpc.dict.readingHint.useQuery(
+    { word: hintWord, context: hintContext },
+    { enabled: Boolean(hintWord), retry: 1 },
+  );
 
   const scheduleParagraphSave = (storyIndex: number, paragraphIndex: number) => {
     if (progressTimer.current !== null) {
@@ -424,7 +431,25 @@ export default function DailyReadingMode({ onBack }: { onBack: () => void }) {
                       data-paragraph-index={paragraphIndex}
                       className="rounded-xl px-2 py-1 text-[17px] leading-8 text-sky-700"
                     >
-                      {paragraph}
+                      {paragraph
+                        .split(/([A-Za-z]+(?:['-][A-Za-z]+)*)/)
+                        .map((part, partIndex) =>
+                          /^[A-Za-z]+(?:['-][A-Za-z]+)*$/.test(part) ? (
+                            <button
+                              key={partIndex}
+                              type="button"
+                              onClick={() => {
+                                setHintWord(part);
+                                setHintContext(paragraph);
+                              }}
+                              className="rounded px-0.5 font-medium text-sky-700 decoration-sky-300 decoration-dotted underline-offset-4 hover:bg-sky-50 hover:underline"
+                            >
+                              {part}
+                            </button>
+                          ) : (
+                            <span key={partIndex}>{part}</span>
+                          ),
+                        )}
                     </p>
                   ))}
                 </div>
@@ -566,6 +591,74 @@ export default function DailyReadingMode({ onBack }: { onBack: () => void }) {
       {unlockMessage && (
         <div className="fixed inset-x-0 top-24 z-50 mx-auto w-fit animate-in zoom-in-90 fade-in rounded-2xl border border-amber-200 bg-white px-6 py-4 text-base font-bold text-amber-600 shadow-xl duration-300">
           {unlockMessage}
+        </div>
+      )}
+      {hintWord && (
+        <div
+          className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/30 p-3 sm:items-center"
+          onClick={() => setHintWord("")}
+        >
+          <section
+            className="w-full max-w-md rounded-3xl bg-white p-5 shadow-2xl"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-xs font-bold text-violet-500">自然拼读提示卡</p>
+                <h3 className="mt-1 text-2xl font-black text-sky-700">
+                  {hintQuery.data?.word || hintWord.toLowerCase()}
+                </h3>
+              </div>
+              <button
+                type="button"
+                aria-label="关闭提示卡"
+                onClick={() => setHintWord("")}
+                className="rounded-full bg-gray-100 p-2 text-gray-500"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            {hintQuery.isLoading ? (
+              <div className="flex items-center justify-center py-10 text-sm text-gray-500">
+                <Loader2 className="mr-2 h-5 w-5 animate-spin" /> 正在生成提示卡…
+              </div>
+            ) : hintQuery.error ? (
+              <p className="py-8 text-center text-sm text-rose-500">
+                提示卡加载失败，请稍后再试
+              </p>
+            ) : hintQuery.data ? (
+              <div className="mt-4 space-y-3 text-sm">
+                <div className="rounded-2xl bg-sky-50 p-3">
+                  <p className="text-xs text-sky-500">音节 · 音标</p>
+                  <p className="mt-1 text-lg font-bold text-sky-800">
+                    {hintQuery.data.syllables.join("-")}
+                    {hintQuery.data.phonetic && (
+                      <span className="ml-2 text-sm font-normal text-sky-600">
+                        {hintQuery.data.phonetic}
+                      </span>
+                    )}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs font-bold text-gray-400">Easy English</p>
+                  <p className="mt-1 leading-6 text-gray-700">
+                    {hintQuery.data.simple_definition}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs font-bold text-gray-400">Story Example</p>
+                  <p className="mt-1 leading-6 text-sky-700">
+                    {hintQuery.data.example_sentence}
+                  </p>
+                </div>
+                {hintQuery.data.translation && (
+                  <p className="rounded-xl bg-amber-50 px-3 py-2 text-amber-800">
+                    中文：{hintQuery.data.translation}
+                  </p>
+                )}
+              </div>
+            ) : null}
+          </section>
         </div>
       )}
     </main>

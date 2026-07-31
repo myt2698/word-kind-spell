@@ -2,8 +2,28 @@ import { Hono } from "hono";
 import { eq } from "drizzle-orm";
 import { wordAudios } from "@db/schema";
 import { getDb } from "./queries/connection";
+import { synthesizeSpeech } from "./lib/aliyun-speech";
 
 export const audioHttp = new Hono();
+
+audioHttp.get("/speech", async (c) => {
+  const text = (c.req.query("text") ?? "").trim();
+  const locale = (c.req.query("locale") ?? "en-US").trim();
+  if (!text || text.length > 300 || !/^en-(US|GB)$/i.test(locale)) {
+    return c.json({ error: "Invalid speech request" }, 400);
+  }
+  const audio = await synthesizeSpeech(text);
+  if (!audio) return c.json({ error: "Aliyun Speech is unavailable" }, 503);
+
+  c.header("Content-Type", "audio/mpeg");
+  c.header("Content-Length", String(audio.byteLength));
+  c.header("Cache-Control", "public, max-age=2592000, immutable");
+  const body = audio.buffer.slice(
+    audio.byteOffset,
+    audio.byteOffset + audio.byteLength,
+  ) as ArrayBuffer;
+  return c.body(body);
+});
 
 audioHttp.get("/:wordId", async (c) => {
   const wordId = Number(c.req.param("wordId"));

@@ -68,13 +68,15 @@ export function preloadAudio(wordIds: number[]) {
 }
 
 /** Play base64 — all sync operations */
-function playAudioUrl(audioUrl: string) {
+function playAudioUrl(audioUrl: string, fallbackWord: string, fallbackLanguage = "en-US") {
   try {
     const a = getAudio();
     a.pause();
     a.src = audioUrl;
     a.currentTime = 0;
-    a.play().catch(() => {});
+    a.play().catch(() => {
+      speakWeb(fallbackWord, fallbackLanguage);
+    });
   } catch { /* ignore */ }
 }
 
@@ -102,17 +104,6 @@ function speakWeb(word: string, language = "en-US") {
 }
 
 /** Youdao — last resort */
-function speakYoudao(word: string, pronunciationType = 2) {
-  if (!navigator.onLine) return;
-  try {
-    const a = getAudio();
-    a.pause();
-    a.src = `https://dict.youdao.com/dictvoice?audio=${encodeURIComponent(word)}&type=${pronunciationType}`;
-    a.currentTime = 0;
-    a.play().catch(() => {});
-  } catch { /* ignore */ }
-}
-
 /** Unlock audio. MUST be called inside a touchstart handler (before click). */
 export function unlockAudio() {
   try { getAudio().play().catch(() => {}); } catch { /* ignore */ }
@@ -127,30 +118,26 @@ export function unlockAudio() {
 export function speakWord(word: string, wordId?: number) {
   if (!word) return;
 
-  // Path 1: cached local audio
+  // Prefer the preloaded server-side speech URL for catalog words.
   if (wordId) {
     const cached = audioCache.get(wordId);
-    if (cached) { playAudioUrl(cached); return; }
-    if (cached === null) {
-      // Explicitly cached as "no audio" -> Web Speech
-      if (speakWeb(word)) return;
-    }
-    // "undefined" = not yet fetched -> Web Speech + trigger load
-    if (speakWeb(word)) {
-      // Lazy load for next time
-      preloadAudio([wordId]);
-      return;
-    }
+    if (cached) { playAudioUrl(cached, word); return; }
+    preloadAudio([wordId]);
   }
 
-  // Path 2/3: Web Speech -> Youdao
-  if (speakWeb(word)) return;
-  speakYoudao(word);
+  // Words outside the catalog use Aliyun directly. Web Speech is the failure fallback.
+  playAudioUrl(
+    `/media/audio/speech?text=${encodeURIComponent(word)}&locale=en-US`,
+    word,
+  );
 }
 
 /** Speak a British-English example word for the phonics/IPA section. */
 export function speakBritishWord(word: string) {
   if (!word) return;
-  if (speakWeb(word, "en-GB")) return;
-  speakYoudao(word, 1);
+  playAudioUrl(
+    `/media/audio/speech?text=${encodeURIComponent(word)}&locale=en-GB`,
+    word,
+    "en-GB",
+  );
 }

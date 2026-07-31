@@ -9,6 +9,7 @@ import { z } from "zod";
 import { createRouter, publicQuery } from "./middleware";
 import { env } from "./lib/env";
 import crypto from "crypto";
+import { splitSyllables } from "../src/utils/phonics";
 
 // ============================================================
 // Youdao Translation API (V3 sign) - for Chinese definitions
@@ -139,6 +140,7 @@ async function fetchYoudaoSuggest(word: string): Promise<{ definitions: string }
 async function fetchFreeDict(word: string): Promise<{
   phonetic: string;
   examples: string[];
+  simpleDefinition: string;
 } | null> {
   try {
     const res = await fetch(
@@ -170,15 +172,19 @@ async function fetchFreeDict(word: string): Promise<{
     phonetic = phonetic.replace(/ɹ/g, "r");
 
     const examples: string[] = [];
+    let simpleDefinition = "";
     for (const meaning of entry.meanings) {
       for (const def of meaning.definitions) {
+        if (!simpleDefinition && def.definition) {
+          simpleDefinition = def.definition;
+        }
         if (def.example && examples.length < 2) {
           examples.push(def.example);
         }
       }
     }
 
-    return { phonetic, examples };
+    return { phonetic, examples, simpleDefinition };
   } catch {
     return null;
   }
@@ -189,6 +195,46 @@ async function fetchFreeDict(word: string): Promise<{
 // ============================================================
 
 export const dictRouter = createRouter({
+  readingHint: publicQuery
+    .input(
+      z.object({
+        word: z.string().min(1).max(50),
+        context: z.string().max(600).optional(),
+      }),
+    )
+    .query(async ({ input }) => {
+      const word = input.word.toLowerCase().replace(/[^a-z'-]/g, "");
+      if (!word) {
+        throw new Error("Invalid reading word");
+      }
+      const [youdao, freeDict] = await Promise.all([
+        fetchYoudaoSuggest(word),
+        fetchFreeDict(word),
+      ]);
+      const contextSentence = input.context
+        ?.split(/(?<=[.!?])\s+/)
+        .find((sentence) =>
+          new RegExp(`\\b${word.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i")
+            .test(sentence),
+        );
+      const simpleDefinition = freeDict?.simpleDefinition
+        ? freeDict.simpleDefinition.split(/[.;]/)[0].trim()
+        : `A word used to talk about ${word}.`;
+
+      return {
+        word,
+        syllables: splitSyllables(word),
+        phonetic: freeDict?.phonetic || "",
+        simple_definition: simpleDefinition,
+        example_sentence:
+          contextSentence?.trim() ||
+          freeDict?.examples[0] ||
+          `I can use the word "${word}" in my story.`,
+        translation: youdao?.definitions || "",
+        image_keyword: word.replace(/'/g, ""),
+      };
+    }),
+
   lookup: publicQuery
     .input(z.object({ word: z.string().min(1) }))
     .mutation(async ({ input }) => {
