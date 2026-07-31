@@ -14,6 +14,7 @@ import {
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { trpc } from "@/providers/trpc";
 import { Button } from "@/components/ui/button";
+import { rawTrpcCall } from "@/utils/raw-trpc";
 
 type ReadingStage = "story" | "questions" | "complete";
 
@@ -54,38 +55,6 @@ type ReadingReward = {
   allCompleted: boolean;
 };
 
-async function callReadingApi<T>(
-  procedure:
-    | "getDailyReading"
-    | "submitReadingAnswer"
-    | "saveReadingProgress",
-  input?: Record<string, unknown>,
-): Promise<T> {
-  const isMutation = procedure !== "getDailyReading";
-  const envelope = JSON.stringify({ json: input ?? null });
-  const url = `/api/trpc/spelling.${procedure}${
-    isMutation ? "" : `?input=${encodeURIComponent(envelope)}`
-  }`;
-  const response = await fetch(url, {
-    method: isMutation ? "POST" : "GET",
-    credentials: "include",
-    headers: {
-      Accept: "application/json",
-      ...(isMutation ? { "Content-Type": "application/json" } : {}),
-    },
-    body: isMutation ? envelope : undefined,
-    signal: AbortSignal.timeout(20_000),
-  });
-  const payload = await response.json();
-  if (!response.ok || payload.error) {
-    const errorData = payload.error?.json ?? payload.error;
-    throw new Error(errorData?.message ?? `请求失败（${response.status}）`);
-  }
-  const data = payload.result?.data;
-  if (data == null) throw new Error("服务器没有返回阅读数据");
-  return (data.json ?? data) as T;
-}
-
 function splitStoryParagraphs(content: string) {
   const sentences = content.split(/(?<=[.!?])\s+/).filter(Boolean);
   const paragraphs: string[] = [];
@@ -99,7 +68,8 @@ export default function DailyReadingMode({ onBack }: { onBack: () => void }) {
   const utils = trpc.useUtils();
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ["daily-reading"],
-    queryFn: () => callReadingApi<DailyReadingData>("getDailyReading"),
+    queryFn: () =>
+      rawTrpcCall<DailyReadingData>("spelling.getDailyReading"),
     retry: 1,
   });
   const [activeStory, setActiveStory] = useState(0);
@@ -123,14 +93,22 @@ export default function DailyReadingMode({ onBack }: { onBack: () => void }) {
       storyIndex: number;
       stage: "story" | "questions";
       paragraphIndex: number;
-    }) => callReadingApi<{ success: boolean }>("saveReadingProgress", input),
+    }) =>
+      rawTrpcCall<{ success: boolean }>("spelling.saveReadingProgress", {
+        method: "POST",
+        input,
+      }),
   });
   const submitAnswer = useMutation({
     mutationFn: (input: {
       storyIndex: number;
       questionIndex: number;
       selectedIndex: number;
-    }) => callReadingApi<ReadingReward>("submitReadingAnswer", input),
+    }) =>
+      rawTrpcCall<ReadingReward>("spelling.submitReadingAnswer", {
+        method: "POST",
+        input,
+      }),
     onSuccess: () => utils.spelling.getStats.invalidate(),
   });
 

@@ -1,7 +1,9 @@
-import { trpc } from "@/providers/trpc";
 import { useCallback, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router";
 import { LOGIN_PATH } from "@/const";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { rawTrpcCall } from "@/utils/raw-trpc";
+import type { User } from "@db/schema";
 
 type UseAuthOptions = {
   redirectOnUnauthenticated?: boolean;
@@ -14,21 +16,26 @@ export function useAuth(options?: UseAuthOptions) {
 
   const navigate = useNavigate();
 
-  const utils = trpc.useUtils();
+  const queryClient = useQueryClient();
 
   const {
     data: user,
     isLoading,
     error,
     refetch,
-  } = trpc.auth.me.useQuery(undefined, {
+  } = useQuery({
+    queryKey: ["auth-me"],
+    queryFn: () =>
+      rawTrpcCall<Omit<User, "password">>("auth.me"),
     staleTime: 1000 * 60 * 5,
     retry: false,
   });
 
-  const logoutMutation = trpc.auth.logout.useMutation({
+  const logoutMutation = useMutation({
+    mutationFn: () =>
+      rawTrpcCall<{ success: boolean }>("auth.logout", { method: "POST" }),
     onSuccess: async () => {
-      await utils.invalidate();
+      await queryClient.invalidateQueries();
       navigate(redirectPath);
     },
   });

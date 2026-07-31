@@ -3,8 +3,9 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { trpc } from "@/providers/trpc";
 import { User, Lock, Loader2, Eye, EyeOff } from "lucide-react";
+import { useMutation } from "@tanstack/react-query";
+import { rawTrpcCall } from "@/utils/raw-trpc";
 
 type Mode = "login" | "register";
 
@@ -17,7 +18,12 @@ export default function Login() {
   const [showConfirm, setShowConfirm] = useState(false);
   const [error, setError] = useState("");
 
-  const loginMutation = trpc.auth.login.useMutation({
+  const loginMutation = useMutation({
+    mutationFn: (input: { name: string; password: string }) =>
+      rawTrpcCall<{ success: boolean; message: string }>("auth.login", {
+        method: "POST",
+        input,
+      }),
     onSuccess: (data) => {
       if (data.success) {
         window.location.href = "/";
@@ -30,7 +36,12 @@ export default function Login() {
     },
   });
 
-  const registerMutation = trpc.auth.register.useMutation({
+  const registerMutation = useMutation({
+    mutationFn: (input: { name: string; password: string }) =>
+      rawTrpcCall<{ success: boolean; message: string }>("auth.register", {
+        method: "POST",
+        input,
+      }),
     onSuccess: (data) => {
       if (data.success) {
         window.location.href = "/";
