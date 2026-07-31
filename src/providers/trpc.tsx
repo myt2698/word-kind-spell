@@ -8,11 +8,32 @@ import type { ReactNode } from "react";
 export const trpc = createTRPCReact<AppRouter>();
 
 const queryClient = new QueryClient();
+const tolerantSuperjson = {
+  serialize(value: unknown) {
+    return superjson.serialize(value);
+  },
+  deserialize(value: unknown) {
+    if (
+      value &&
+      typeof value === "object" &&
+      "json" in value
+    ) {
+      try {
+        return superjson.deserialize(
+          value as Parameters<typeof superjson.deserialize>[0],
+        );
+      } catch {
+        return (value as { json: unknown }).json;
+      }
+    }
+    return value;
+  },
+};
 const trpcClient = trpc.createClient({
   links: [
     httpBatchLink({
       url: "/api/trpc",
-      transformer: superjson,
+      transformer: tolerantSuperjson,
       fetch(input, init) {
         const timeoutSignal = AbortSignal.timeout(20_000);
         const signal = init?.signal
