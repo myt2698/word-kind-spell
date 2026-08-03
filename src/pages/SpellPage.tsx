@@ -586,7 +586,7 @@ function TodayWordsProvider({ children, allWords }: { children: React.ReactNode;
 // Types
 // ============================================================
 type SpellView = "home" | "study" | "reading" | "blocks" | "fillblank" | "flash" | "dictation";
-type PracticeSourceMode = "challenge" | "revenge";
+type PracticeSourceMode = "review" | "challenge" | "revenge";
 
 // ============================================================
 // Main Component
@@ -720,6 +720,14 @@ function SpellHome({
   const [dialogOpen, setDialogOpen] = useState(false);
   const [dialogType, setDialogType] = useState<string>("");
   const [selectDialogOpen, setSelectDialogOpen] = useState(false);
+  const sourceInitialized = useRef(false);
+
+  useEffect(() => {
+    if (!sourceInitialized.current && reviewQueue) {
+      sourceInitialized.current = true;
+      if (reviewQueue.length > 0) onPracticeSourceChange("review");
+    }
+  }, [onPracticeSourceChange, reviewQueue]);
 
   // Preload audio for all learning words
   useEffect(() => {
@@ -736,12 +744,16 @@ function SpellHome({
   const manualDue = reviewQueue?.filter((w) => w.source === "manual" && w.totalAttempts === 0) ?? [];
   const allDue = reviewQueue ?? [];
   const practiceWordCount =
-    practiceSource === "challenge"
+    practiceSource === "review"
+      ? allDue.length
+      : practiceSource === "challenge"
       ? selectedIds.length
       : errorWords?.length ?? 0;
   const canPractice = practiceWordCount > 0;
   const emptyPracticeText =
-    practiceSource === "challenge"
+    practiceSource === "review"
+      ? "今天的复习已经完成"
+      : practiceSource === "challenge"
       ? "请先选择今日练习单词"
       : "错题本里还没有需要复习的单词";
 
@@ -755,6 +767,8 @@ function SpellHome({
       onStart(mode);
     } else if (practiceSource === "challenge") {
       setSelectDialogOpen(true);
+    } else if (practiceSource === "review") {
+      openDialog("review");
     } else {
       openDialog("errors");
     }
@@ -827,7 +841,41 @@ function SpellHome({
           )}
         </div>
       </div>
-      <p className="text-sm text-gray-500 mb-6">先选择今日练习单词，再开始练习</p>
+      <p className="text-sm text-gray-500 mb-4">先复习到期单词，再学今日新词，最后巩固错词</p>
+
+      <div className="mb-5 grid grid-cols-4 gap-2" aria-label="今日学习流程">
+        {[
+          ["1", "待复习", allDue.length === 0],
+          ["2", "今日新词", selectedIds.length > 0],
+          ["3", "错词再练", (errorWords?.length ?? 0) === 0],
+          ["4", "完成结算", allDue.length === 0 && (errorWords?.length ?? 0) === 0],
+        ].map(([step, label, done]) => (
+          <div key={String(step)} className={`rounded-xl border px-2 py-2 text-center ${done ? "border-emerald-200 bg-emerald-50" : "border-gray-100 bg-white"}`}>
+            <div className={`mx-auto mb-1 flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-bold ${done ? "bg-emerald-500 text-white" : "bg-indigo-100 text-indigo-600"}`}>
+              {done ? "✓" : step}
+            </div>
+            <p className="truncate text-[10px] text-gray-600">{label}</p>
+          </div>
+        ))}
+      </div>
+
+      <button
+        type="button"
+        onClick={() => {
+          onPracticeSourceChange("review");
+          if (allDue.length > 0) onStart("blocks");
+        }}
+        className={`mb-6 flex w-full items-center gap-4 rounded-2xl border p-4 text-left shadow-sm transition-all ${allDue.length > 0 ? "border-amber-200 bg-gradient-to-r from-amber-50 to-orange-50 hover:shadow-md" : "border-emerald-200 bg-emerald-50"}`}
+      >
+        <div className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-xl ${allDue.length > 0 ? "bg-amber-100" : "bg-emerald-100"}`}>
+          {allDue.length > 0 ? <Clock className="h-6 w-6 text-amber-600" /> : <CheckCircle2 className="h-6 w-6 text-emerald-600" />}
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="font-bold text-gray-900">{allDue.length > 0 ? `先完成今日复习（${allDue.length} 个）` : "今日复习已完成"}</p>
+          <p className="mt-0.5 text-xs text-gray-500">{allDue.length > 0 ? "按到期时间优先，每天最多安排 10 个" : "可以开始学习今天的新单词啦"}</p>
+        </div>
+        {allDue.length > 0 && <ChevronRight className="h-5 w-5 text-amber-500" />}
+      </button>
 
       {/* Stats Cards - Clickable to open dialog */}
       <div className="grid grid-cols-4 gap-3 mb-6">
@@ -1041,7 +1089,22 @@ function SpellHome({
         <h2 className="text-sm font-semibold text-gray-700">选择练习模式</h2>
         <span className="text-xs text-gray-400">{practiceWordCount} 个单词</span>
       </div>
-      <div className="grid grid-cols-2 gap-2 mb-4">
+      <div className="grid grid-cols-3 gap-2 mb-4">
+        <button
+          type="button"
+          onClick={() => onPracticeSourceChange("review")}
+          className={`rounded-xl border p-3 text-left transition-all ${
+            practiceSource === "review"
+              ? "border-amber-300 bg-amber-50 shadow-sm"
+              : "border-gray-100 bg-white hover:border-amber-200"
+          }`}
+        >
+          <div className="mb-1 flex items-center gap-2">
+            <Clock className="h-4 w-4 text-amber-500" />
+            <span className="text-sm font-bold text-gray-900">今日复习</span>
+          </div>
+          <p className="text-[11px] leading-relaxed text-gray-500">{allDue.length} 个到期单词</p>
+        </button>
         <button
           type="button"
           onClick={() => onPracticeSourceChange("challenge")}
@@ -1618,9 +1681,21 @@ function DictationWrapper({
     trpc.spelling.getErrorWords.useQuery(undefined, {
       enabled: source === "revenge",
     });
-  const words = source === "revenge" ? errorWords ?? [] : todayWords;
+  const { data: reviewWords, isLoading: reviewLoading } =
+    trpc.spelling.getReviewQueue.useQuery(undefined, {
+      enabled: source === "review",
+    });
+  const words = source === "review"
+    ? reviewWords ?? []
+    : source === "revenge"
+      ? errorWords ?? []
+      : todayWords;
   const isEmpty =
-    source === "revenge" ? !errorsLoading && words.length === 0 : selectedIds.length === 0;
+    source === "review"
+      ? !reviewLoading && words.length === 0
+      : source === "revenge"
+        ? !errorsLoading && words.length === 0
+        : selectedIds.length === 0;
 
   if (isEmpty) {
     return (
@@ -1628,10 +1703,12 @@ function DictationWrapper({
         <div className="text-center">
           <ListChecks className="w-12 h-12 text-gray-300 mx-auto mb-4" />
           <p className="text-gray-500 mb-1">
-            {source === "revenge" ? "错题本里还没有单词" : "还没有选择今日练习单词"}
+            {source === "review" ? "今天的复习已经完成" : source === "revenge" ? "错题本里还没有单词" : "还没有选择今日练习单词"}
           </p>
           <p className="text-xs text-gray-400 mb-4">
-            {source === "revenge"
+            {source === "review"
+              ? "可以继续学习今天的新单词"
+              : source === "revenge"
               ? "出现错题后，就可以回来发起复仇之战"
               : "请先返回首页选择要练习的单词"}
           </p>
@@ -1644,7 +1721,7 @@ function DictationWrapper({
     );
   }
 
-  if (errorsLoading) {
+  if (errorsLoading || reviewLoading) {
     return (
       <main className="min-h-screen flex items-center justify-center">
         <Loader2 className="w-8 h-8 animate-spin text-rose-500" />
@@ -1672,9 +1749,21 @@ function PracticeModeWrapper({
     trpc.spelling.getErrorWords.useQuery(undefined, {
       enabled: source === "revenge",
     });
-  const words = source === "revenge" ? errorWords ?? [] : todayWords;
+  const { data: reviewWords, isLoading: reviewLoading } =
+    trpc.spelling.getReviewQueue.useQuery(undefined, {
+      enabled: source === "review",
+    });
+  const words = source === "review"
+    ? reviewWords ?? []
+    : source === "revenge"
+      ? errorWords ?? []
+      : todayWords;
   const isEmpty =
-    source === "revenge" ? !errorsLoading && words.length === 0 : selectedIds.length === 0;
+    source === "review"
+      ? !reviewLoading && words.length === 0
+      : source === "revenge"
+        ? !errorsLoading && words.length === 0
+        : selectedIds.length === 0;
 
   if (isEmpty) {
     return (
@@ -1682,10 +1771,12 @@ function PracticeModeWrapper({
         <div className="text-center">
           <ListChecks className="w-12 h-12 text-gray-300 mx-auto mb-4" />
           <p className="text-gray-500 mb-1">
-            {source === "revenge" ? "错题本里还没有单词" : "还没有选择今日练习单词"}
+            {source === "review" ? "今天的复习已经完成" : source === "revenge" ? "错题本里还没有单词" : "还没有选择今日练习单词"}
           </p>
           <p className="text-xs text-gray-400 mb-4">
-            {source === "revenge"
+            {source === "review"
+              ? "可以继续学习今天的新单词"
+              : source === "revenge"
               ? "出现错题后，就可以回来发起复仇之战"
               : "请先返回首页选择要练习的单词"}
           </p>
@@ -1701,7 +1792,7 @@ function PracticeModeWrapper({
     );
   }
 
-  if (errorsLoading || words.length === 0) {
+  if (errorsLoading || reviewLoading || words.length === 0) {
     return (
       <main className="max-w-lg mx-auto px-4 py-6 pb-24 min-h-screen flex flex-col items-center justify-center">
         <div className="text-center">

@@ -35,6 +35,7 @@ import androidx.compose.material.icons.filled.EmojiEvents
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.School
 import androidx.compose.material.icons.filled.Whatshot
+import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -101,6 +102,7 @@ private enum class StatDialogType {
 }
 
 private enum class PracticeSourceMode {
+    Review,
     Challenge,
     Revenge,
 }
@@ -158,6 +160,9 @@ internal fun PracticeScreen(
             stats = result.stats
             val activeIds = result.learning.mapTo(mutableSetOf()) { it.id }
             selectedIds = result.selectedIds.intersect(activeIds)
+            if (result.review.isNotEmpty() && practiceSource == PracticeSourceMode.Challenge) {
+                practiceSource = PracticeSourceMode.Review
+            }
         } catch (error: Exception) {
             error.rethrowIfCancellation()
             onMessage(error.message ?: "拼写数据加载失败")
@@ -183,6 +188,7 @@ internal fun PracticeScreen(
         learningWords.filter { it.id in selectedIds }
     }
     val practiceWords = when (practiceSource) {
+        PracticeSourceMode.Review -> reviewWords
         PracticeSourceMode.Challenge -> selectedWords
         PracticeSourceMode.Revenge -> errorWords
     }
@@ -192,6 +198,8 @@ internal fun PracticeScreen(
             view = mode
         } else if (practiceSource == PracticeSourceMode.Challenge) {
             selectionOpen = true
+        } else if (practiceSource == PracticeSourceMode.Review) {
+            statDialog = StatDialogType.Review
         } else {
             statDialog = StatDialogType.Errors
         }
@@ -385,11 +393,13 @@ private fun PracticeHome(
     onStat: (StatDialogType) -> Unit,
 ) {
     val practiceWordCount = when (practiceSource) {
+        PracticeSourceMode.Review -> reviewWords.size
         PracticeSourceMode.Challenge -> selectedWords.size
         PracticeSourceMode.Revenge -> errorWords.size
     }
     val hasPracticeWords = practiceWordCount > 0
     val emptyPracticeText = when (practiceSource) {
+        PracticeSourceMode.Review -> "今天的复习已经完成"
         PracticeSourceMode.Challenge -> "请先选择今日练习单词"
         PracticeSourceMode.Revenge -> "错题本里还没有需要复习的单词"
     }
@@ -447,7 +457,7 @@ private fun PracticeHome(
             }
         }
         Spacer(Modifier.height(3.dp))
-        Text("先选择今日练习单词，再开始练习", color = PracticeMuted, fontSize = 13.sp)
+        Text("先复习到期单词，再学今日新词，最后巩固错词", color = PracticeMuted, fontSize = 13.sp)
         Spacer(Modifier.height(18.dp))
 
         if (loading) {
@@ -496,6 +506,50 @@ private fun PracticeHome(
                 onClick = { onStat(StatDialogType.Errors) },
                 modifier = Modifier.weight(1f),
             )
+        }
+        Spacer(Modifier.height(18.dp))
+
+        Card(
+            onClick = {
+                onPracticeSourceChange(PracticeSourceMode.Review)
+                if (reviewWords.isNotEmpty()) onMode(PracticeView.Blocks)
+            },
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(16.dp),
+            colors = CardDefaults.cardColors(
+                containerColor = if (reviewWords.isEmpty()) Color(0xFFECFDF5) else Color(0xFFFFFBEB),
+            ),
+            border = androidx.compose.foundation.BorderStroke(
+                1.dp,
+                if (reviewWords.isEmpty()) Color(0xFFA7F3D0) else Color(0xFFFDE68A),
+            ),
+        ) {
+            Row(
+                modifier = Modifier.padding(16.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(
+                    if (reviewWords.isEmpty()) Icons.Default.CheckBox else Icons.Default.Schedule,
+                    contentDescription = null,
+                    tint = if (reviewWords.isEmpty()) PracticeSuccess else PracticeAmber,
+                    modifier = Modifier.size(28.dp),
+                )
+                Spacer(Modifier.width(12.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        if (reviewWords.isEmpty()) "今日复习已完成" else "先完成今日复习（${reviewWords.size} 个）",
+                        fontWeight = FontWeight.Bold,
+                    )
+                    Text(
+                        if (reviewWords.isEmpty()) "可以开始学习今天的新单词啦" else "按到期时间优先，每天最多安排 10 个",
+                        color = PracticeMuted,
+                        fontSize = 12.sp,
+                    )
+                }
+                if (reviewWords.isNotEmpty()) {
+                    Icon(Icons.Default.ChevronRight, contentDescription = null, tint = PracticeAmber)
+                }
+            }
         }
         Spacer(Modifier.height(18.dp))
 
@@ -670,6 +724,17 @@ private fun PracticeHome(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
+            PracticeSourceCard(
+                title = "今日复习",
+                description = "${reviewWords.size} 个到期单词",
+                count = reviewWords.size,
+                icon = Icons.Default.Schedule,
+                color = PracticeAmber,
+                background = Color(0xFFFFFBEB),
+                selected = practiceSource == PracticeSourceMode.Review,
+                onClick = { onPracticeSourceChange(PracticeSourceMode.Review) },
+                modifier = Modifier.weight(1f),
+            )
             PracticeSourceCard(
                 title = "闯关模式",
                 description = "准备好接受今天的挑战了吗？",

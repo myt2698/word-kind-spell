@@ -72,7 +72,6 @@ export function calculateErrorBookStreak(
   for (const action of recentActions) {
     if (action !== "test_pass") break;
     streak++;
-    if (streak >= ERROR_BOOK_CLEAR_STREAK) break;
   }
   return streak;
 }

@@ -35,17 +35,20 @@ import {
 } from "./spelling-progress";
 import { generateDailyReading } from "./reading-generator";
 
-// Review intervals in minutes for each level
-const REVIEW_INTERVALS: Record<number, number[]> = {
-  1: [5, 30, 12 * 60, 24 * 60],
-  2: [24 * 60, 2 * 24 * 60, 4 * 24 * 60, 7 * 24 * 60],
-  3: [7 * 24 * 60, 15 * 24 * 60, 30 * 24 * 60],
-};
+const CORRECT_REVIEW_INTERVAL_DAYS = [1, 3, 7, 14, 30] as const;
 
-function calculateNextReview(level: number, streak: number): Date {
-  const intervals = REVIEW_INTERVALS[level] || REVIEW_INTERVALS[1];
-  const idx = Math.min(streak, intervals.length - 1);
-  return new Date(Date.now() + intervals[idx] * 60 * 1000);
+function calculateNextReview(isCorrect: boolean, consecutiveCorrect: number): Date {
+  if (!isCorrect) {
+    // A wrong word returns later in the same session/day for short-term recall.
+    return new Date(Date.now() + 10 * 60 * 1000);
+  }
+  const index = Math.min(
+    Math.max(consecutiveCorrect, 1) - 1,
+    CORRECT_REVIEW_INTERVAL_DAYS.length - 1,
+  );
+  return new Date(
+    Date.now() + CORRECT_REVIEW_INTERVAL_DAYS[index] * 24 * 60 * 60 * 1000,
+  );
 }
 
 export const spellingRouter = createRouter({
@@ -358,7 +361,8 @@ export const spellingRouter = createRouter({
           eq(wordSpellings.learningStatus, "active"),
         ),
       )
-      .orderBy(wordSpellings.source, wordSpellings.level);
+      .orderBy(wordSpellings.nextReviewAt, desc(wordSpellings.errorCount))
+      .limit(10);
 
     if (dueRecords.length === 0) return [];
 
@@ -475,7 +479,6 @@ export const spellingRouter = createRouter({
         newStreak = 0;
       }
 
-      const nextReview = calculateNextReview(newLevel, newStreak);
       const recentAttempts = await db
         .select({ action: wordLogs.action })
         .from(wordLogs)
@@ -487,7 +490,7 @@ export const spellingRouter = createRouter({
           ),
         )
         .orderBy(desc(wordLogs.id))
-        .limit(ERROR_BOOK_CLEAR_STREAK - 1);
+        .limit(Math.max(ERROR_BOOK_CLEAR_STREAK - 1, 4));
       const errorCorrectStreak = calculateErrorBookStreak(
         input.isCorrect,
         recentAttempts.map(
@@ -498,6 +501,10 @@ export const spellingRouter = createRouter({
         record.errorCount > 0 &&
         input.isCorrect &&
         errorCorrectStreak >= ERROR_BOOK_CLEAR_STREAK;
+      const nextReview = calculateNextReview(
+        input.isCorrect,
+        errorCorrectStreak,
+      );
       const todayStart = new Date();
       todayStart.setHours(0, 0, 0, 0);
       const rewardedCorrectAttempts = input.isCorrect

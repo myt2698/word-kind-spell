@@ -23,6 +23,17 @@ describe("error-book recovery streak", () => {
     ).toBe(2);
   });
 
+  it("keeps counting beyond the error-book threshold for review scheduling", () => {
+    expect(
+      calculateErrorBookStreak(true, [
+        "test_pass",
+        "test_pass",
+        "test_pass",
+        "test_pass",
+      ]),
+    ).toBe(5);
+  });
+
   it("resets to zero whenever the current answer is wrong", () => {
     expect(
       calculateErrorBookStreak(false, ["test_pass", "test_pass"]),
