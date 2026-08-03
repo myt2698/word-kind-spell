@@ -3,6 +3,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useNavigate } from "react-router";
 import { trpc } from "@/providers/trpc";
 import AppHeader from "@/components/AppHeader";
+import TagDetailDialog from "@/components/TagDetailDialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -124,6 +125,7 @@ function TagManager() {
   const [tagForm, setTagForm] = useState({ name: "", description: "" });
   const [editingTagId, setEditingTagId] = useState<number | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [detailTagId, setDetailTagId] = useState<number | null>(null);
 
   const createTag = trpc.tag.create.useMutation({
     onSuccess: () => {
@@ -194,7 +196,16 @@ function TagManager() {
           sortTagsAlphabetically(allTags ?? []).map((tag) => (
             <div
               key={tag.id}
-              className="flex items-center gap-3 px-4 py-3 hover:bg-gray-50/50 transition-colors"
+              role="button"
+              tabIndex={0}
+              onClick={() => setDetailTagId(tag.id)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" || event.key === " ") {
+                  event.preventDefault();
+                  setDetailTagId(tag.id);
+                }
+              }}
+              className="flex items-center gap-3 px-4 py-3 hover:bg-gray-50/50 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-indigo-500"
             >
               <Tag className="w-4 h-4 text-emerald-500 shrink-0" />
               <div className="flex-1 min-w-0">
@@ -209,7 +220,10 @@ function TagManager() {
                   variant="ghost"
                   size="icon"
                   className="h-8 w-8 text-gray-400 hover:text-indigo-600"
-                  onClick={() => openEdit(tag)}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    openEdit(tag);
+                  }}
                 >
                   <Edit3 className="w-3.5 h-3.5" />
                 </Button>
@@ -217,7 +231,8 @@ function TagManager() {
                   variant="ghost"
                   size="icon"
                   className="h-8 w-8 text-gray-400 hover:text-red-500"
-                  onClick={() => {
+                  onClick={(event) => {
+                    event.stopPropagation();
                     if (confirm(`确定删除标签 "${tag.name}"？`)) {
                       deleteTag.mutate({ id: tag.id });
                     }
@@ -271,6 +286,17 @@ function TagManager() {
           </div>
         </DialogContent>
       </Dialog>
+
+      <TagDetailDialog
+        tagId={detailTagId}
+        open={detailTagId !== null}
+        onClose={() => setDetailTagId(null)}
+        onEdit={(tag) => {
+          setDetailTagId(null);
+          openEdit(tag);
+        }}
+        canEditWords
+      />
     </div>
   );
 }

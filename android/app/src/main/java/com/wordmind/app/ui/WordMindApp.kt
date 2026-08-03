@@ -619,6 +619,8 @@ private fun MainScreen(
                         api = api,
                         textbooks = textbooks,
                         tags = tags,
+                        words = words,
+                        speak = speak,
                         onChanged = onRefresh,
                         onMessage = onMessage,
                     )

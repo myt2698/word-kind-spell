@@ -1,5 +1,6 @@
 package com.wordmind.app.ui
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -49,6 +50,7 @@ import androidx.compose.ui.unit.sp
 import com.wordmind.app.data.Tag
 import com.wordmind.app.data.Textbook
 import com.wordmind.app.data.UnitGroup
+import com.wordmind.app.data.Word
 import com.wordmind.app.data.WordMindApi
 import kotlinx.coroutines.launch
 import java.util.Locale
@@ -76,6 +78,8 @@ internal fun AdminScreen(
     api: WordMindApi,
     textbooks: List<Textbook>,
     tags: List<Tag>,
+    words: List<Word>,
+    speak: (String) -> Unit,
     onChanged: () -> Unit,
     onMessage: (String) -> Unit,
 ) {
@@ -88,6 +92,7 @@ internal fun AdminScreen(
     var tagDialogOpen by remember { mutableStateOf(false) }
     var editingTag by remember { mutableStateOf<Tag?>(null) }
     var deleteTarget by remember { mutableStateOf<DeleteTarget?>(null) }
+    var detailTag by remember { mutableStateOf<Tag?>(null) }
     var deleting by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
 
@@ -188,6 +193,7 @@ internal fun AdminScreen(
                 ) { tag ->
                     AdminTagCard(
                         tag = tag,
+                        onClick = { detailTag = tag },
                         onEdit = {
                             editingTag = tag
                             tagDialogOpen = true
@@ -250,6 +256,17 @@ internal fun AdminScreen(
                 onChanged()
             },
             onMessage = onMessage,
+        )
+    }
+
+    detailTag?.let { selectedTag ->
+        NativeTagDetailDialog(
+            tag = selectedTag,
+            words = words
+                .filter { word -> word.tags.any { it.id == selectedTag.id } }
+                .sortedBy { it.word.lowercase(Locale.ROOT) },
+            speak = speak,
+            onDismiss = { detailTag = null },
         )
     }
 
@@ -373,9 +390,16 @@ private fun AdminTextbookCard(
 }
 
 @Composable
-private fun AdminTagCard(tag: Tag, onEdit: () -> Unit, onDelete: () -> Unit) {
+private fun AdminTagCard(
+    tag: Tag,
+    onClick: () -> Unit,
+    onEdit: () -> Unit,
+    onDelete: () -> Unit,
+) {
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick),
         shape = RoundedCornerShape(14.dp),
         colors = CardDefaults.cardColors(containerColor = Color.White),
         border = CardDefaults.outlinedCardBorder(),
