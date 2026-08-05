@@ -18,6 +18,7 @@
     "db:push": "drizzle-kit push",
     "db:seed": "tsx db/seed.ts",
     "db:sync-pep4b": "node scripts/sync-pep-grade4-volume2.mjs",
+    "db:sync-pep5a": "node scripts/sync-pep-grade5-volume1.mjs",
     "db:rebuild-catalog": "node scripts/rebuild-shared-catalog.mjs",
     "db:dedupe-catalog": "node scripts/deduplicate-shared-words.mjs"
   },
