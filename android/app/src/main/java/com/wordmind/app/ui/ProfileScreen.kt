@@ -9,12 +9,15 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -27,12 +30,8 @@ import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.EmojiEvents
 import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.Key
-import androidx.compose.material.icons.filled.PauseCircle
-import androidx.compose.material.icons.filled.Schedule
-import androidx.compose.material.icons.filled.School
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -45,6 +44,7 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -61,6 +61,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import com.wordmind.app.data.PracticeWord
 import com.wordmind.app.data.SpellingErrorEntry
 import com.wordmind.app.data.SpellingStats
 import com.wordmind.app.data.User
@@ -68,6 +70,9 @@ import com.wordmind.app.data.WordMindApi
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
+import java.text.SimpleDateFormat
+import java.util.Locale
+import java.util.TimeZone
 
 private val ProfileIndigo = Color(0xFF4F46E5)
 private val ProfileMuted = Color(0xFF64748B)
@@ -80,6 +85,22 @@ private enum class ProfileTab(val label: String, val icon: ImageVector) {
     Stats("统计", Icons.Default.BarChart),
     Errors("错题本", Icons.Default.ErrorOutline),
     Settings("设置", Icons.Default.Settings),
+}
+
+private enum class ProfileStatType {
+    Learning,
+    New,
+    Review,
+    Errors,
+}
+
+private fun PracticeWord.isDueForReview(nowMillis: Long): Boolean {
+    val reviewAt = nextReviewAt ?: return false
+    val parser = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US).apply {
+        timeZone = TimeZone.getTimeZone("UTC")
+    }
+    val reviewMillis = runCatching { parser.parse(reviewAt)?.time }.getOrNull() ?: return false
+    return reviewMillis <= nowMillis
 }
 
 @Composable
@@ -101,6 +122,14 @@ internal fun ProfileScreen(
     var changingPassword by remember { mutableStateOf(false) }
     var clearingRecords by remember { mutableStateOf(false) }
     var notice by remember { mutableStateOf<String?>(null) }
+    var selectedLevel by rememberSaveable { mutableStateOf<Int?>(null) }
+    var selectedStat by rememberSaveable { mutableStateOf<ProfileStatType?>(null) }
+    var learningWords by remember { mutableStateOf<List<PracticeWord>?>(null) }
+    var errorWords by remember { mutableStateOf<List<PracticeWord>?>(null) }
+    var levelWordsLoading by remember { mutableStateOf(false) }
+    var levelWordsError by remember { mutableStateOf<String?>(null) }
+    var statWordsLoading by remember { mutableStateOf(false) }
+    var statWordsError by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
 
     suspend fun loadProfile() {
@@ -126,6 +155,40 @@ internal fun ProfileScreen(
 
     LaunchedEffect(Unit) {
         loadProfile()
+    }
+
+    LaunchedEffect(selectedLevel, selectedStat) {
+        val needsLearningWords = selectedLevel != null || (
+            selectedStat != null && selectedStat != ProfileStatType.Errors
+        )
+        if (needsLearningWords && learningWords == null) {
+            levelWordsLoading = true
+            levelWordsError = null
+            try {
+                learningWords = api.getLearningQueue()
+            } catch (error: Exception) {
+                error.rethrowIfCancellation()
+                levelWordsError = error.message ?: "单词列表加载失败"
+            } finally {
+                levelWordsLoading = false
+            }
+        }
+    }
+
+    LaunchedEffect(selectedStat) {
+        val type = selectedStat ?: return@LaunchedEffect
+        if (type != ProfileStatType.Errors || errorWords != null) return@LaunchedEffect
+
+        statWordsLoading = true
+        statWordsError = null
+        try {
+            errorWords = api.getErrorWords()
+        } catch (error: Exception) {
+            error.rethrowIfCancellation()
+            statWordsError = error.message ?: "单词列表加载失败"
+        } finally {
+            statWordsLoading = false
+        }
     }
 
     Column(
@@ -175,6 +238,8 @@ internal fun ProfileScreen(
             ProfileTab.Stats -> ProfileStatsContent(
                 stats = stats,
                 loading = statsLoading,
+                onStatClick = { selectedStat = it },
+                onLevelClick = { selectedLevel = it },
             )
             ProfileTab.Errors -> ProfileErrorsContent(
                 errors = errors,
@@ -231,10 +296,63 @@ internal fun ProfileScreen(
             onCleared = {
                 clearingRecords = false
                 notice = it
+                learningWords = null
+                errorWords = null
                 onRefresh()
                 scope.launch { loadProfile() }
             },
             onDismiss = { clearingRecords = false },
+        )
+    }
+
+    selectedLevel?.let { level ->
+        val levelLabel = when (level) {
+            1 -> "陌生 (Lv.1)"
+            2 -> "熟悉 (Lv.2)"
+            else -> "掌握 (Lv.3)"
+        }
+        ProfileWordListDialog(
+            title = "$levelLabel 单词",
+            emptyText = "该等级暂无单词",
+            words = learningWords.orEmpty().filter { it.level == level },
+            loading = levelWordsLoading,
+            error = levelWordsError,
+            onDismiss = { selectedLevel = null },
+        )
+    }
+
+
+    selectedStat?.let { type ->
+        val words = when (type) {
+            ProfileStatType.Learning -> learningWords.orEmpty()
+            ProfileStatType.New -> learningWords.orEmpty().filter {
+                it.source == "manual" && it.totalAttempts == 0
+            }
+            ProfileStatType.Review -> {
+                val nowMillis = System.currentTimeMillis()
+                learningWords.orEmpty().filter { it.isDueForReview(nowMillis) }
+            }
+            ProfileStatType.Errors -> errorWords.orEmpty()
+        }
+        val title = when (type) {
+            ProfileStatType.Learning -> "学习中的单词"
+            ProfileStatType.New -> "新学单词"
+            ProfileStatType.Review -> "待复习队列"
+            ProfileStatType.Errors -> "错题本"
+        }
+        val emptyText = when (type) {
+            ProfileStatType.Learning -> "暂无学习中的单词"
+            ProfileStatType.New -> "暂无新学单词"
+            ProfileStatType.Review -> "暂无待复习单词"
+            ProfileStatType.Errors -> "暂无错题"
+        }
+        ProfileWordListDialog(
+            title = title,
+            emptyText = emptyText,
+            words = words,
+            loading = if (type == ProfileStatType.Errors) statWordsLoading else levelWordsLoading,
+            error = if (type == ProfileStatType.Errors) statWordsError else levelWordsError,
+            onDismiss = { selectedStat = null },
         )
     }
 }
@@ -359,6 +477,8 @@ private fun ProfileTabButton(
 private fun ProfileStatsContent(
     stats: SpellingStats?,
     loading: Boolean,
+    onStatClick: (ProfileStatType) -> Unit,
+    onLevelClick: (Int) -> Unit,
 ) {
     if (loading && stats == null) {
         Box(
@@ -372,84 +492,81 @@ private fun ProfileStatsContent(
         return
     }
 
-    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             ProfileStatCard(
-                icon = Icons.Default.School,
                 value = stats?.learningWords ?: 0,
                 label = "学习中",
                 color = ProfileSuccess,
+                onClick = { onStatClick(ProfileStatType.Learning) },
                 modifier = Modifier.weight(1f),
             )
             ProfileStatCard(
-                icon = Icons.Default.PauseCircle,
-                value = stats?.pausedWords ?: 0,
-                label = "已暂停",
-                color = ProfileAmber,
-                modifier = Modifier.weight(1f),
-            )
-        }
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-            ProfileStatCard(
-                icon = Icons.Default.Schedule,
                 value = stats?.manualDue ?: 0,
-                label = "新学待复习",
+                label = "新学单词",
                 color = ProfileIndigo,
+                onClick = { onStatClick(ProfileStatType.New) },
                 modifier = Modifier.weight(1f),
             )
             ProfileStatCard(
-                icon = Icons.Default.EmojiEvents,
+                value = stats?.dueForReview ?: 0,
+                label = "总待复习",
+                color = ProfileAmber,
+                onClick = { onStatClick(ProfileStatType.Review) },
+                modifier = Modifier.weight(1f),
+            )
+            ProfileStatCard(
                 value = stats?.totalErrors ?: 0,
-                label = "累计错题",
+                label = "错题",
                 color = Color(0xFFE11D48),
+                onClick = { onStatClick(ProfileStatType.Errors) },
                 modifier = Modifier.weight(1f),
             )
         }
-        Spacer(Modifier.height(2.dp))
-        ProfileLevelDistribution(stats)
+        ProfileLevelDistribution(stats, onLevelClick)
     }
 }
 
 @Composable
 private fun ProfileStatCard(
-    icon: ImageVector,
     value: Int,
     label: String,
     color: Color,
-    modifier: Modifier,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     Card(
-        modifier = modifier.height(112.dp),
+        onClick = onClick,
+        modifier = modifier.height(76.dp),
+        shape = RoundedCornerShape(14.dp),
         colors = CardDefaults.cardColors(containerColor = Color.White),
         border = BorderStroke(1.dp, ProfileBorder),
-        shape = RoundedCornerShape(14.dp),
     ) {
         Column(
             modifier = Modifier.fillMaxSize(),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center,
         ) {
-            Icon(icon, contentDescription = null, tint = color, modifier = Modifier.size(23.dp))
-            Spacer(Modifier.height(4.dp))
+            Text(value.toString(), color = color, fontSize = 19.sp, fontWeight = FontWeight.Bold)
             Text(
-                value.toString(),
-                color = Color(0xFF111827),
-                fontSize = 23.sp,
-                fontWeight = FontWeight.Bold,
+                label,
+                color = ProfileMuted,
+                fontSize = 10.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
             )
-            Text(label, color = ProfileMuted, fontSize = 11.sp)
         }
     }
 }
 
 @Composable
-private fun ProfileLevelDistribution(stats: SpellingStats?) {
+private fun ProfileLevelDistribution(
+    stats: SpellingStats?,
+    onLevelClick: (Int) -> Unit,
+) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = Color.White),
@@ -476,32 +593,173 @@ private fun ProfileLevelDistribution(stats: SpellingStats?) {
                 )
             } else {
                 val total = levels.sumOf { it.count }.coerceAtLeast(1)
-                levels.forEachIndexed { index, item ->
-                    val color = when (item.level) {
+                val counts = levels.associate { it.level to it.count }
+                (1..3).forEach { level ->
+                    val count = counts[level] ?: 0
+                    val color = when (level) {
                         1 -> Color(0xFFEF4444)
                         2 -> Color(0xFFF59E0B)
                         else -> Color(0xFF22C55E)
                     }
-                    val label = when (item.level) {
+                    val label = when (level) {
                         1 -> "陌生 (Lv.1)"
                         2 -> "熟悉 (Lv.2)"
                         else -> "掌握 (Lv.3)"
                     }
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onLevelClick(level) }
+                            .padding(vertical = 7.dp),
                     ) {
-                        Text(label, color = color, fontSize = 11.sp)
-                        Text("${item.count} 词", color = ProfileMuted, fontSize = 11.sp)
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(label, color = color, fontSize = 11.sp)
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text("$count 词", color = ProfileMuted, fontSize = 11.sp)
+                                Spacer(Modifier.width(2.dp))
+                                Icon(
+                                    Icons.Default.ChevronRight,
+                                    contentDescription = "查看$label 单词列表",
+                                    tint = ProfileMuted,
+                                    modifier = Modifier.size(16.dp),
+                                )
+                            }
+                        }
+                        Spacer(Modifier.height(6.dp))
+                        LinearProgressIndicator(
+                            progress = { count.toFloat() / total },
+                            modifier = Modifier.fillMaxWidth(),
+                            color = color,
+                            trackColor = Color(0xFFF1F5F9),
+                        )
                     }
-                    Spacer(Modifier.height(6.dp))
-                    LinearProgressIndicator(
-                        progress = { item.count.toFloat() / total },
-                        modifier = Modifier.fillMaxWidth(),
-                        color = color,
-                        trackColor = Color(0xFFF1F5F9),
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ProfileWordListDialog(
+    title: String,
+    emptyText: String,
+    words: List<PracticeWord>,
+    loading: Boolean,
+    error: String?,
+    onDismiss: () -> Unit,
+) {
+    Dialog(onDismissRequest = onDismiss) {
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .fillMaxHeight(0.75f),
+            shape = RoundedCornerShape(20.dp),
+            colors = CardDefaults.cardColors(containerColor = Color.White),
+        ) {
+            Column(Modifier.fillMaxSize()) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 18.dp, vertical = 16.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        title,
+                        modifier = Modifier.weight(1f),
+                        color = Color(0xFF111827),
+                        fontSize = 17.sp,
+                        fontWeight = FontWeight.SemiBold,
                     )
-                    if (index != levels.lastIndex) Spacer(Modifier.height(13.dp))
+                    if (!loading) {
+                        Text("${words.size} 个", color = ProfileMuted, fontSize = 11.sp)
+                    }
+                }
+                HorizontalDivider(color = ProfileBorder)
+
+                when {
+                    loading -> Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxWidth(),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        CircularProgressIndicator(color = ProfileIndigo)
+                    }
+                    error != null -> Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxWidth()
+                            .padding(24.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(error, color = ProfileDanger, fontSize = 13.sp)
+                    }
+                    words.isEmpty() -> Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxWidth(),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(emptyText, color = ProfileMuted, fontSize = 13.sp)
+                    }
+                    else -> LazyColumn(
+                        modifier = Modifier.weight(1f),
+                        contentPadding = PaddingValues(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(7.dp),
+                    ) {
+                        items(words, key = { it.id }) { word ->
+                            Surface(
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(12.dp),
+                                color = Color(0xFFF8FAFC),
+                                border = BorderStroke(1.dp, ProfileBorder),
+                            ) {
+                                Column(Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                    ) {
+                                        Text(
+                                            word.word,
+                                            modifier = Modifier.weight(1f),
+                                            color = Color(0xFF111827),
+                                            fontSize = 14.sp,
+                                            fontWeight = FontWeight.Medium,
+                                        )
+                                        word.phonetic?.let { phonetic ->
+                                            Text(
+                                                phonetic,
+                                                color = ProfileMuted,
+                                                fontSize = 10.sp,
+                                            )
+                                        }
+                                    }
+                                    if (word.definition.isNotBlank()) {
+                                        Spacer(Modifier.height(3.dp))
+                                        Text(
+                                            word.definition,
+                                            color = ProfileMuted,
+                                            fontSize = 11.sp,
+                                            maxLines = 2,
+                                            overflow = TextOverflow.Ellipsis,
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                HorizontalDivider(color = ProfileBorder)
+                TextButton(
+                    onClick = onDismiss,
+                    modifier = Modifier
+                        .align(Alignment.End)
+                        .padding(horizontal = 10.dp, vertical = 4.dp),
+                ) {
+                    Text("关闭")
                 }
             }
         }

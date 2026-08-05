@@ -275,7 +275,6 @@ internal fun PracticeScreen(
             onPracticeSourceChange = { practiceSource = it },
             onSelectWords = { selectionOpen = true },
             onMode = ::openMode,
-            onStat = { statDialog = it },
         )
         PracticeView.Study -> TodayStudyMode(
             words = selectedWords,
@@ -390,7 +389,6 @@ private fun PracticeHome(
     onPracticeSourceChange: (PracticeSourceMode) -> Unit,
     onSelectWords: () -> Unit,
     onMode: (PracticeView) -> Unit,
-    onStat: (StatDialogType) -> Unit,
 ) {
     val practiceWordCount = when (practiceSource) {
         PracticeSourceMode.Review -> reviewWords.size
@@ -471,43 +469,6 @@ private fun PracticeHome(
             }
             return
         }
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            PracticeStatCard(
-                value = stats?.learningWords ?: learningWords.size,
-                label = "学习中",
-                color = PracticeSuccess,
-                onClick = { onStat(StatDialogType.Learning) },
-                modifier = Modifier.weight(1f),
-            )
-            PracticeStatCard(
-                value = stats?.manualDue ?: reviewWords.count {
-                    it.source == "manual" && it.totalAttempts == 0
-                },
-                label = "新学单词",
-                color = PracticeIndigo,
-                onClick = { onStat(StatDialogType.New) },
-                modifier = Modifier.weight(1f),
-            )
-            PracticeStatCard(
-                value = stats?.dueForReview ?: reviewWords.size,
-                label = "总待复习",
-                color = PracticeAmber,
-                onClick = { onStat(StatDialogType.Review) },
-                modifier = Modifier.weight(1f),
-            )
-            PracticeStatCard(
-                value = stats?.totalErrors ?: errorWords.size,
-                label = "错题",
-                color = Color(0xFFE11D48),
-                onClick = { onStat(StatDialogType.Errors) },
-                modifier = Modifier.weight(1f),
-            )
-        }
-        Spacer(Modifier.height(18.dp))
 
         Card(
             onClick = {
@@ -870,38 +831,6 @@ private fun PracticeSourceCard(
                 fontSize = 10.sp,
                 lineHeight = 14.sp,
                 maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-            )
-        }
-    }
-}
-
-@Composable
-private fun PracticeStatCard(
-    value: Int,
-    label: String,
-    color: Color,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    Card(
-        onClick = onClick,
-        modifier = modifier.height(76.dp),
-        shape = RoundedCornerShape(14.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.White),
-        border = CardDefaults.outlinedCardBorder(),
-    ) {
-        Column(
-            modifier = Modifier.fillMaxSize(),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center,
-        ) {
-            Text("$value", color = color, fontSize = 19.sp, fontWeight = FontWeight.Bold)
-            Text(
-                label,
-                color = PracticeMuted,
-                fontSize = 10.sp,
-                maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
         }

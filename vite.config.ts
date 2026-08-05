@@ -6,6 +6,8 @@ import { defineConfig } from "vite"
 import { inspectAttr } from 'kimi-plugin-inspect-react'
 import { VitePWA } from 'vite-plugin-pwa'
 
+const previewApiTarget = process.env.PREVIEW_API_TARGET
+
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [
@@ -53,6 +55,20 @@ export default defineConfig({
   server: {
     port: 3000,
   },
+  preview: previewApiTarget ? {
+    proxy: {
+      '/api': {
+        target: previewApiTarget,
+        changeOrigin: true,
+        secure: false,
+      },
+      '/media/audio': {
+        target: previewApiTarget,
+        changeOrigin: true,
+        secure: false,
+      },
+    },
+  } : undefined,
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),

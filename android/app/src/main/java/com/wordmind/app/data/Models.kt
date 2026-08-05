@@ -84,6 +84,7 @@ data class PracticeWord(
     val totalAttempts: Int,
     val totalCorrect: Int,
     val source: String,
+    val nextReviewAt: String?,
     val tags: List<Tag>,
     val phonics: StudyPhonicsAnalysis,
 )
@@ -430,6 +431,7 @@ internal fun JSONArray.toPracticeWords(): List<PracticeWord> = buildList {
                 totalAttempts = item.optInt("totalAttempts"),
                 totalCorrect = item.optInt("totalCorrect"),
                 source = item.optString("source", "auto"),
+                nextReviewAt = item.nullableString("nextReviewAt"),
                 tags = wordTags,
                 phonics = StudyPhonicsAnalysis(
                     syllables = syllables,

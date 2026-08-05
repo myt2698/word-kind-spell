@@ -843,22 +843,6 @@ function SpellHome({
       </div>
       <p className="text-sm text-gray-500 mb-4">先复习到期单词，再学今日新词，最后巩固错词</p>
 
-      <div className="mb-5 grid grid-cols-4 gap-2" aria-label="今日学习流程">
-        {[
-          ["1", "待复习", allDue.length === 0],
-          ["2", "今日新词", selectedIds.length > 0],
-          ["3", "错词再练", (errorWords?.length ?? 0) === 0],
-          ["4", "完成结算", allDue.length === 0 && (errorWords?.length ?? 0) === 0],
-        ].map(([step, label, done]) => (
-          <div key={String(step)} className={`rounded-xl border px-2 py-2 text-center ${done ? "border-emerald-200 bg-emerald-50" : "border-gray-100 bg-white"}`}>
-            <div className={`mx-auto mb-1 flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-bold ${done ? "bg-emerald-500 text-white" : "bg-indigo-100 text-indigo-600"}`}>
-              {done ? "✓" : step}
-            </div>
-            <p className="truncate text-[10px] text-gray-600">{label}</p>
-          </div>
-        ))}
-      </div>
-
       <button
         type="button"
         onClick={() => {
@@ -876,38 +860,6 @@ function SpellHome({
         </div>
         {allDue.length > 0 && <ChevronRight className="h-5 w-5 text-amber-500" />}
       </button>
-
-      {/* Stats Cards - Clickable to open dialog */}
-      <div className="grid grid-cols-4 gap-3 mb-6">
-        <button
-          onClick={() => openDialog("learning")}
-          className="bg-white rounded-xl border border-gray-100 p-3 text-center hover:border-emerald-200 hover:shadow-md transition-all"
-        >
-          <p className="text-2xl font-bold text-emerald-600">{stats?.learningWords ?? 0}</p>
-          <p className="text-xs text-gray-500">学习中</p>
-        </button>
-        <button
-          onClick={() => openDialog("new")}
-          className="bg-white rounded-xl border border-gray-100 p-3 text-center hover:border-indigo-200 hover:shadow-md transition-all"
-        >
-          <p className="text-2xl font-bold text-indigo-600">{stats?.manualDue ?? 0}</p>
-          <p className="text-xs text-gray-500">新学单词</p>
-        </button>
-        <button
-          onClick={() => openDialog("review")}
-          className="bg-white rounded-xl border border-gray-100 p-3 text-center hover:border-amber-200 hover:shadow-md transition-all"
-        >
-          <p className="text-2xl font-bold text-amber-600">{stats?.dueForReview ?? 0}</p>
-          <p className="text-xs text-gray-500">总待复习</p>
-        </button>
-        <button
-          onClick={() => openDialog("errors")}
-          className="bg-white rounded-xl border border-gray-100 p-3 text-center hover:border-rose-200 hover:shadow-md transition-all"
-        >
-          <p className="text-2xl font-bold text-rose-600">{stats?.totalErrors ?? 0}</p>
-          <p className="text-xs text-gray-500">错题</p>
-        </button>
-      </div>
 
       {/* Dialog for word lists */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>

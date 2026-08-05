@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Dialog,
   DialogContent,
@@ -33,10 +34,6 @@ import {
   XCircle,
   Loader2,
   BarChart3,
-  Clock,
-  Award,
-  GraduationCap,
-  Pause,
   Shield,
   Pencil,
   Trash2,
@@ -44,6 +41,25 @@ import {
 } from "lucide-react";
 
 type ProfileTab = "stats" | "errors" | "settings";
+type ProficiencyLevel = 1 | 2 | 3;
+type ProfileStatKind = "learning" | "new" | "review" | "errors";
+type ProfileWordSummary = {
+  id: number;
+  word: string;
+  phonetic?: string | null;
+  definition?: string | null;
+};
+
+const proficiencyLevels: Array<{
+  level: ProficiencyLevel;
+  label: string;
+  textClass: string;
+  barClass: string;
+}> = [
+  { level: 1, label: "陌生 (Lv.1)", textClass: "text-red-500", barClass: "bg-red-400" },
+  { level: 2, label: "熟悉 (Lv.2)", textClass: "text-amber-500", barClass: "bg-amber-400" },
+  { level: 3, label: "掌握 (Lv.3)", textClass: "text-green-500", barClass: "bg-green-400" },
+];
 
 export default function ProfilePage() {
   const { user, logout } = useAuth();
@@ -56,10 +72,71 @@ export default function ProfilePage() {
   const [nickname, setNickname] = useState("");
   const [settingsMessage, setSettingsMessage] = useState("");
   const [settingsError, setSettingsError] = useState("");
+  const [selectedLevel, setSelectedLevel] = useState<ProficiencyLevel | null>(null);
+  const [selectedStat, setSelectedStat] = useState<ProfileStatKind | null>(null);
 
   const { data: stats, isLoading: statsLoading } = trpc.spelling.getStats.useQuery();
   const { data: errors, isLoading: errorsLoading } = trpc.spelling.getErrorBook.useQuery();
+  const { data: learningQueue, isLoading: levelWordsLoading } =
+    trpc.spelling.getLearningQueue.useQuery(undefined, {
+      enabled: selectedLevel !== null || (
+        selectedStat !== null && selectedStat !== "errors"
+      ),
+    });
+  const { data: errorWords, isLoading: errorWordsLoading } =
+    trpc.spelling.getErrorWords.useQuery(undefined, {
+      enabled: selectedStat === "errors",
+    });
   const practicedWords = stats?.byLevel?.reduce((sum, item) => sum + Number(item.count), 0) ?? 0;
+  const selectedLevelWords = selectedLevel === null
+    ? []
+    : (learningQueue ?? []).filter((word) => word.level === selectedLevel);
+  const selectedLevelLabel = proficiencyLevels.find(
+    (item) => item.level === selectedLevel,
+  )?.label;
+  const statDialogData: {
+    title: string;
+    words: ProfileWordSummary[];
+    loading: boolean;
+    emptyText: string;
+  } = (() => {
+    switch (selectedStat) {
+      case "learning":
+        return {
+          title: "学习中的单词",
+          words: learningQueue ?? [],
+          loading: levelWordsLoading,
+          emptyText: "暂无学习中的单词",
+        };
+      case "new":
+        return {
+          title: "新学单词",
+          words: (learningQueue ?? []).filter(
+            (word) => word.source === "manual" && word.totalAttempts === 0,
+          ),
+          loading: levelWordsLoading,
+          emptyText: "暂无新学单词",
+        };
+      case "review":
+        return {
+          title: "待复习队列",
+          words: (learningQueue ?? []).filter(
+            (word) => new Date(word.nextReviewAt).getTime() <= Date.now(),
+          ),
+          loading: levelWordsLoading,
+          emptyText: "暂无待复习单词",
+        };
+      case "errors":
+        return {
+          title: "错题本",
+          words: errorWords ?? [],
+          loading: errorWordsLoading,
+          emptyText: "暂无错题",
+        };
+      default:
+        return { title: "", words: [], loading: false, emptyText: "" };
+    }
+  })();
 
   const updateName = trpc.auth.updateName.useMutation({
     onSuccess: async (data) => {
@@ -163,28 +240,39 @@ export default function ProfilePage() {
 
         {activeTab === "stats" && (
           <div className="space-y-4">
-            {/* Learning Stats */}
-            <div className="grid grid-cols-2 gap-3">
-              <div className="bg-white rounded-xl border border-gray-100 p-4 text-center">
-                <GraduationCap className="w-6 h-6 text-emerald-500 mx-auto mb-1" />
-                <p className="text-2xl font-bold text-gray-900">{stats?.learningWords ?? 0}</p>
+            <div className="grid grid-cols-4 gap-3">
+              <button
+                type="button"
+                onClick={() => setSelectedStat("learning")}
+                className="rounded-xl border border-gray-100 bg-white p-3 text-center transition-all hover:border-emerald-200 hover:shadow-md"
+              >
+                <p className="text-2xl font-bold text-emerald-600">{stats?.learningWords ?? 0}</p>
                 <p className="text-xs text-gray-500">学习中</p>
-              </div>
-              <div className="bg-white rounded-xl border border-gray-100 p-4 text-center">
-                <Pause className="w-6 h-6 text-amber-500 mx-auto mb-1" />
-                <p className="text-2xl font-bold text-gray-900">{stats?.pausedWords ?? 0}</p>
-                <p className="text-xs text-gray-500">已暂停</p>
-              </div>
-              <div className="bg-white rounded-xl border border-gray-100 p-4 text-center">
-                <Clock className="w-6 h-6 text-indigo-500 mx-auto mb-1" />
-                <p className="text-2xl font-bold text-gray-900">{stats?.manualDue ?? 0}</p>
-                <p className="text-xs text-gray-500">新学待复习</p>
-              </div>
-              <div className="bg-white rounded-xl border border-gray-100 p-4 text-center">
-                <Award className="w-6 h-6 text-rose-500 mx-auto mb-1" />
-                <p className="text-2xl font-bold text-gray-900">{stats?.totalErrors ?? 0}</p>
-                <p className="text-xs text-gray-500">累计错题</p>
-              </div>
+              </button>
+              <button
+                type="button"
+                onClick={() => setSelectedStat("new")}
+                className="rounded-xl border border-gray-100 bg-white p-3 text-center transition-all hover:border-indigo-200 hover:shadow-md"
+              >
+                <p className="text-2xl font-bold text-indigo-600">{stats?.manualDue ?? 0}</p>
+                <p className="text-xs text-gray-500">新学单词</p>
+              </button>
+              <button
+                type="button"
+                onClick={() => setSelectedStat("review")}
+                className="rounded-xl border border-gray-100 bg-white p-3 text-center transition-all hover:border-amber-200 hover:shadow-md"
+              >
+                <p className="text-2xl font-bold text-amber-600">{stats?.dueForReview ?? 0}</p>
+                <p className="text-xs text-gray-500">总待复习</p>
+              </button>
+              <button
+                type="button"
+                onClick={() => setSelectedStat("errors")}
+                className="rounded-xl border border-gray-100 bg-white p-3 text-center transition-all hover:border-rose-200 hover:shadow-md"
+              >
+                <p className="text-2xl font-bold text-rose-600">{stats?.totalErrors ?? 0}</p>
+                <p className="text-xs text-gray-500">错题</p>
+              </button>
             </div>
 
             {/* Level Distribution */}
@@ -196,24 +284,36 @@ export default function ProfilePage() {
                 <p className="text-sm text-gray-400 text-center py-4">暂无练习数据</p>
               ) : (
                 <div className="space-y-3">
-                  {stats.byLevel.map((b) => (
-                    <div key={b.level}>
-                      <div className="flex justify-between text-xs mb-1">
-                        <span className={b.level === 1 ? "text-red-500" : b.level === 2 ? "text-amber-500" : "text-green-500"}>
-                          {b.level === 1 ? "陌生 (Lv.1)" : b.level === 2 ? "熟悉 (Lv.2)" : "掌握 (Lv.3)"}
-                        </span>
-                        <span className="text-gray-500">{b.count} 词</span>
-                      </div>
-                      <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
-                        <div
-                          className={`h-full rounded-full ${
-                            b.level === 1 ? "bg-red-400" : b.level === 2 ? "bg-amber-400" : "bg-green-400"
-                          }`}
-                          style={{ width: `${Math.min((Number(b.count) / (practicedWords || 1)) * 100, 100)}%` }}
-                        />
-                      </div>
-                    </div>
-                  ))}
+                  {proficiencyLevels.map((item) => {
+                    const count = Number(
+                      stats.byLevel.find((entry) => entry.level === item.level)?.count ?? 0,
+                    );
+                    return (
+                      <button
+                        key={item.level}
+                        type="button"
+                        onClick={() => setSelectedLevel(item.level)}
+                        className="w-full rounded-lg p-2 text-left transition-colors hover:bg-gray-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400"
+                        aria-label={`查看${item.label}的单词列表，共${count}词`}
+                      >
+                        <div className="flex justify-between text-xs mb-1">
+                          <span className={item.textClass}>
+                            {item.label}
+                          </span>
+                          <span className="flex items-center gap-1 text-gray-500">
+                            {count} 词
+                            <ChevronRight className="h-3.5 w-3.5" />
+                          </span>
+                        </div>
+                        <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+                          <div
+                            className={`h-full rounded-full ${item.barClass}`}
+                            style={{ width: `${Math.min((count / (practicedWords || 1)) * 100, 100)}%` }}
+                          />
+                        </div>
+                      </button>
+                    );
+                  })}
                 </div>
               )}
             </div>
@@ -317,6 +417,110 @@ export default function ProfilePage() {
         )}
       </main>
       <MobileNav activeTab="profile" />
+
+      <Dialog
+        open={selectedLevel !== null}
+        onOpenChange={(open) => {
+          if (!open) setSelectedLevel(null);
+        }}
+      >
+        <DialogContent className="max-h-[75vh] max-w-md overflow-hidden p-0">
+          <DialogHeader className="border-b border-gray-100 p-5 pb-3">
+            <DialogTitle className="text-base font-semibold">
+              {selectedLevelLabel ?? "熟练度"}单词
+              {!levelWordsLoading && (
+                <span className="ml-2 text-xs font-normal text-gray-400">
+                  ({selectedLevelWords.length} 个)
+                </span>
+              )}
+            </DialogTitle>
+          </DialogHeader>
+
+          {levelWordsLoading ? (
+            <div className="flex justify-center py-10">
+              <Loader2 className="h-6 w-6 animate-spin text-indigo-500" />
+            </div>
+          ) : selectedLevelWords.length === 0 ? (
+            <p className="py-10 text-center text-sm text-gray-400">该等级暂无单词</p>
+          ) : (
+            <ScrollArea className="max-h-[55vh]">
+              <div className="space-y-2 p-3">
+                {selectedLevelWords.map((word) => (
+                  <div
+                    key={word.id}
+                    className="rounded-xl border border-gray-100 bg-gray-50 px-3 py-2.5"
+                  >
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="font-medium text-gray-900">{word.word}</span>
+                      {word.phonetic && (
+                        <span className="shrink-0 font-mono text-xs text-gray-400">
+                          {word.phonetic}
+                        </span>
+                      )}
+                    </div>
+                    {word.definition && (
+                      <p className="mt-1 text-xs text-gray-500">{word.definition}</p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </ScrollArea>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={selectedStat !== null}
+        onOpenChange={(open) => {
+          if (!open) setSelectedStat(null);
+        }}
+      >
+        <DialogContent className="max-h-[75vh] max-w-md overflow-hidden p-0">
+          <DialogHeader className="border-b border-gray-100 p-5 pb-3">
+            <DialogTitle className="text-base font-semibold">
+              {statDialogData.title}
+              {!statDialogData.loading && (
+                <span className="ml-2 text-xs font-normal text-gray-400">
+                  ({statDialogData.words.length} 个)
+                </span>
+              )}
+            </DialogTitle>
+          </DialogHeader>
+
+          {statDialogData.loading ? (
+            <div className="flex justify-center py-10">
+              <Loader2 className="h-6 w-6 animate-spin text-indigo-500" />
+            </div>
+          ) : statDialogData.words.length === 0 ? (
+            <p className="py-10 text-center text-sm text-gray-400">
+              {statDialogData.emptyText}
+            </p>
+          ) : (
+            <ScrollArea className="max-h-[55vh]">
+              <div className="space-y-2 p-3">
+                {statDialogData.words.map((word) => (
+                  <div
+                    key={word.id}
+                    className="rounded-xl border border-gray-100 bg-gray-50 px-3 py-2.5"
+                  >
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="font-medium text-gray-900">{word.word}</span>
+                      {word.phonetic && (
+                        <span className="shrink-0 font-mono text-xs text-gray-400">
+                          {word.phonetic}
+                        </span>
+                      )}
+                    </div>
+                    {word.definition && (
+                      <p className="mt-1 text-xs text-gray-500">{word.definition}</p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </ScrollArea>
+          )}
+        </DialogContent>
+      </Dialog>
 
       <Dialog
         open={showNicknameDialog}

@@ -11,6 +11,12 @@ import {
   textbookName,
   units,
 } from "./data/pep-grade5-volume1-data.mjs";
+import {
+  consolidateEntries,
+  mergeExamples,
+  mergeNotes,
+  normalizeWord,
+} from "./lib/textbook-sync-utils.mjs";
 
 const apply = process.argv.includes("--apply");
 const databaseUrl = process.env.DATABASE_URL;
@@ -20,17 +26,7 @@ const entries = units.flatMap((unit) =>
 );
 
 function normalize(value) {
-  return value.trim().toLocaleLowerCase("en-US");
-}
-
-function mergeExamples(incoming, existing) {
-  const merged = [];
-  for (const value of [incoming, existing]) {
-    for (const sentence of (value ?? "").split("\n").map((item) => item.trim())) {
-      if (sentence && !merged.includes(sentence)) merged.push(sentence);
-    }
-  }
-  return merged.slice(0, 3).join("\n");
+  return normalizeWord(value);
 }
 
 function notesFor(entry) {
@@ -87,7 +83,8 @@ function validateData() {
 
 validateData();
 
-const uniqueWordNames = [...new Set(entries.map((entry) => normalize(entry.word)))];
+const catalogEntries = consolidateEntries(entries);
+const uniqueWordNames = catalogEntries.map((entry) => normalize(entry.word));
 const localSummary = {
   mode: apply ? "apply" : databaseUrl ? "dry-run" : "local-validation",
   textbookName,
@@ -134,6 +131,16 @@ const existingWords = await query(
     WHERE userId = ? AND LOWER(TRIM(word)) IN (?)`,
   [catalogOwnerId, uniqueWordNames],
 );
+const existingTextbookWords = existingTextbook
+  ? await query(
+      `SELECT DISTINCT w.id, w.groupId, w.word, w.phonetic, w.definition, w.example, w.notes
+         FROM words w
+         JOIN word_group_links link ON link.wordId = w.id
+         JOIN word_groups g ON g.id = link.groupId
+        WHERE g.textbookId = ?`,
+      [existingTextbook.id],
+    )
+  : [];
 const existingTags = await query(
   "SELECT id, name, description FROM tags WHERE userId = ? AND name IN (?) ORDER BY id",
   [catalogOwnerId, Object.keys(tagDescriptions)],
@@ -160,13 +167,18 @@ if (!apply) {
   process.exit(0);
 }
 
-const existingWordIds = existingWords.map((word) => Number(word.id));
+const backupWords = [
+  ...new Map(
+    [...existingWords, ...existingTextbookWords].map((word) => [Number(word.id), word]),
+  ).values(),
+];
+const existingWordIds = backupWords.map((word) => Number(word.id));
 const backup = {
   createdAt: new Date().toISOString(),
   catalogOwnerId,
   textbook: existingTextbook ?? null,
   groups: existingGroups,
-  words: existingWords,
+  words: backupWords,
   links:
     existingWordIds.length > 0
       ? await query(
@@ -291,8 +303,8 @@ try {
     }
   }
 
-  for (const [index, entry] of entries.entries()) {
-    const groupId = groupIdByUnit.get(entry.unit);
+  for (const [index, entry] of catalogEntries.entries()) {
+    const groupId = groupIdByUnit.get(entry.units[0]);
     const [existing] = await query(
       `SELECT w.*, g.textbookId primaryTextbookId
          FROM words w
@@ -319,9 +331,13 @@ try {
         Number(existing.primaryTextbookId) === textbookId
           ? groupId
           : Number(existing.groupId);
+      const incomingNotes = notesFor(entry);
       const nextExample = outsideLink
-        ? mergeExamples(entry.example, existing.example)
+        ? mergeExamples(existing.example, entry.example)
         : entry.example;
+      const nextNotes = outsideLink
+        ? mergeNotes(existing.notes, incomingNotes)
+        : incomingNotes;
       await query(
         `UPDATE words
             SET groupId = ?, word = ?, phonetic = ?, definition = ?, example = ?,
@@ -329,11 +345,15 @@ try {
           WHERE id = ? AND userId = ?`,
         [
           primaryGroupId,
-          entry.word,
-          entry.phonetic,
-          entry.definition,
+          outsideLink ? existing.word : entry.word,
+          outsideLink && existing.phonetic?.trim()
+            ? existing.phonetic
+            : entry.phonetic,
+          outsideLink && existing.definition?.trim()
+            ? existing.definition
+            : entry.definition,
           nextExample,
-          notesFor(entry),
+          nextNotes,
           wordId,
           catalogOwnerId,
         ],
@@ -357,10 +377,12 @@ try {
       wordId = Number(result.insertId);
     }
 
-    await query(
-      "INSERT IGNORE INTO word_group_links (wordId, groupId) VALUES (?, ?)",
-      [wordId, groupId],
-    );
+    for (const unitName of entry.units) {
+      await query(
+        "INSERT IGNORE INTO word_group_links (wordId, groupId) VALUES (?, ?)",
+        [wordId, groupIdByUnit.get(unitName)],
+      );
+    }
     for (const tagName of entry.tags) {
       const tagId = tagIdByName.get(tagName);
       await query(
@@ -372,9 +394,13 @@ try {
       );
     }
 
-    if ((index + 1) % 20 === 0 || index === entries.length - 1) {
+    if ((index + 1) % 20 === 0 || index === catalogEntries.length - 1) {
       console.log(
-        JSON.stringify({ phase: "words", completed: index + 1, total: entries.length }),
+        JSON.stringify({
+          phase: "words",
+          completed: index + 1,
+          total: catalogEntries.length,
+        }),
       );
     }
   }
