@@ -65,12 +65,51 @@ function splitStoryParagraphs(content: string) {
   return paragraphs.length > 0 ? paragraphs : [content];
 }
 
+function ReadingStoryParagraphs({
+  storyIndex,
+  content,
+  onWordClick,
+}: {
+  storyIndex: number;
+  content: string;
+  onWordClick: (word: string, context: string) => void;
+}) {
+  return (
+    <div className="space-y-4">
+      {splitStoryParagraphs(content).map((paragraph, paragraphIndex) => (
+        <p
+          key={paragraphIndex}
+          data-reading-paragraph={`${storyIndex}-${paragraphIndex}`}
+          data-paragraph-index={paragraphIndex}
+          className="rounded-xl px-2 py-1 text-[17px] leading-8 text-sky-700"
+        >
+          {paragraph
+            .split(/([A-Za-z]+(?:['-][A-Za-z]+)*)/)
+            .map((part, partIndex) =>
+              /^[A-Za-z]+(?:['-][A-Za-z]+)*$/.test(part) ? (
+                <button
+                  key={partIndex}
+                  type="button"
+                  onClick={() => onWordClick(part, paragraph)}
+                  className="rounded px-0.5 font-medium text-sky-700 decoration-sky-300 decoration-dotted underline-offset-4 hover:bg-sky-50 hover:underline"
+                >
+                  {part}
+                </button>
+              ) : (
+                <span key={partIndex}>{part}</span>
+              ),
+            )}
+        </p>
+      ))}
+    </div>
+  );
+}
+
 export default function DailyReadingMode({ onBack }: { onBack: () => void }) {
   const utils = trpc.useUtils();
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ["daily-reading"],
-    queryFn: () =>
-      rawTrpcCall<DailyReadingData>("spelling.getDailyReading"),
+    queryFn: () => rawTrpcCall<DailyReadingData>("spelling.getDailyReading"),
     retry: 1,
   });
   const [activeStory, setActiveStory] = useState(0);
@@ -208,15 +247,14 @@ export default function DailyReadingMode({ onBack }: { onBack: () => void }) {
       Math.max(data.progress.paragraphIndex || 0, 0),
       Math.max(paragraphCount - 1, 0),
     );
-    const safeStage = data.progress.stage === "questions" ? "questions" : "story";
+    const safeStage =
+      data.progress.stage === "questions" ? "questions" : "story";
     setActiveStory(safeStory);
     setUnlockedStory(Math.min(Math.max(safeStory, 0), storyCount - 1));
     setStage(safeStage);
     setResumeParagraph(safeParagraph);
     latestParagraph.current = safeParagraph;
-    setShowResume(
-      safeStage === "story" && safeParagraph > 0,
-    );
+    setShowResume(safeStage === "story" && safeParagraph > 0);
   }, [data]);
 
   useEffect(() => {
@@ -240,9 +278,7 @@ export default function DailyReadingMode({ onBack }: { onBack: () => void }) {
             .filter((entry) => entry.isIntersecting)
             .sort(
               (a, b) =>
-                Number(
-                  a.target.getAttribute("data-paragraph-index") ?? 0,
-                ) -
+                Number(a.target.getAttribute("data-paragraph-index") ?? 0) -
                 Number(b.target.getAttribute("data-paragraph-index") ?? 0),
             );
           const last = visible.at(-1);
@@ -417,9 +453,7 @@ export default function DailyReadingMode({ onBack }: { onBack: () => void }) {
                 const complete = completedStories.includes(storyIndex);
                 const current =
                   stage !== "complete" && storyIndex === activeStory;
-                const unlocked =
-                  complete ||
-                  storyIndex <= unlockedStory;
+                const unlocked = complete || storyIndex <= unlockedStory;
                 return (
                   <button
                     key={story.title}
@@ -495,38 +529,14 @@ export default function DailyReadingMode({ onBack }: { onBack: () => void }) {
                     上次读到这里啦，点击继续 👉
                   </button>
                 )}
-                <div className="space-y-4">
-                  {splitStoryParagraphs(
-                    currentStory.content,
-                  ).map((paragraph, paragraphIndex) => (
-                    <p
-                      key={paragraphIndex}
-                      data-reading-paragraph={`${activeStory}-${paragraphIndex}`}
-                      data-paragraph-index={paragraphIndex}
-                      className="rounded-xl px-2 py-1 text-[17px] leading-8 text-sky-700"
-                    >
-                      {paragraph
-                        .split(/([A-Za-z]+(?:['-][A-Za-z]+)*)/)
-                        .map((part, partIndex) =>
-                          /^[A-Za-z]+(?:['-][A-Za-z]+)*$/.test(part) ? (
-                            <button
-                              key={partIndex}
-                              type="button"
-                              onClick={() => {
-                                setHintWord(part);
-                                setHintContext(paragraph);
-                              }}
-                              className="rounded px-0.5 font-medium text-sky-700 decoration-sky-300 decoration-dotted underline-offset-4 hover:bg-sky-50 hover:underline"
-                            >
-                              {part}
-                            </button>
-                          ) : (
-                            <span key={partIndex}>{part}</span>
-                          ),
-                        )}
-                    </p>
-                  ))}
-                </div>
+                <ReadingStoryParagraphs
+                  storyIndex={activeStory}
+                  content={currentStory.content}
+                  onWordClick={(word, context) => {
+                    setHintWord(word);
+                    setHintContext(context);
+                  }}
+                />
                 <p className="mt-3 text-[11px] text-gray-400">
                   带连字符的词为自然拼读音节拆分
                 </p>
@@ -540,34 +550,39 @@ export default function DailyReadingMode({ onBack }: { onBack: () => void }) {
               </div>
             </article>
           ) : (
-            <article className="animate-in fade-in overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm">
-              <header className="border-b border-violet-50 bg-violet-50/60 p-5">
-                <div className="text-xs font-semibold text-violet-600">
-                  第 {activeStory + 1} 关 · 阅读理解
+            <div className="animate-in fade-in space-y-5">
+              <article className="overflow-hidden rounded-2xl border border-sky-100 bg-white shadow-sm">
+                <header className="border-b border-sky-50 bg-sky-50/60 p-5">
+                  <div className="text-xs font-semibold text-sky-600">
+                    第 {activeStory + 1} 关 · 阅读原文
+                  </div>
+                  <h2 className="mt-1 text-lg font-bold text-gray-900">
+                    {currentStory.title}
+                  </h2>
+                </header>
+                <div className="p-5">
+                  <ReadingStoryParagraphs
+                    storyIndex={activeStory}
+                    content={currentStory.content}
+                    onWordClick={(word, context) => {
+                      setHintWord(word);
+                      setHintContext(context);
+                    }}
+                  />
                 </div>
-                <h2 className="mt-1 text-lg font-bold text-gray-900">
-                  {currentStory.title}
-                </h2>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setStage("story");
-                    setResumeParagraph(0);
-                    latestParagraph.current = 0;
-                    saveProgress({
-                      storyIndex: activeStory,
-                      stage: "story",
-                      paragraphIndex: 0,
-                    });
-                  }}
-                  className="mt-2 text-xs text-violet-500 hover:underline"
-                >
-                  再读一遍故事
-                </button>
-              </header>
-              <div className="space-y-6 p-5">
-                {currentStory.questions.map(
-                  (question, questionIndex) => {
+              </article>
+
+              <article className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm">
+                <header className="border-b border-violet-50 bg-violet-50/60 p-5">
+                  <div className="text-xs font-semibold text-violet-600">
+                    第 {activeStory + 1} 关 · 阅读理解
+                  </div>
+                  <h2 className="mt-1 text-lg font-bold text-gray-900">
+                    边看原文，边完成下面的题目
+                  </h2>
+                </header>
+                <div className="space-y-6 p-5">
+                  {currentStory.questions.map((question, questionIndex) => {
                     const key = `${activeStory}-${questionIndex}`;
                     const selected = answers[key];
                     const reward = rewards[key];
@@ -654,10 +669,10 @@ export default function DailyReadingMode({ onBack }: { onBack: () => void }) {
                         )}
                       </section>
                     );
-                  },
-                )}
-              </div>
-            </article>
+                  })}
+                </div>
+              </article>
+            </div>
           )}
         </>
       )}
@@ -678,7 +693,9 @@ export default function DailyReadingMode({ onBack }: { onBack: () => void }) {
           >
             <div className="flex items-start justify-between gap-3">
               <div>
-                <p className="text-xs font-bold text-violet-500">自然拼读提示卡</p>
+                <p className="text-xs font-bold text-violet-500">
+                  自然拼读提示卡
+                </p>
                 <h3 className="mt-1 text-2xl font-black text-sky-700">
                   {hintQuery.data?.word || hintWord.toLowerCase()}
                 </h3>
@@ -694,7 +711,8 @@ export default function DailyReadingMode({ onBack }: { onBack: () => void }) {
             </div>
             {hintQuery.isLoading ? (
               <div className="flex items-center justify-center py-10 text-sm text-gray-500">
-                <Loader2 className="mr-2 h-5 w-5 animate-spin" /> 正在生成提示卡…
+                <Loader2 className="mr-2 h-5 w-5 animate-spin" />{" "}
+                正在生成提示卡…
               </div>
             ) : hintQuery.error ? (
               <p className="py-8 text-center text-sm text-rose-500">
@@ -714,13 +732,17 @@ export default function DailyReadingMode({ onBack }: { onBack: () => void }) {
                   </p>
                 </div>
                 <div>
-                  <p className="text-xs font-bold text-gray-400">Easy English</p>
+                  <p className="text-xs font-bold text-gray-400">
+                    Easy English
+                  </p>
                   <p className="mt-1 leading-6 text-gray-700">
                     {hintQuery.data.simple_definition}
                   </p>
                 </div>
                 <div>
-                  <p className="text-xs font-bold text-gray-400">Story Example</p>
+                  <p className="text-xs font-bold text-gray-400">
+                    Story Example
+                  </p>
                   <p className="mt-1 leading-6 text-sky-700">
                     {hintQuery.data.example_sentence}
                   </p>

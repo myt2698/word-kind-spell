@@ -75,6 +75,23 @@ internal fun DailyReadingMode(
         }
     }
 
+    fun showWordHint(word: String, paragraph: String, paragraphIndex: Int) {
+        resumeParagraph = paragraphIndex
+        hintLoading = true
+        hintError = null
+        scope.launch {
+            try {
+                wordHint = api.getReadingWordHint(word, paragraph)
+                saveProgressSafely(activeStory, stage, paragraphIndex)
+            } catch (exception: Exception) {
+                exception.rethrowIfCancellation()
+                hintError = exception.message ?: "提示卡加载失败"
+            } finally {
+                hintLoading = false
+            }
+        }
+    }
+
     LaunchedEffect(Unit) {
         try {
             val result = api.getDailyReading()
@@ -282,41 +299,12 @@ internal fun DailyReadingMode(
                         }
                         paragraphs.forEachIndexed { paragraphIndex, paragraph ->
                             item {
-                                Surface(color = Color.White, shape = RoundedCornerShape(14.dp)) {
-                                    FlowRow(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .padding(14.dp),
-                                    ) {
-                                        tokenizeReadingText(paragraph).forEach { token ->
-                                            Text(
-                                                token.text,
-                                                modifier = if (token.isWord) {
-                                                    Modifier.clickable {
-                                                        resumeParagraph = paragraphIndex
-                                                        hintLoading = true
-                                                        hintError = null
-                                                        scope.launch {
-                                                            try {
-                                                                wordHint = api.getReadingWordHint(token.text, paragraph)
-                                                                saveProgressSafely(activeStory, "story", paragraphIndex)
-                                                            } catch (exception: Exception) {
-                                                                exception.rethrowIfCancellation()
-                                                                hintError = exception.message ?: "提示卡加载失败"
-                                                            } finally {
-                                                                hintLoading = false
-                                                            }
-                                                        }
-                                                    }
-                                                } else Modifier,
-                                                color = Color(0xFF0369A1),
-                                                fontSize = 17.sp,
-                                                lineHeight = 28.sp,
-                                                fontWeight = if (token.isWord) FontWeight.Medium else FontWeight.Normal,
-                                            )
-                                        }
-                                    }
-                                }
+                                ReadingParagraphCard(
+                                    paragraph = paragraph,
+                                    onWordClick = { word ->
+                                        showWordHint(word, paragraph, paragraphIndex)
+                                    },
+                                )
                             }
                         }
                         item {
@@ -339,15 +327,32 @@ internal fun DailyReadingMode(
                     }
                     else -> {
                         item {
+                            Surface(
+                                color = Color(0xFFF0F9FF),
+                                shape = RoundedCornerShape(18.dp),
+                                border = BorderStroke(1.dp, Color(0xFFBAE6FD)),
+                            ) {
+                                Column(Modifier.padding(18.dp)) {
+                                    Text("第 ${activeStory + 1} 关 · 阅读原文", color = Color(0xFF0369A1), fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                    Text(currentStory.title, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                                }
+                            }
+                        }
+                        paragraphs.forEachIndexed { paragraphIndex, paragraph ->
+                            item {
+                                ReadingParagraphCard(
+                                    paragraph = paragraph,
+                                    onWordClick = { word ->
+                                        showWordHint(word, paragraph, paragraphIndex)
+                                    },
+                                )
+                            }
+                        }
+                        item {
                             Surface(color = Color(0xFFFAF5FF), shape = RoundedCornerShape(18.dp)) {
                                 Column(Modifier.padding(18.dp)) {
                                     Text("第 ${activeStory + 1} 关 · 阅读理解", color = PracticePurple, fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                                    Text(currentStory.title, fontSize = 18.sp, fontWeight = FontWeight.Bold)
-                                    TextButton(onClick = {
-                                        stage = "story"
-                                        resumeParagraph = 0
-                                        scope.launch { saveProgressSafely(activeStory, "story", 0) }
-                                    }) { Text("再读一遍故事") }
+                                    Text("边看原文，边完成下面的题目", fontSize = 18.sp, fontWeight = FontWeight.Bold)
                                 }
                             }
                         }
@@ -445,6 +450,33 @@ internal fun DailyReadingMode(
                     }
                 },
             )
+        }
+    }
+}
+
+@Composable
+private fun ReadingParagraphCard(
+    paragraph: String,
+    onWordClick: (String) -> Unit,
+) {
+    Surface(color = Color.White, shape = RoundedCornerShape(14.dp)) {
+        FlowRow(
+            modifier = Modifier.fillMaxWidth().padding(14.dp),
+        ) {
+            tokenizeReadingText(paragraph).forEach { token ->
+                Text(
+                    token.text,
+                    modifier = if (token.isWord) {
+                        Modifier.clickable { onWordClick(token.text) }
+                    } else {
+                        Modifier
+                    },
+                    color = Color(0xFF0369A1),
+                    fontSize = 17.sp,
+                    lineHeight = 28.sp,
+                    fontWeight = if (token.isWord) FontWeight.Medium else FontWeight.Normal,
+                )
+            }
         }
     }
 }
