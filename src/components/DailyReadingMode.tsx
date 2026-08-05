@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ArrowLeft,
   BookOpenText,
@@ -91,8 +91,9 @@ export default function DailyReadingMode({ onBack }: { onBack: () => void }) {
   const [hintContext, setHintContext] = useState("");
   const latestParagraph = useRef(0);
   const progressTimer = useRef<number | null>(null);
+  const transitionTimer = useRef<number | null>(null);
 
-  const saveProgress = useMutation({
+  const { mutate: saveProgress } = useMutation({
     mutationFn: (input: {
       storyIndex: number;
       stage: "story" | "questions";
@@ -120,54 +121,107 @@ export default function DailyReadingMode({ onBack }: { onBack: () => void }) {
     { enabled: Boolean(hintWord), retry: 1 },
   );
 
-  const scheduleParagraphSave = (storyIndex: number, paragraphIndex: number) => {
-    if (progressTimer.current !== null) {
-      window.clearTimeout(progressTimer.current);
-    }
-    progressTimer.current = window.setTimeout(() => {
-      saveProgress.mutate({
-        storyIndex,
-        stage: "story",
-        paragraphIndex,
-      });
-      progressTimer.current = null;
-    }, 800);
-  };
+  const scheduleParagraphSave = useCallback(
+    (storyIndex: number, paragraphIndex: number) => {
+      if (progressTimer.current !== null) {
+        window.clearTimeout(progressTimer.current);
+      }
+      progressTimer.current = window.setTimeout(() => {
+        saveProgress({
+          storyIndex,
+          stage: "story",
+          paragraphIndex,
+        });
+        progressTimer.current = null;
+      }, 800);
+    },
+    [saveProgress],
+  );
 
-  useEffect(() => () => {
-    if (progressTimer.current !== null) {
-      window.clearTimeout(progressTimer.current);
-    }
-  }, []);
+  useEffect(
+    () => () => {
+      if (progressTimer.current !== null) {
+        window.clearTimeout(progressTimer.current);
+      }
+      if (transitionTimer.current !== null) {
+        window.clearTimeout(transitionTimer.current);
+      }
+    },
+    [],
+  );
 
   useEffect(() => {
     if (!data) return;
+    const storyCount = data.stories.length;
+    const completed = data.progress.completedStories.filter(
+      (storyIndex) =>
+        Number.isInteger(storyIndex) &&
+        storyIndex >= 0 &&
+        storyIndex < storyCount,
+    );
     setAnswers(
       Object.fromEntries(
-        data.progress.answered.map((attempt) => [
-          `${attempt.storyIndex}-${attempt.questionIndex}`,
-          attempt.selectedIndex,
-        ]),
+        data.progress.answered
+          .filter(
+            (attempt) =>
+              attempt.storyIndex >= 0 &&
+              attempt.storyIndex < storyCount &&
+              attempt.questionIndex >= 0 &&
+              attempt.questionIndex <
+                (data.stories[attempt.storyIndex]?.questions.length ?? 0),
+          )
+          .map((attempt) => [
+            `${attempt.storyIndex}-${attempt.questionIndex}`,
+            attempt.selectedIndex,
+          ]),
       ),
     );
-    setCompletedStories(data.progress.completedStories);
-    setUnlockedStory(Math.min(data.progress.currentStoryIndex, 2));
-    if (data.progress.currentStoryIndex >= data.stories.length) {
-      setStage("complete");
-      setActiveStory(data.stories.length - 1);
+    setCompletedStories(completed);
+    if (storyCount === 0) {
+      setActiveStory(0);
+      setUnlockedStory(0);
+      setStage("story");
+      setResumeParagraph(0);
+      latestParagraph.current = 0;
+      setShowResume(false);
       return;
     }
-    setActiveStory(data.progress.currentStoryIndex);
-    setStage(data.progress.stage);
-    setResumeParagraph(data.progress.paragraphIndex);
-    latestParagraph.current = data.progress.paragraphIndex;
+
+    const requestedStory = Number.isInteger(data.progress.currentStoryIndex)
+      ? data.progress.currentStoryIndex
+      : 0;
+    if (requestedStory >= storyCount || data.progress.stage === "complete") {
+      setStage("complete");
+      setActiveStory(storyCount - 1);
+      setUnlockedStory(storyCount - 1);
+      setResumeParagraph(0);
+      latestParagraph.current = 0;
+      setShowResume(false);
+      return;
+    }
+
+    const safeStory = Math.min(Math.max(requestedStory, 0), storyCount - 1);
+    const paragraphCount = splitStoryParagraphs(
+      data.stories[safeStory]?.content ?? "",
+    ).length;
+    const safeParagraph = Math.min(
+      Math.max(data.progress.paragraphIndex || 0, 0),
+      Math.max(paragraphCount - 1, 0),
+    );
+    const safeStage = data.progress.stage === "questions" ? "questions" : "story";
+    setActiveStory(safeStory);
+    setUnlockedStory(Math.min(Math.max(safeStory, 0), storyCount - 1));
+    setStage(safeStage);
+    setResumeParagraph(safeParagraph);
+    latestParagraph.current = safeParagraph;
     setShowResume(
-      data.progress.stage === "story" && data.progress.paragraphIndex > 0,
+      safeStage === "story" && safeParagraph > 0,
     );
   }, [data]);
 
   useEffect(() => {
     if (!data || stage !== "story") return;
+    let observer: IntersectionObserver | null = null;
     const timer = window.setTimeout(() => {
       if (resumeParagraph > 0) {
         document
@@ -179,7 +233,8 @@ export default function DailyReadingMode({ onBack }: { onBack: () => void }) {
       const elements = document.querySelectorAll(
         `[data-reading-story="${activeStory}"] [data-reading-paragraph]`,
       );
-      const observer = new IntersectionObserver(
+      if (!("IntersectionObserver" in window)) return;
+      observer = new IntersectionObserver(
         (entries) => {
           const visible = entries
             .filter((entry) => entry.isIntersecting)
@@ -201,11 +256,13 @@ export default function DailyReadingMode({ onBack }: { onBack: () => void }) {
         },
         { threshold: 0.6 },
       );
-      elements.forEach((element) => observer.observe(element));
-      return () => observer.disconnect();
+      elements.forEach((element) => observer?.observe(element));
     }, 350);
-    return () => window.clearTimeout(timer);
-  }, [activeStory, data, resumeParagraph, stage]);
+    return () => {
+      window.clearTimeout(timer);
+      observer?.disconnect();
+    };
+  }, [activeStory, data, resumeParagraph, scheduleParagraphSave, stage]);
 
   useEffect(() => {
     if (!unlockMessage) return;
@@ -230,7 +287,7 @@ export default function DailyReadingMode({ onBack }: { onBack: () => void }) {
   const startQuestions = () => {
     setShowResume(false);
     setStage("questions");
-    saveProgress.mutate({
+    saveProgress({
       storyIndex: activeStory,
       stage: "questions",
       paragraphIndex: latestParagraph.current,
@@ -243,25 +300,37 @@ export default function DailyReadingMode({ onBack }: { onBack: () => void }) {
     setCompletedStories((old) => [...new Set([...old, finishedStory])]);
     if (result.allCompleted || finishedStory >= 2) {
       setUnlockMessage("🏆 恭喜你！三个阅读任务全部完成");
-      window.setTimeout(() => setStage("complete"), 1200);
+      if (transitionTimer.current !== null) {
+        window.clearTimeout(transitionTimer.current);
+      }
+      transitionTimer.current = window.setTimeout(() => {
+        setStage("complete");
+        transitionTimer.current = null;
+      }, 1200);
       return;
     }
     const nextStory = finishedStory + 1;
     setUnlockedStory(nextStory);
     setUnlockMessage(`🌟 太棒了！第 ${nextStory + 1} 关已解锁`);
-    saveProgress.mutate({
+    saveProgress({
       storyIndex: nextStory,
       stage: "story",
       paragraphIndex: 0,
     });
-    window.setTimeout(() => {
+    if (transitionTimer.current !== null) {
+      window.clearTimeout(transitionTimer.current);
+    }
+    transitionTimer.current = window.setTimeout(() => {
       setActiveStory(nextStory);
       setStage("story");
       setResumeParagraph(0);
       latestParagraph.current = 0;
       window.scrollTo({ top: 0, behavior: "smooth" });
+      transitionTimer.current = null;
     }, 1200);
   };
+
+  const currentStory = data?.stories[activeStory];
 
   if (isLoading) {
     return (
@@ -332,6 +401,11 @@ export default function DailyReadingMode({ onBack }: { onBack: () => void }) {
             返回选词
           </Button>
         </div>
+      ) : !currentStory ? (
+        <div className="flex items-center justify-center rounded-2xl border border-gray-100 bg-white py-12 text-sm text-gray-500">
+          <Loader2 className="mr-2 h-5 w-5 animate-spin text-violet-500" />
+          正在恢复阅读进度…
+        </div>
       ) : (
         <>
           <section className="mb-5 rounded-2xl border border-gray-100 bg-white p-4 shadow-sm">
@@ -395,10 +469,10 @@ export default function DailyReadingMode({ onBack }: { onBack: () => void }) {
               <header className="border-b border-violet-50 bg-violet-50/60 p-5">
                 <div className="mb-1 flex items-center gap-2 text-xs font-semibold text-violet-600">
                   <Sparkles className="h-3.5 w-3.5" /> 第 {activeStory + 1} 关 ·{" "}
-                  {data.stories[activeStory].theme}
+                  {currentStory.theme}
                 </div>
                 <h2 className="text-lg font-bold text-gray-900">
-                  {data.stories[activeStory].title}
+                  {currentStory.title}
                 </h2>
               </header>
               <div className="p-5">
@@ -423,7 +497,7 @@ export default function DailyReadingMode({ onBack }: { onBack: () => void }) {
                 )}
                 <div className="space-y-4">
                   {splitStoryParagraphs(
-                    data.stories[activeStory].content,
+                    currentStory.content,
                   ).map((paragraph, paragraphIndex) => (
                     <p
                       key={paragraphIndex}
@@ -472,7 +546,7 @@ export default function DailyReadingMode({ onBack }: { onBack: () => void }) {
                   第 {activeStory + 1} 关 · 阅读理解
                 </div>
                 <h2 className="mt-1 text-lg font-bold text-gray-900">
-                  {data.stories[activeStory].title}
+                  {currentStory.title}
                 </h2>
                 <button
                   type="button"
@@ -480,7 +554,7 @@ export default function DailyReadingMode({ onBack }: { onBack: () => void }) {
                     setStage("story");
                     setResumeParagraph(0);
                     latestParagraph.current = 0;
-                    saveProgress.mutate({
+                    saveProgress({
                       storyIndex: activeStory,
                       stage: "story",
                       paragraphIndex: 0,
@@ -492,7 +566,7 @@ export default function DailyReadingMode({ onBack }: { onBack: () => void }) {
                 </button>
               </header>
               <div className="space-y-6 p-5">
-                {data.stories[activeStory].questions.map(
+                {currentStory.questions.map(
                   (question, questionIndex) => {
                     const key = `${activeStory}-${questionIndex}`;
                     const selected = answers[key];

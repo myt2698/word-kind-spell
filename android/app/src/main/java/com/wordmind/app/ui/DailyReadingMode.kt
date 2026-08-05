@@ -63,28 +63,61 @@ internal fun DailyReadingMode(
     var unlockMessage by remember { mutableStateOf<String?>(null) }
     var wordHint by remember { mutableStateOf<ReadingWordHint?>(null) }
     var hintLoading by remember { mutableStateOf(false) }
+    var hintError by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
     val listState = rememberLazyListState()
+
+    suspend fun saveProgressSafely(storyIndex: Int, nextStage: String, paragraphIndex: Int) {
+        try {
+            api.saveReadingProgress(storyIndex, nextStage, paragraphIndex)
+        } catch (exception: Exception) {
+            exception.rethrowIfCancellation()
+        }
+    }
 
     LaunchedEffect(Unit) {
         try {
             val result = api.getDailyReading()
             reading = result
-            completedStories = result.progress.completedStories.toSet()
-            answerSelections = result.progress.answered.associate {
+            val storyCount = result.stories.size
+            completedStories = result.progress.completedStories
+                .filter { it in 0 until storyCount }
+                .toSet()
+            answerSelections = result.progress.answered
+                .filter { answer ->
+                    answer.storyIndex in 0 until storyCount &&
+                        answer.questionIndex in result.stories[answer.storyIndex].questions.indices
+                }
+                .associate {
                 "${it.storyIndex}-${it.questionIndex}" to it.selectedIndex
             }
-            if (result.progress.currentStoryIndex >= result.stories.size) {
+            if (storyCount == 0) {
+                activeStory = 0
+                unlockedStory = 0
+                stage = "story"
+                resumeParagraph = 0
+            } else if (
+                result.progress.currentStoryIndex >= storyCount ||
+                result.progress.stage == "complete"
+            ) {
                 stage = "complete"
-                activeStory = result.stories.lastIndex.coerceAtLeast(0)
-                unlockedStory = result.stories.lastIndex.coerceAtLeast(0)
+                activeStory = result.stories.lastIndex
+                unlockedStory = result.stories.lastIndex
+                resumeParagraph = 0
             } else {
-                activeStory = result.progress.currentStoryIndex
-                unlockedStory = result.progress.currentStoryIndex
-                stage = result.progress.stage
-                resumeParagraph = result.progress.paragraphIndex
+                val safeStory = result.progress.currentStoryIndex.coerceIn(0, result.stories.lastIndex)
+                val paragraphCount = splitReadingParagraphs(result.stories[safeStory].content).size
+                val safeParagraph = result.progress.paragraphIndex.coerceIn(
+                    0,
+                    (paragraphCount - 1).coerceAtLeast(0),
+                )
+                activeStory = safeStory
+                unlockedStory = safeStory
+                stage = if (result.progress.stage == "questions") "questions" else "story"
+                resumeParagraph = safeParagraph
             }
         } catch (exception: Exception) {
+            exception.rethrowIfCancellation()
             error = exception.message ?: "加载失败"
         } finally {
             loading = false
@@ -95,7 +128,13 @@ internal fun DailyReadingMode(
         if (!loading && stage == "story" && resumeParagraph > 0) {
             delay(300)
             // Back, hero, map and story title occupy the first four items.
-            listState.animateScrollToItem(4 + resumeParagraph)
+            val lastItemIndex = (listState.layoutInfo.totalItemsCount - 1).coerceAtLeast(0)
+            val targetIndex = (4 + resumeParagraph).coerceAtMost(lastItemIndex)
+            try {
+                listState.animateScrollToItem(targetIndex)
+            } catch (exception: Exception) {
+                exception.rethrowIfCancellation()
+            }
         }
     }
 
@@ -105,7 +144,8 @@ internal fun DailyReadingMode(
         unlockMessage = null
     }
 
-    val currentStory = reading?.stories?.getOrNull(activeStory)
+    val currentReading = reading
+    val currentStory = currentReading?.stories?.getOrNull(activeStory)
     val paragraphs = remember(currentStory?.content) {
         splitReadingParagraphs(currentStory?.content.orEmpty())
     }
@@ -159,13 +199,16 @@ internal fun DailyReadingMode(
             error != null -> item {
                 Text("加载失败：$error", color = PracticeDanger, modifier = Modifier.padding(20.dp))
             }
-            reading?.stories.isNullOrEmpty() -> item {
+            currentReading == null || currentReading.stories.isEmpty() -> item {
                 Text("还没有今日单词，请返回选择后再来阅读。", color = PracticeMuted, modifier = Modifier.padding(20.dp))
+            }
+            currentStory == null -> item {
+                Text("阅读进度正在恢复，请稍后重试。", color = PracticeMuted, modifier = Modifier.padding(20.dp))
             }
             else -> {
                 item {
                     ReadingLevelMap(
-                        reading = reading!!,
+                        reading = currentReading,
                         activeStory = activeStory,
                         unlockedStory = unlockedStory,
                         completedStories = completedStories,
@@ -174,8 +217,8 @@ internal fun DailyReadingMode(
                             if (storyIndex <= unlockedStory || storyIndex in completedStories) {
                                 activeStory = storyIndex
                                 stage = "story"
-                                resumeParagraph = if (storyIndex == reading!!.progress.currentStoryIndex) {
-                                    reading!!.progress.paragraphIndex
+                                resumeParagraph = if (storyIndex == currentReading.progress.currentStoryIndex) {
+                                    currentReading.progress.paragraphIndex
                                 } else {
                                     0
                                 }
@@ -224,7 +267,7 @@ internal fun DailyReadingMode(
                                 border = BorderStroke(1.dp, Color(0xFFEDE9FE)),
                             ) {
                                 Column(Modifier.padding(18.dp)) {
-                                    Text("第 ${activeStory + 1} 关 · ${currentStory!!.theme}", color = PracticePurple, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                    Text("第 ${activeStory + 1} 关 · ${currentStory.theme}", color = PracticePurple, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                                     Text(currentStory.title, color = Color(0xFF111827), fontSize = 19.sp, fontWeight = FontWeight.Bold)
                                     if (resumeParagraph > 0) {
                                         Text(
@@ -252,10 +295,14 @@ internal fun DailyReadingMode(
                                                     Modifier.clickable {
                                                         resumeParagraph = paragraphIndex
                                                         hintLoading = true
+                                                        hintError = null
                                                         scope.launch {
                                                             try {
                                                                 wordHint = api.getReadingWordHint(token.text, paragraph)
-                                                                api.saveReadingProgress(activeStory, "story", paragraphIndex)
+                                                                saveProgressSafely(activeStory, "story", paragraphIndex)
+                                                            } catch (exception: Exception) {
+                                                                exception.rethrowIfCancellation()
+                                                                hintError = exception.message ?: "提示卡加载失败"
                                                             } finally {
                                                                 hintLoading = false
                                                             }
@@ -281,7 +328,7 @@ internal fun DailyReadingMode(
                                     onClick = {
                                         stage = "questions"
                                         scope.launch {
-                                            api.saveReadingProgress(activeStory, "questions", resumeParagraph)
+                                            saveProgressSafely(activeStory, "questions", resumeParagraph)
                                         }
                                     },
                                 ) {
@@ -295,16 +342,16 @@ internal fun DailyReadingMode(
                             Surface(color = Color(0xFFFAF5FF), shape = RoundedCornerShape(18.dp)) {
                                 Column(Modifier.padding(18.dp)) {
                                     Text("第 ${activeStory + 1} 关 · 阅读理解", color = PracticePurple, fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                                    Text(currentStory!!.title, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                                    Text(currentStory.title, fontSize = 18.sp, fontWeight = FontWeight.Bold)
                                     TextButton(onClick = {
                                         stage = "story"
                                         resumeParagraph = 0
-                                        scope.launch { api.saveReadingProgress(activeStory, "story", 0) }
+                                        scope.launch { saveProgressSafely(activeStory, "story", 0) }
                                     }) { Text("再读一遍故事") }
                                 }
                             }
                         }
-                        currentStory!!.questions.forEachIndexed { questionIndex, question ->
+                        currentStory.questions.forEachIndexed { questionIndex, question ->
                             item {
                                 val key = "$activeStory-$questionIndex"
                                 ReadingQuestionBlock(
@@ -362,6 +409,15 @@ internal fun DailyReadingMode(
                     Text("正在生成提示卡…", modifier = Modifier.padding(start = 12.dp))
                 }
             },
+        )
+    } else if (hintError != null) {
+        AlertDialog(
+            onDismissRequest = { hintError = null },
+            confirmButton = {
+                TextButton(onClick = { hintError = null }) { Text("知道了") }
+            },
+            title = { Text("提示卡加载失败") },
+            text = { Text(hintError.orEmpty()) },
         )
     } else {
         wordHint?.let { hint ->
