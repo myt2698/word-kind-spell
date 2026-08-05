@@ -15,7 +15,7 @@ android {
         versionCode 12
         versionName "1.0.11-native"
 
-        buildConfigField "String", "API_BASE_URL", '"https://word-kind-spell-production.up.railway.app"'
+        buildConfigField "String", "API_BASE_URL", '"https://121.43.35.47"'
     }
 
     buildTypes {

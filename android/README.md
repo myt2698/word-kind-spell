@@ -5,7 +5,7 @@ This directory contains the native 词音岛 Android client.
 - UI: Kotlin + Jetpack Compose
 - Network: Android `HttpURLConnection`
 - Speech: Android `TextToSpeech`
-- Backend: `https://word-kind-spell-production.up.railway.app`
+- Backend: `https://121.43.35.47`
 - Package: `com.wordmind.app`
 - Version: `1.0.9-native` (`versionCode` 10)
 - Minimum Android version: Android 6.0 (API 23)
@@ -16,7 +16,7 @@ runtime.
 ## Features
 
 - Login, registration, persistent sessions, and logout
-- Shared textbook, unit, tag, and word data from Railway
+- Shared textbook, unit, tag, and word data from Alibaba Cloud ECS
 - Native phonics library with alphabetically sorted letter patterns and a
   British-English 44-sound IPA guide with spoken examples
 - Compact word search, textbook/unit/tag filtering, latest/oldest/alphabetical
