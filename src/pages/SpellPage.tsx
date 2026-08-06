@@ -48,6 +48,7 @@ import {
   Layers3,
   ShieldCheck,
   Flame,
+  Armchair,
 } from "lucide-react";
 import {
   generateLetterBlocks,
@@ -64,6 +65,7 @@ import {
 } from "@/utils/word-selection";
 import DictationMode from "@/components/DictationMode";
 import DailyReadingMode from "@/components/DailyReadingMode";
+import RestMode from "@/components/RestMode";
 
 const AUTO_SPEAK_BASE_DELAY_MS = 1100;
 const PRACTICE_EXTRA_KEYS = [
@@ -585,7 +587,7 @@ function TodayWordsProvider({ children, allWords }: { children: React.ReactNode;
 // ============================================================
 // Types
 // ============================================================
-type SpellView = "home" | "study" | "reading" | "blocks" | "fillblank" | "flash" | "dictation";
+type SpellView = "home" | "study" | "reading" | "blocks" | "fillblank" | "flash" | "dictation" | "rest";
 type PracticeSourceMode = "review" | "challenge" | "revenge";
 
 // ============================================================
@@ -649,8 +651,8 @@ export default function SpellPage() {
   const allWords = learningQueue ?? [];
 
   return (
-    <div className="min-h-screen bg-gray-50/50">
-      <AppHeader />
+    <div className={`min-h-screen ${view === "rest" ? "bg-white" : "bg-gray-50/50"}`}>
+      {view !== "rest" && <AppHeader />}
       <TodayWordsProvider allWords={allWords}>
         {view === "home" && (
           <SpellHome
@@ -661,7 +663,8 @@ export default function SpellPage() {
         )}
         {view === "study" && <TodayStudyWrapper onBack={() => setView("home")} />}
         {view === "reading" && <DailyReadingMode onBack={() => setView("home")} />}
-        {view !== "home" && view !== "study" && view !== "reading" && view !== "dictation" && (
+        {view === "rest" && <RestMode onBack={() => setView("home")} />}
+        {view !== "home" && view !== "study" && view !== "reading" && view !== "dictation" && view !== "rest" && (
           <PracticeModeWrapper
             mode={view}
             source={practiceSource}
@@ -1152,10 +1155,29 @@ function SpellHome({
           <div className="flex-1">
             <h3 className="text-base font-semibold text-gray-900">听写模式</h3>
             <p className="text-xs text-gray-500">
-              {canPractice ? "每个单词读两遍，听音写词" : emptyPracticeText}
+              {canPractice
+                ? "单词读两遍，再读最短例句"
+                : emptyPracticeText}
             </p>
           </div>
           <Play className={`w-5 h-5 ${canPractice ? "text-purple-400" : "text-gray-300"}`} />
+        </button>
+      </div>
+
+      <div className="mt-8 border-t border-gray-100 pt-5">
+        <button
+          type="button"
+          onClick={() => onStart("rest")}
+          className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left text-gray-500 transition-colors hover:bg-violet-50/60 hover:text-violet-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-300"
+        >
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-violet-50">
+            <Armchair className="h-5 w-5 text-violet-400" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-semibold text-gray-700">休息小站</p>
+            <p className="mt-0.5 text-xs text-gray-400">想休息时，自己选择一部动画短片</p>
+          </div>
+          <ChevronRight className="h-4 w-4 text-gray-300" />
         </button>
       </div>
     </main>

@@ -6,6 +6,10 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import { speakWord, preloadAudio } from "@/utils/speech";
+import {
+  getDictationExampleWaitTime,
+  pickShortestDictationExample,
+} from "@/utils/dictation";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, Play, Pause, SkipForward, Headphones } from "lucide-react";
 
@@ -50,9 +54,6 @@ export default function DictationMode({ words, onBack }: DictationModeProps) {
 
   const total = words.length;
   const currentWord = words[currentIdx];
-  const syllables = currentWord ? countSyllables(currentWord.word) : 1;
-  const waitTime = getWaitTime(syllables);
-
   // Preload all audio when component mounts
   useEffect(() => {
     if (words.length > 0) {
@@ -77,6 +78,8 @@ export default function DictationMode({ words, onBack }: DictationModeProps) {
 
       const word = words[idx];
       const sylCount = countSyllables(word.word);
+      const wordWaitTime = getWaitTime(sylCount);
+      const example = pickShortestDictationExample(word.example, word.word);
 
       setCurrentIdx(idx);
       setStatusText(`第 ${idx + 1} / ${total} 个`);
@@ -89,14 +92,23 @@ export default function DictationMode({ words, onBack }: DictationModeProps) {
         if (pausedRef.current) return;
         play(word.word, word.id);
 
-        // Step 3: Wait, then next word
+        // Step 3: Read the shortest matching example, then move on.
         timerRef.current = setTimeout(() => {
           if (pausedRef.current) return;
-          playSequence(idx + 1);
-        }, getWaitTime(sylCount));
-      }, waitTime + 800);
+          if (!example) {
+            playSequence(idx + 1);
+            return;
+          }
+
+          speakWord(example);
+          timerRef.current = setTimeout(() => {
+            if (pausedRef.current) return;
+            playSequence(idx + 1);
+          }, getDictationExampleWaitTime(example));
+        }, example ? 1_600 : wordWaitTime);
+      }, wordWaitTime + 800);
     },
-    [total, words, waitTime]
+    [total, words]
   );
 
   const start = () => {
@@ -158,7 +170,9 @@ export default function DictationMode({ words, onBack }: DictationModeProps) {
             <Headphones className="w-5 h-5 text-purple-500" />
             听写模式
           </h1>
-          <p className="text-xs text-gray-500">{total} 个单词 · 每个读两遍</p>
+          <p className="text-xs text-gray-500">
+            {total} 个单词 · 单词读两遍，再读最短例句
+          </p>
         </div>
       </div>
 

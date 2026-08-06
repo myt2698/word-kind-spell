@@ -6,6 +6,7 @@ import { dictRouter } from "./dict-router";
 import { spellingRouter } from "./spelling-router";
 import { textbookRouter } from "./textbook-router";
 import { audioRouter } from "./audio-router";
+import { restRouter } from "./rest-router";
 import { createRouter, publicQuery } from "./middleware";
 
 export const appRouter = createRouter({
@@ -22,6 +23,7 @@ export const appRouter = createRouter({
   spelling: spellingRouter,
   textbook: textbookRouter,
   audio: audioRouter,
+  rest: restRouter,
 });
 
 export type AppRouter = typeof appRouter;

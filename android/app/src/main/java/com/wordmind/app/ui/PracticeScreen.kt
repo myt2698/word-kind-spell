@@ -36,6 +36,7 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.School
 import androidx.compose.material.icons.filled.Whatshot
 import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.material.icons.filled.Weekend
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -92,6 +93,7 @@ internal enum class PracticeView {
     FillBlank,
     Flash,
     Dictation,
+    Rest,
 }
 
 private enum class StatDialogType {
@@ -194,6 +196,10 @@ internal fun PracticeScreen(
     }
 
     fun openMode(mode: PracticeView) {
+        if (mode == PracticeView.Rest) {
+            view = mode
+            return
+        }
         if (practiceWords.isNotEmpty()) {
             view = mode
         } else if (practiceSource == PracticeSourceMode.Challenge) {
@@ -308,6 +314,11 @@ internal fun PracticeScreen(
             words = practiceWords,
             speak = speak,
             onBack = ::returnHome,
+        )
+        PracticeView.Rest -> RestMode(
+            api = api,
+            onBack = { view = PracticeView.Home },
+            onMessage = onMessage,
         )
     }
 
@@ -771,7 +782,7 @@ private fun PracticeHome(
             description = if (!hasPracticeWords) {
                 emptyPracticeText
             } else {
-                "每个单词读两遍，听音写词"
+                "单词读两遍，再读最短例句"
             },
             icon = Icons.Default.Headphones,
             color = PracticePurple,
@@ -779,6 +790,36 @@ private fun PracticeHome(
             enabled = hasPracticeWords,
             onClick = { onMode(PracticeView.Dictation) },
         )
+        Spacer(Modifier.height(24.dp))
+        HorizontalDivider(color = Color(0xFFF1F5F9))
+        Spacer(Modifier.height(12.dp))
+        Card(
+            onClick = { onMode(PracticeView.Rest) },
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(12.dp),
+            colors = CardDefaults.cardColors(containerColor = Color.Transparent),
+            elevation = CardDefaults.cardElevation(0.dp),
+        ) {
+            Row(
+                modifier = Modifier.padding(horizontal = 8.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Surface(color = Color(0xFFF5F3FF), shape = RoundedCornerShape(12.dp)) {
+                    Icon(
+                        Icons.Default.Weekend,
+                        contentDescription = null,
+                        tint = Color(0xFFA78BFA),
+                        modifier = Modifier.padding(10.dp).size(20.dp),
+                    )
+                }
+                Spacer(Modifier.width(12.dp))
+                Column(Modifier.weight(1f)) {
+                    Text("休息小站", color = Color(0xFF475569), fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                    Text("想休息时，自己选择一部动画短片", color = Color(0xFF94A3B8), fontSize = 11.sp)
+                }
+                Icon(Icons.Default.ChevronRight, contentDescription = null, tint = Color(0xFFCBD5E1), modifier = Modifier.size(18.dp))
+            }
+        }
     }
 }
 

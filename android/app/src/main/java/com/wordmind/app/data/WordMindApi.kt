@@ -197,6 +197,27 @@ class WordMindApi(context: Context) {
     suspend fun getErrorWords(): List<PracticeWord> =
         (query("spelling.getErrorWords") as JSONArray).toPracticeWords()
 
+    suspend fun getRestSeries(): List<RestSeries> =
+        (query("rest.listSeries") as JSONArray).toRestSeriesList().map(::resolveRestMedia)
+
+    suspend fun getRestSeries(id: Int): RestSeries =
+        resolveRestMedia(
+            (query("rest.getSeries", JSONObject().put("id", id)) as JSONObject).toRestSeries(),
+        )
+
+    private fun resolveRestMedia(series: RestSeries): RestSeries = series.copy(
+        coverUrl = resolveMediaUrl(series.coverUrl),
+        episodes = series.episodes.map { episode ->
+            episode.copy(videoUrl = resolveMediaUrl(episode.videoUrl))
+        },
+    )
+
+    private fun resolveMediaUrl(value: String): String = when {
+        value.startsWith("https://", ignoreCase = true) -> value
+        value.startsWith("/") -> "$baseUrl$value"
+        else -> value
+    }
+
     suspend fun getErrorBook(): List<SpellingErrorEntry> {
         val result = query("spelling.getErrorBook") as JSONArray
         return buildList {

@@ -263,6 +263,55 @@ data class SpellingErrorEntry(
     val practiceMode: String,
 )
 
+data class RestSeries(
+    val id: Int,
+    val title: String,
+    val description: String?,
+    val coverUrl: String,
+    val episodeCount: Int,
+    val episodes: List<RestEpisode> = emptyList(),
+)
+
+data class RestEpisode(
+    val id: Int,
+    val seriesId: Int,
+    val title: String,
+    val episodeNumber: Int,
+    val videoUrl: String,
+    val durationSeconds: Int?,
+)
+
+internal fun JSONObject.toRestSeries(): RestSeries {
+    val episodesJson = optJSONArray("episodes") ?: JSONArray()
+    val episodes = buildList {
+        for (index in 0 until episodesJson.length()) {
+            val episode = episodesJson.getJSONObject(index)
+            add(
+                RestEpisode(
+                    id = episode.getInt("id"),
+                    seriesId = episode.getInt("seriesId"),
+                    title = episode.optString("title"),
+                    episodeNumber = episode.optInt("episodeNumber"),
+                    videoUrl = episode.optString("videoUrl"),
+                    durationSeconds = if (episode.isNull("durationSeconds")) null else episode.optInt("durationSeconds"),
+                )
+            )
+        }
+    }
+    return RestSeries(
+        id = getInt("id"),
+        title = optString("title"),
+        description = nullableString("description"),
+        coverUrl = optString("coverUrl"),
+        episodeCount = optInt("episodeCount", episodes.size),
+        episodes = episodes,
+    )
+}
+
+internal fun JSONArray.toRestSeriesList(): List<RestSeries> = buildList {
+    for (index in 0 until length()) add(getJSONObject(index).toRestSeries())
+}
+
 internal fun JSONObject.nullableString(key: String): String? {
     if (isNull(key)) return null
     return optString(key).takeIf { it.isNotBlank() && it != "null" }

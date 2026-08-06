@@ -1,5 +1,5 @@
 import { relations } from "drizzle-orm";
-import { users, textbooks, wordGroups, words, wordGroupLinks, tags, wordTags, wordLogs, wordSpellings, spellingErrors, spellingSessions } from "./schema";
+import { users, textbooks, wordGroups, words, wordGroupLinks, tags, wordTags, wordLogs, wordSpellings, spellingErrors, spellingSessions, restVideoSeries, restVideoEpisodes } from "./schema";
 
 export const usersRelations = relations(users, ({ many }) => ({
   textbooks: many(textbooks),
@@ -66,4 +66,15 @@ export const spellingErrorsRelations = relations(spellingErrors, ({ one }) => ({
 
 export const spellingSessionsRelations = relations(spellingSessions, ({ one }) => ({
   user: one(users, { fields: [spellingSessions.userId], references: [users.id] }),
+}));
+
+export const restVideoSeriesRelations = relations(restVideoSeries, ({ many }) => ({
+  episodes: many(restVideoEpisodes),
+}));
+
+export const restVideoEpisodesRelations = relations(restVideoEpisodes, ({ one }) => ({
+  series: one(restVideoSeries, {
+    fields: [restVideoEpisodes.seriesId],
+    references: [restVideoSeries.id],
+  }),
 }));

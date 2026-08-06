@@ -308,3 +308,47 @@ export const wordAudios = mysqlTable("word_audios", {
 
 export type WordAudio = typeof wordAudios.$inferSelect;
 export type InsertWordAudio = typeof wordAudios.$inferInsert;
+
+// ========== 休息小站短片 ==========
+
+export const restVideoSeries = mysqlTable("rest_video_series", {
+  id: serial("id").primaryKey(),
+  title: varchar("title", { length: 100 }).notNull(),
+  description: text("description"),
+  coverUrl: text("coverUrl").notNull(),
+  sortOrder: int("sortOrder").default(0).notNull(),
+  enabled: boolean("enabled").default(true).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt")
+    .defaultNow()
+    .notNull()
+    .$onUpdate(() => new Date()),
+});
+
+export type RestVideoSeries = typeof restVideoSeries.$inferSelect;
+export type InsertRestVideoSeries = typeof restVideoSeries.$inferInsert;
+
+export const restVideoEpisodes = mysqlTable("rest_video_episodes", {
+  id: serial("id").primaryKey(),
+  seriesId: bigint("seriesId", { mode: "number", unsigned: true })
+    .notNull()
+    .references(() => restVideoSeries.id, { onDelete: "cascade" }),
+  title: varchar("title", { length: 150 }).notNull(),
+  episodeNumber: int("episodeNumber").notNull(),
+  videoUrl: text("videoUrl").notNull(),
+  durationSeconds: int("durationSeconds"),
+  enabled: boolean("enabled").default(true).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt")
+    .defaultNow()
+    .notNull()
+    .$onUpdate(() => new Date()),
+}, (table) => [
+  uniqueIndex("rest_video_episodes_series_number_unique").on(
+    table.seriesId,
+    table.episodeNumber,
+  ),
+]);
+
+export type RestVideoEpisode = typeof restVideoEpisodes.$inferSelect;
+export type InsertRestVideoEpisode = typeof restVideoEpisodes.$inferInsert;

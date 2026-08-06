@@ -1024,10 +1024,17 @@ internal fun DictationPracticeMode(
     LaunchedEffect(phase, index) {
         if (phase == DictationPhase.Playing && current != null) {
             val waitTime = dictationWaitTime(current.word)
+            val example = selectShortestDictationExample(current.example, current.word)
             speak(current.word)
             delay(waitTime + 800L)
             speak(current.word)
-            delay(waitTime)
+            if (example != null) {
+                delay(1_600L)
+                speak(example)
+                delay(dictationExampleWaitTime(example))
+            } else {
+                delay(waitTime)
+            }
             if (index < words.lastIndex) {
                 index += 1
             } else {
@@ -1062,7 +1069,7 @@ internal fun DictationPracticeMode(
                     Spacer(Modifier.width(7.dp))
                     Text("听写模式", fontSize = 19.sp, fontWeight = FontWeight.Bold)
                 }
-                Text("${words.size} 个单词 · 每个读两遍", color = PracticeMuted, fontSize = 11.sp)
+                Text("${words.size} 个单词 · 单词读两遍，再读最短例句", color = PracticeMuted, fontSize = 11.sp)
             }
         }
         Spacer(Modifier.height(18.dp))
@@ -1832,6 +1839,19 @@ private fun selectPracticeExample(example: String?, word: String): String? {
     return candidates.firstOrNull { targetPattern.containsMatchIn(it) }
 }
 
+private fun selectShortestDictationExample(example: String?, word: String): String? {
+    val target = word.trim()
+    if (target.isEmpty()) return null
+    val targetPattern = Regex(
+        "(?i)(?<![a-z])${Regex.escape(target)}(?![a-z])",
+    )
+    return example
+        ?.lineSequence()
+        ?.map { it.trim() }
+        ?.filter { it.isNotEmpty() && targetPattern.containsMatchIn(it) }
+        ?.minByOrNull { it.length }
+}
+
 private fun highlightPracticeWord(
     example: String,
     word: String,
@@ -2406,4 +2426,9 @@ private fun dictationWaitTime(word: String): Long {
         2 -> 6_500L
         else -> 10_000L
     }
+}
+
+private fun dictationExampleWaitTime(example: String): Long {
+    val wordCount = example.trim().split(Regex("\\s+")).count { it.isNotEmpty() }
+    return (wordCount * 550L + 1_200L).coerceIn(3_000L, 8_000L)
 }

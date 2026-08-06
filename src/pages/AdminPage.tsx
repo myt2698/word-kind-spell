@@ -4,6 +4,7 @@ import { useNavigate } from "react-router";
 import { trpc } from "@/providers/trpc";
 import AppHeader from "@/components/AppHeader";
 import TagDetailDialog from "@/components/TagDetailDialog";
+import RestAdminManager from "@/components/RestAdminManager";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -24,9 +25,10 @@ import {
   Loader2,
   ArrowLeft,
   Layers,
+  Film,
 } from "lucide-react";
 
-type AdminTab = "tags" | "textbooks" | "words";
+type AdminTab = "tags" | "textbooks" | "rest";
 
 const tagNameCollator = new Intl.Collator("en", {
   sensitivity: "base",
@@ -90,6 +92,7 @@ export default function AdminPage() {
           {[
             { key: "tags" as AdminTab, label: "标签管理", icon: Tag },
             { key: "textbooks" as AdminTab, label: "课本管理", icon: BookOpen },
+            { key: "rest" as AdminTab, label: "休息短片", icon: Film },
           ].map((tab) => {
             const Icon = tab.icon;
             const isActive = activeTab === tab.key;
@@ -113,6 +116,7 @@ export default function AdminPage() {
         {/* Content */}
         {activeTab === "tags" && <TagManager />}
         {activeTab === "textbooks" && <TextbookManager />}
+        {activeTab === "rest" && <RestAdminManager />}
       </main>
     </div>
   );

@@ -62,7 +62,9 @@ const proficiencyLevels: Array<{
 ];
 
 export default function ProfilePage() {
-  const { user, logout } = useAuth();
+  const { user, logout, isLoading: authLoading } = useAuth({
+    redirectOnUnauthenticated: true,
+  });
   const navigate = useNavigate();
   const utils = trpc.useUtils();
   const [activeTab, setActiveTab] = useState<ProfileTab>("stats");
@@ -75,17 +77,23 @@ export default function ProfilePage() {
   const [selectedLevel, setSelectedLevel] = useState<ProficiencyLevel | null>(null);
   const [selectedStat, setSelectedStat] = useState<ProfileStatKind | null>(null);
 
-  const { data: stats, isLoading: statsLoading } = trpc.spelling.getStats.useQuery();
-  const { data: errors, isLoading: errorsLoading } = trpc.spelling.getErrorBook.useQuery();
+  const { data: stats, isLoading: statsLoading } = trpc.spelling.getStats.useQuery(undefined, {
+    enabled: !!user,
+  });
+  const { data: errors, isLoading: errorsLoading } = trpc.spelling.getErrorBook.useQuery(undefined, {
+    enabled: !!user,
+  });
   const { data: learningQueue, isLoading: levelWordsLoading } =
     trpc.spelling.getLearningQueue.useQuery(undefined, {
-      enabled: selectedLevel !== null || (
-        selectedStat !== null && selectedStat !== "errors"
+      enabled: !!user && (
+        selectedLevel !== null || (
+          selectedStat !== null && selectedStat !== "errors"
+        )
       ),
     });
   const { data: errorWords, isLoading: errorWordsLoading } =
     trpc.spelling.getErrorWords.useQuery(undefined, {
-      enabled: selectedStat === "errors",
+      enabled: !!user && selectedStat === "errors",
     });
   const practicedWords = stats?.byLevel?.reduce((sum, item) => sum + Number(item.count), 0) ?? 0;
   const selectedLevelWords = selectedLevel === null
@@ -182,7 +190,16 @@ export default function ProfilePage() {
     updateName.mutate({ name: nextName });
   };
 
-  if (!user) return null;
+  if (authLoading || !user) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-gray-50/50">
+        <div className="flex flex-col items-center gap-3 text-sm text-gray-500">
+          <Loader2 className="h-7 w-7 animate-spin text-indigo-500" />
+          <span>{authLoading ? "正在加载个人页面" : "正在返回登录页"}</span>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-50/50">
