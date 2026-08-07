@@ -4,6 +4,7 @@ import { z } from "zod";
 import { restVideoEpisodes, restVideoSeries } from "@db/schema";
 import { adminQuery, authedQuery, createRouter } from "./middleware";
 import { getDb } from "./queries/connection";
+import { deleteRestMediaByUrl } from "./rest-media-http";
 
 const mediaLocation = z
   .string()
@@ -116,17 +117,38 @@ export const restRouter = createRouter({
     .mutation(async ({ input }) => {
       const { id, ...fields } = input;
       await requireSeries(id);
+      const [existing] = await getDb()
+        .select({ coverUrl: restVideoSeries.coverUrl })
+        .from(restVideoSeries)
+        .where(eq(restVideoSeries.id, id))
+        .limit(1);
       await getDb().update(restVideoSeries).set({
         ...fields,
         description: fields.description || null,
       }).where(eq(restVideoSeries.id, id));
+      if (existing?.coverUrl !== fields.coverUrl) {
+        await deleteRestMediaByUrl(existing?.coverUrl);
+      }
       return { success: true };
     }),
 
   deleteSeries: adminQuery
     .input(z.object({ id: z.number().int().positive() }))
     .mutation(async ({ input }) => {
+      const [series] = await getDb()
+        .select({ coverUrl: restVideoSeries.coverUrl })
+        .from(restVideoSeries)
+        .where(eq(restVideoSeries.id, input.id))
+        .limit(1);
+      const episodes = await getDb()
+        .select({ videoUrl: restVideoEpisodes.videoUrl })
+        .from(restVideoEpisodes)
+        .where(eq(restVideoEpisodes.seriesId, input.id));
       await getDb().delete(restVideoSeries).where(eq(restVideoSeries.id, input.id));
+      await Promise.all([
+        deleteRestMediaByUrl(series?.coverUrl),
+        ...episodes.map((episode) => deleteRestMediaByUrl(episode.videoUrl)),
+      ]);
       return { success: true };
     }),
 
@@ -144,17 +166,31 @@ export const restRouter = createRouter({
     .mutation(async ({ input }) => {
       const { id, ...fields } = input;
       await requireSeries(fields.seriesId);
+      const [existing] = await getDb()
+        .select({ videoUrl: restVideoEpisodes.videoUrl })
+        .from(restVideoEpisodes)
+        .where(eq(restVideoEpisodes.id, id))
+        .limit(1);
       await getDb().update(restVideoEpisodes).set({
         ...fields,
         durationSeconds: fields.durationSeconds ?? null,
       }).where(eq(restVideoEpisodes.id, id));
+      if (existing?.videoUrl !== fields.videoUrl) {
+        await deleteRestMediaByUrl(existing?.videoUrl);
+      }
       return { success: true };
     }),
 
   deleteEpisode: adminQuery
     .input(z.object({ id: z.number().int().positive() }))
     .mutation(async ({ input }) => {
+      const [episode] = await getDb()
+        .select({ videoUrl: restVideoEpisodes.videoUrl })
+        .from(restVideoEpisodes)
+        .where(eq(restVideoEpisodes.id, input.id))
+        .limit(1);
       await getDb().delete(restVideoEpisodes).where(eq(restVideoEpisodes.id, input.id));
+      await deleteRestMediaByUrl(episode?.videoUrl);
       return { success: true };
     }),
 });

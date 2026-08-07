@@ -38,6 +38,9 @@ backups/*.json
 # Build outputs
 dist/
 build/
+
+# Local deployment archives
+word-kind-spell-*.tar.gz
 # Test coverage
 coverage/
 .nyc_output/

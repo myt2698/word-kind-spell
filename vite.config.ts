@@ -67,6 +67,11 @@ export default defineConfig({
         changeOrigin: true,
         secure: false,
       },
+      '/media/rest': {
+        target: previewApiTarget,
+        changeOrigin: true,
+        secure: false,
+      },
     },
   } : undefined,
   resolve: {

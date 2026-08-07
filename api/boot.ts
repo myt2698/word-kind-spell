@@ -8,6 +8,7 @@ import { createContext } from "./context";
 import { env } from "./lib/env";
 import { rateLimit } from "./lib/rate-limit";
 import { audioHttp } from "./audio-http";
+import { restMediaHttp } from "./rest-media-http";
 
 console.log("[BOOT] ========== Starting 词音岛 ==========");
 console.log("[BOOT] NODE_ENV:", process.env.NODE_ENV);
@@ -21,6 +22,12 @@ app.use("/media/audio/*", rateLimit({
   authMaxRequests: 60,
 }));
 app.route("/media/audio", audioHttp);
+app.use("/media/rest/upload", rateLimit({
+  windowMs: 60_000,
+  maxRequests: 20,
+  authMaxRequests: 20,
+}));
+app.route("/media/rest", restMediaHttp);
 app.use("/api/*", async (c, next) => {
   await next();
   c.header("Cache-Control", "no-store, max-age=0");

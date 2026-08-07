@@ -11,26 +11,28 @@ export type TrpcContext = {
   user?: Omit<User, "password">;
 };
 
+export async function getRequestUser(
+  req: Request,
+): Promise<Omit<User, "password"> | undefined> {
+  try {
+    const cookies = cookie.parse(req.headers.get("cookie") || "");
+    const token = cookies[Session.cookieName];
+    if (!token) return undefined;
+
+    const session = await verifyPhoneSessionToken(token);
+    if (!session) return undefined;
+    return await findUserById(session.userId) ?? undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 export async function createContext(
   opts: FetchCreateContextFnOptions,
 ): Promise<TrpcContext> {
   const ctx: TrpcContext = { req: opts.req, resHeaders: opts.resHeaders };
 
-  try {
-    const cookies = cookie.parse(opts.req.headers.get("cookie") || "");
-    const token = cookies[Session.cookieName];
-    if (token) {
-      const session = await verifyPhoneSessionToken(token);
-      if (session) {
-        const user = await findUserById(session.userId);
-        if (user) {
-          ctx.user = user;
-        }
-      }
-    }
-  } catch {
-    // Authentication is optional
-  }
+  ctx.user = await getRequestUser(opts.req);
 
   return ctx;
 }

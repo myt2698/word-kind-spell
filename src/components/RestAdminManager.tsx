@@ -1,6 +1,6 @@
 import { useState } from "react";
 import type { ReactNode } from "react";
-import { ChevronDown, ChevronRight, Edit3, Loader2, Plus, Trash2 } from "lucide-react";
+import { ChevronDown, ChevronRight, Edit3, FileImage, Loader2, Plus, Trash2, Upload, Video } from "lucide-react";
 import { trpc } from "@/providers/trpc";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -28,6 +28,55 @@ type EpisodeForm = {
 const emptySeries: SeriesForm = { title: "", description: "", coverUrl: "", sortOrder: "0", enabled: true };
 const emptyEpisode: EpisodeForm = { seriesId: null, title: "", episodeNumber: "1", videoUrl: "", durationSeconds: "", enabled: true };
 
+type UploadKind = "cover" | "video";
+
+function formatBytes(bytes: number) {
+  if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`;
+  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+}
+
+function uploadRestMedia(file: File, kind: UploadKind, onProgress: (progress: number) => void) {
+  return new Promise<string>((resolve, reject) => {
+    const request = new XMLHttpRequest();
+    const query = new URLSearchParams({ kind, filename: file.name });
+    request.open("POST", `/media/rest/upload?${query}`);
+    request.withCredentials = true;
+    request.responseType = "json";
+    request.timeout = 60 * 60 * 1000;
+    request.setRequestHeader("Content-Type", file.type || "application/octet-stream");
+    request.upload.onprogress = (event) => {
+      if (event.lengthComputable) onProgress(Math.round((event.loaded / event.total) * 100));
+    };
+    request.onload = () => {
+      const response = request.response as { url?: string; error?: string } | null;
+      if (request.status >= 200 && request.status < 300 && response?.url) {
+        resolve(response.url);
+      } else {
+        reject(new Error(response?.error || `上传失败（${request.status}）`));
+      }
+    };
+    request.onerror = () => reject(new Error("上传连接中断，请检查网络后重试"));
+    request.ontimeout = () => reject(new Error("上传超时，请重试"));
+    request.send(file);
+  });
+}
+
+function readVideoDuration(file: File) {
+  return new Promise<number | null>((resolve) => {
+    const video = document.createElement("video");
+    const objectUrl = URL.createObjectURL(file);
+    const done = (value: number | null) => {
+      URL.revokeObjectURL(objectUrl);
+      video.remove();
+      resolve(value);
+    };
+    video.preload = "metadata";
+    video.onloadedmetadata = () => done(Number.isFinite(video.duration) ? Math.max(1, Math.round(video.duration)) : null);
+    video.onerror = () => done(null);
+    video.src = objectUrl;
+  });
+}
+
 export default function RestAdminManager() {
   const utils = trpc.useUtils();
   const { data: series = [], isLoading } = trpc.rest.adminList.useQuery();
@@ -38,23 +87,26 @@ export default function RestAdminManager() {
   const [editingEpisodeId, setEditingEpisodeId] = useState<number | null>(null);
   const [seriesForm, setSeriesForm] = useState<SeriesForm>(emptySeries);
   const [episodeForm, setEpisodeForm] = useState<EpisodeForm>(emptyEpisode);
+  const [seriesCoverFile, setSeriesCoverFile] = useState<File | null>(null);
+  const [episodeVideoFile, setEpisodeVideoFile] = useState<File | null>(null);
+  const [uploadProgress, setUploadProgress] = useState<number | null>(null);
   const [formError, setFormError] = useState("");
 
   const refresh = () => utils.rest.adminList.invalidate();
-  const closeSeriesDialog = () => { setSeriesDialogOpen(false); setFormError(""); };
-  const closeEpisodeDialog = () => { setEpisodeDialogOpen(false); setFormError(""); };
-  const mutationError = (error: { message: string }) => setFormError(error.message || "保存失败，请重试");
+  const closeSeriesDialog = () => { setSeriesDialogOpen(false); setSeriesCoverFile(null); setUploadProgress(null); setFormError(""); };
+  const closeEpisodeDialog = () => { setEpisodeDialogOpen(false); setEpisodeVideoFile(null); setUploadProgress(null); setFormError(""); };
 
-  const createSeries = trpc.rest.createSeries.useMutation({ onSuccess: () => { refresh(); closeSeriesDialog(); }, onError: mutationError });
-  const updateSeries = trpc.rest.updateSeries.useMutation({ onSuccess: () => { refresh(); closeSeriesDialog(); }, onError: mutationError });
+  const createSeries = trpc.rest.createSeries.useMutation();
+  const updateSeries = trpc.rest.updateSeries.useMutation();
   const deleteSeries = trpc.rest.deleteSeries.useMutation({ onSuccess: refresh });
-  const createEpisode = trpc.rest.createEpisode.useMutation({ onSuccess: () => { refresh(); closeEpisodeDialog(); }, onError: mutationError });
-  const updateEpisode = trpc.rest.updateEpisode.useMutation({ onSuccess: () => { refresh(); closeEpisodeDialog(); }, onError: mutationError });
+  const createEpisode = trpc.rest.createEpisode.useMutation();
+  const updateEpisode = trpc.rest.updateEpisode.useMutation();
   const deleteEpisode = trpc.rest.deleteEpisode.useMutation({ onSuccess: refresh });
 
   const openSeriesCreate = () => {
     setEditingSeriesId(null);
     setSeriesForm(emptySeries);
+    setSeriesCoverFile(null);
     setFormError("");
     setSeriesDialogOpen(true);
   };
@@ -68,6 +120,7 @@ export default function RestAdminManager() {
       sortOrder: String(item.sortOrder),
       enabled: item.enabled,
     });
+    setSeriesCoverFile(null);
     setFormError("");
     setSeriesDialogOpen(true);
   };
@@ -75,6 +128,7 @@ export default function RestAdminManager() {
   const openEpisodeCreate = (seriesId: number, nextNumber: number) => {
     setEditingEpisodeId(null);
     setEpisodeForm({ ...emptyEpisode, seriesId, episodeNumber: String(nextNumber) });
+    setEpisodeVideoFile(null);
     setFormError("");
     setEpisodeDialogOpen(true);
   };
@@ -89,55 +143,82 @@ export default function RestAdminManager() {
       durationSeconds: item.durationSeconds ? String(item.durationSeconds) : "",
       enabled: item.enabled,
     });
+    setEpisodeVideoFile(null);
     setFormError("");
     setEpisodeDialogOpen(true);
   };
 
-  const submitSeries = () => {
+  const submitSeries = async () => {
     setFormError("");
-    if (!seriesForm.title.trim() || !seriesForm.coverUrl.trim()) {
-      setFormError("请填写系列名称和封面地址");
+    if (!seriesForm.title.trim() || (!seriesCoverFile && !seriesForm.coverUrl.trim())) {
+      setFormError("请填写系列名称并选择封面图片");
       return;
     }
-    const input = {
-      title: seriesForm.title.trim(),
-      description: seriesForm.description.trim(),
-      coverUrl: seriesForm.coverUrl.trim(),
-      sortOrder: Number(seriesForm.sortOrder) || 0,
-      enabled: seriesForm.enabled,
-    };
-    if (editingSeriesId) updateSeries.mutate({ id: editingSeriesId, ...input });
-    else createSeries.mutate(input);
+    try {
+      let coverUrl = seriesForm.coverUrl.trim();
+      if (seriesCoverFile) {
+        setUploadProgress(0);
+        coverUrl = await uploadRestMedia(seriesCoverFile, "cover", setUploadProgress);
+        setUploadProgress(null);
+      }
+      const input = {
+        title: seriesForm.title.trim(),
+        description: seriesForm.description.trim(),
+        coverUrl,
+        sortOrder: Number(seriesForm.sortOrder) || 0,
+        enabled: seriesForm.enabled,
+      };
+      if (editingSeriesId) await updateSeries.mutateAsync({ id: editingSeriesId, ...input });
+      else await createSeries.mutateAsync(input);
+      await refresh();
+      closeSeriesDialog();
+    } catch (error) {
+      setUploadProgress(null);
+      setFormError(error instanceof Error ? error.message : "保存失败，请重试");
+    }
   };
 
-  const submitEpisode = () => {
+  const submitEpisode = async () => {
     setFormError("");
-    if (!episodeForm.seriesId || !episodeForm.title.trim() || !episodeForm.videoUrl.trim()) {
-      setFormError("请填写集数标题和视频地址");
+    if (!episodeForm.seriesId || !episodeForm.title.trim() || (!episodeVideoFile && !episodeForm.videoUrl.trim())) {
+      setFormError("请填写集数标题并选择视频文件");
       return;
     }
-    const duration = episodeForm.durationSeconds.trim();
-    const input = {
-      seriesId: episodeForm.seriesId,
-      title: episodeForm.title.trim(),
-      episodeNumber: Math.max(1, Number(episodeForm.episodeNumber) || 1),
-      videoUrl: episodeForm.videoUrl.trim(),
-      durationSeconds: duration ? Math.max(1, Number(duration) || 1) : null,
-      enabled: episodeForm.enabled,
-    };
-    if (editingEpisodeId) updateEpisode.mutate({ id: editingEpisodeId, ...input });
-    else createEpisode.mutate(input);
+    try {
+      let videoUrl = episodeForm.videoUrl.trim();
+      if (episodeVideoFile) {
+        setUploadProgress(0);
+        videoUrl = await uploadRestMedia(episodeVideoFile, "video", setUploadProgress);
+        setUploadProgress(null);
+      }
+      const duration = episodeForm.durationSeconds.trim();
+      const input = {
+        seriesId: episodeForm.seriesId,
+        title: episodeForm.title.trim(),
+        episodeNumber: Math.max(1, Number(episodeForm.episodeNumber) || 1),
+        videoUrl,
+        durationSeconds: duration ? Math.max(1, Number(duration) || 1) : null,
+        enabled: episodeForm.enabled,
+      };
+      if (editingEpisodeId) await updateEpisode.mutateAsync({ id: editingEpisodeId, ...input });
+      else await createEpisode.mutateAsync(input);
+      await refresh();
+      closeEpisodeDialog();
+    } catch (error) {
+      setUploadProgress(null);
+      setFormError(error instanceof Error ? error.message : "保存失败，请重试");
+    }
   };
 
-  const seriesSaving = createSeries.isPending || updateSeries.isPending;
-  const episodeSaving = createEpisode.isPending || updateEpisode.isPending;
+  const seriesSaving = createSeries.isPending || updateSeries.isPending || uploadProgress !== null;
+  const episodeSaving = createEpisode.isPending || updateEpisode.isPending || uploadProgress !== null;
 
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between gap-3">
         <div>
           <h2 className="text-sm font-medium text-gray-500">共 {series.length} 个短片系列</h2>
-          <p className="mt-1 text-xs text-gray-400">填写 OSS 或其他 HTTPS 封面、视频地址</p>
+          <p className="mt-1 text-xs text-gray-400">从电脑选择封面和视频，保存时自动上传到服务器</p>
         </div>
         <Button size="sm" onClick={openSeriesCreate} className="gap-1">
           <Plus className="h-4 w-4" />新建系列
@@ -205,24 +286,45 @@ export default function RestAdminManager() {
         ))}
       </div>
 
-      <Dialog open={seriesDialogOpen} onOpenChange={(open) => open ? setSeriesDialogOpen(true) : closeSeriesDialog()}>
+      <Dialog open={seriesDialogOpen} onOpenChange={(open) => {
+        if (open) setSeriesDialogOpen(true);
+        else if (!seriesSaving) closeSeriesDialog();
+      }}>
         <DialogContent className="sm:max-w-lg">
           <DialogHeader><DialogTitle>{editingSeriesId ? "编辑短片系列" : "新建短片系列"}</DialogTitle></DialogHeader>
           <div className="space-y-4 pt-2">
             <Field label="系列名称"><Input value={seriesForm.title} onChange={(event) => setSeriesForm((form) => ({ ...form, title: event.target.value }))} placeholder="如：森林里的小熊" /></Field>
             <Field label="简介（可选）"><Textarea value={seriesForm.description} onChange={(event) => setSeriesForm((form) => ({ ...form, description: event.target.value }))} rows={2} placeholder="一句安静的内容介绍" /></Field>
-            <Field label="封面地址"><Input value={seriesForm.coverUrl} onChange={(event) => setSeriesForm((form) => ({ ...form, coverUrl: event.target.value }))} placeholder="https://.../cover.jpg" /></Field>
+            <MediaFileField
+              label={editingSeriesId ? "封面图片（不选择则保留原封面）" : "封面图片"}
+              accept="image/jpeg,image/png,image/webp,image/gif"
+              icon={<FileImage className="h-5 w-5" />}
+              file={seriesCoverFile}
+              hint="支持 JPG、PNG、WebP、GIF，最大 10MB"
+              onChange={(file) => {
+                if (file && file.size > 10 * 1024 * 1024) {
+                  setFormError("封面不能超过 10MB");
+                  return;
+                }
+                setFormError("");
+                setSeriesCoverFile(file);
+              }}
+            />
             <div className="grid grid-cols-2 gap-4">
               <Field label="排序"><Input type="number" value={seriesForm.sortOrder} onChange={(event) => setSeriesForm((form) => ({ ...form, sortOrder: event.target.value }))} /></Field>
               <CheckField checked={seriesForm.enabled} onChange={(enabled) => setSeriesForm((form) => ({ ...form, enabled }))} label="在孩子端展示" />
             </div>
+            <UploadStatus progress={uploadProgress} />
             {formError && <p className="text-sm text-red-500">{formError}</p>}
-            <Button className="w-full" onClick={submitSeries} disabled={seriesSaving}>{seriesSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : "保存系列"}</Button>
+            <Button className="w-full" onClick={submitSeries} disabled={seriesSaving}>{seriesSaving ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />{uploadProgress !== null ? `正在上传 ${uploadProgress}%` : "正在保存"}</> : "保存系列"}</Button>
           </div>
         </DialogContent>
       </Dialog>
 
-      <Dialog open={episodeDialogOpen} onOpenChange={(open) => open ? setEpisodeDialogOpen(true) : closeEpisodeDialog()}>
+      <Dialog open={episodeDialogOpen} onOpenChange={(open) => {
+        if (open) setEpisodeDialogOpen(true);
+        else if (!episodeSaving) closeEpisodeDialog();
+      }}>
         <DialogContent className="sm:max-w-lg">
           <DialogHeader><DialogTitle>{editingEpisodeId ? "编辑集数" : "添加集数"}</DialogTitle></DialogHeader>
           <div className="space-y-4 pt-2">
@@ -230,13 +332,32 @@ export default function RestAdminManager() {
               <Field label="第几集"><Input type="number" min="1" value={episodeForm.episodeNumber} onChange={(event) => setEpisodeForm((form) => ({ ...form, episodeNumber: event.target.value }))} /></Field>
               <Field label="集数标题"><Input value={episodeForm.title} onChange={(event) => setEpisodeForm((form) => ({ ...form, title: event.target.value }))} placeholder="如：小熊去河边" /></Field>
             </div>
-            <Field label="视频地址"><Input value={episodeForm.videoUrl} onChange={(event) => setEpisodeForm((form) => ({ ...form, videoUrl: event.target.value }))} placeholder="https://.../episode-01.mp4" /></Field>
+            <MediaFileField
+              label={editingEpisodeId ? "视频文件（不选择则保留原视频）" : "视频文件"}
+              accept="video/mp4,video/webm,video/ogg,video/quicktime,.mp4,.webm,.ogv,.mov"
+              icon={<Video className="h-5 w-5" />}
+              file={episodeVideoFile}
+              hint="建议使用 MP4（H.264），最大 1GB"
+              onChange={async (file) => {
+                if (file && file.size > 1024 * 1024 * 1024) {
+                  setFormError("视频不能超过 1GB");
+                  return;
+                }
+                setFormError("");
+                setEpisodeVideoFile(file);
+                if (file) {
+                  const duration = await readVideoDuration(file);
+                  if (duration) setEpisodeForm((form) => ({ ...form, durationSeconds: String(duration) }));
+                }
+              }}
+            />
             <div className="grid grid-cols-2 gap-4">
               <Field label="时长（秒，可选）"><Input type="number" min="1" value={episodeForm.durationSeconds} onChange={(event) => setEpisodeForm((form) => ({ ...form, durationSeconds: event.target.value }))} /></Field>
               <CheckField checked={episodeForm.enabled} onChange={(enabled) => setEpisodeForm((form) => ({ ...form, enabled }))} label="在孩子端展示" />
             </div>
+            <UploadStatus progress={uploadProgress} />
             {formError && <p className="text-sm text-red-500">{formError}</p>}
-            <Button className="w-full" onClick={submitEpisode} disabled={episodeSaving}>{episodeSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : "保存集数"}</Button>
+            <Button className="w-full" onClick={submitEpisode} disabled={episodeSaving}>{episodeSaving ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />{uploadProgress !== null ? `正在上传 ${uploadProgress}%` : "正在保存"}</> : "保存集数"}</Button>
           </div>
         </DialogContent>
       </Dialog>
@@ -246,6 +367,53 @@ export default function RestAdminManager() {
 
 function Field({ label, children }: { label: string; children: ReactNode }) {
   return <div className="space-y-1.5"><Label>{label}</Label>{children}</div>;
+}
+
+function MediaFileField({
+  label,
+  accept,
+  icon,
+  file,
+  hint,
+  onChange,
+}: {
+  label: string;
+  accept: string;
+  icon: ReactNode;
+  file: File | null;
+  hint: string;
+  onChange: (file: File | null) => void | Promise<void>;
+}) {
+  return (
+    <div className="space-y-1.5">
+      <Label>{label}</Label>
+      <label className="flex min-h-20 cursor-pointer items-center gap-3 rounded-xl border border-dashed border-indigo-200 bg-indigo-50/40 px-4 py-3 text-indigo-600 transition-colors hover:bg-indigo-50">
+        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-white shadow-sm">{icon}</span>
+        <span className="min-w-0 flex-1">
+          <span className="flex items-center gap-1 text-sm font-medium"><Upload className="h-3.5 w-3.5" />{file ? "已选择文件" : "点击选择本地文件"}</span>
+          <span className="mt-1 block truncate text-xs text-gray-500">{file ? `${file.name} · ${formatBytes(file.size)}` : hint}</span>
+        </span>
+        <input
+          type="file"
+          accept={accept}
+          className="sr-only"
+          onChange={(event) => onChange(event.target.files?.[0] ?? null)}
+        />
+      </label>
+    </div>
+  );
+}
+
+function UploadStatus({ progress }: { progress: number | null }) {
+  if (progress === null) return null;
+  return (
+    <div className="space-y-1.5" role="status" aria-live="polite">
+      <div className="flex justify-between text-xs text-gray-500"><span>正在上传到服务器，请勿关闭窗口</span><span>{progress}%</span></div>
+      <div className="h-2 overflow-hidden rounded-full bg-gray-100">
+        <div className="h-full rounded-full bg-indigo-500 transition-[width]" style={{ width: `${progress}%` }} />
+      </div>
+    </div>
+  );
 }
 
 function CheckField({ checked, onChange, label }: { checked: boolean; onChange: (checked: boolean) => void; label: string }) {

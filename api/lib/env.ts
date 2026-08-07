@@ -28,6 +28,10 @@ export const env = {
   get aliyunAccessKeyId() { return get("ALIYUN_ACCESS_KEY_ID"); },
   get aliyunAccessKeySecret() { return get("ALIYUN_ACCESS_KEY_SECRET"); },
   get aliyunSpeechVoice() { return get("ALIYUN_SPEECH_VOICE"); },
+  get restMediaDir() {
+    return get("REST_MEDIA_DIR")
+      || (process.env.NODE_ENV === "production" ? "/app/uploads/rest" : "./tmp/rest-media");
+  },
 
   // Validate all required variables before starting the production server.
   validate() {
